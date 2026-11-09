@@ -8,19 +8,25 @@
     "dev": "vite",
     "build:standalone": "vite build",
     "build:widget": "vite build --config vite.widget.config.ts",
-    "build": "npm run typecheck && npm run build:standalone && npm run build:widget",
+    "build": "npm run typecheck && npm run build:standalone && npm run build:widget && npm run build:mcp",
     "preview": "vite preview --port 5173",
     "typecheck": "tsc --noEmit",
     "test": "vitest",
-    "gen:types": "node scripts/gen-types.mjs"
+    "gen:types": "node scripts/gen-types.mjs",
+    "build:mcp": "vite build --config vite.mcp.config.ts",
+    "mcp": "node dist-mcp/data-manual-mcp.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.7.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "mermaid": "^12.3.0",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "survey-core": "^3.2.2",
+    "survey-react-ui": "^3.2.2",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

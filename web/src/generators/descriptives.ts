@@ -34,6 +34,34 @@ export interface MissingnessSummary {
   icc: number | null;
 }
 
+export interface ParticipantRate {
+  participant: string;
+  delivered: number;
+  answered: number;
+}
+
+export interface DayRate {
+  /** YYYY-MM-DD */
+  date: string;
+  delivered: number;
+  answered: number;
+}
+
+export interface OutlierSummary {
+  q1: number;
+  median: number;
+  q3: number;
+  /** Tukey fences: q1 - 1.5*IQR and q3 + 1.5*IQR. */
+  lower: number;
+  upper: number;
+  min: number;
+  max: number;
+  /** All answered values (for the dot strip), with who gave them. */
+  points: Array<{ value: number; participant: string }>;
+  /** Values outside the fences, most extreme first. */
+  flagged: Array<{ value: number; participant: string; z: number }>;
+}
+
 export interface ItemDescriptives {
   delivered: number;
   answered: number;
@@ -45,6 +73,12 @@ export interface ItemDescriptives {
   /** Participants anywhere in the data set. */
   totalParticipants: number;
   missingness: MissingnessSummary | null;
+  /** Response rate per participant, lowest first. */
+  byParticipant: ParticipantRate[];
+  /** Response rate per day of the study (when the data has dates). */
+  byDay: DayRate[];
+  /** Outlier screen for numeric items. */
+  outliers: OutlierSummary | null;
   frequencies: FrequencyRow[] | null;
   numeric: NumericSummary | null;
 }
@@ -57,7 +91,7 @@ export interface DataOverview {
   participants: number;
 }
 
-type Response = { value: string | null; participant: string | null };
+type Response = { value: string | null; participant: string | null; date?: string | null };
 
 const MISSING = new Set(['', 'na', 'n/a', 'null', 'nan', 'no response', '%%']);
 const isMissing = (v: string | null | undefined) => v == null || MISSING.has(String(v).trim().toLowerCase());
@@ -70,11 +104,12 @@ export function indexResponses(spec: StudySpec): Map<string, Response[]> {
   const qids = d['Question.ID'];
   const resp = d['User.Response'];
   const pids = d['Participant.ID'] ?? [];
+  const dates = d['Survey.Date.Completed'] ?? [];
   for (let i = 0; i < qids.length; i++) {
     const q = qids[i];
     if (q == null) continue;
     const list = out.get(q) ?? [];
-    list.push({ value: resp[i] ?? null, participant: pids[i] ?? null });
+    list.push({ value: resp[i] ?? null, participant: pids[i] ?? null, date: dates[i] ? String(dates[i]).slice(0, 10) : null });
     out.set(q, list);
   }
   return out;
@@ -111,6 +146,9 @@ export function describeItem(q: Question, responses: Response[] | undefined, tot
     participantsAnswered: new Set(answered.map((r) => r.participant).filter(Boolean)).size,
     totalParticipants,
     missingness: missingness(responses),
+    byParticipant: rates(responses, (r) => r.participant ?? '').map(([participant, x]) => ({ participant, ...x })).sort((a, b) => a.answered / a.delivered - b.answered / b.delivered),
+    byDay: rates(responses.filter((r) => r.date), (r) => r.date!).map(([date, x]) => ({ date, ...x })).sort((a, b) => a.date.localeCompare(b.date)),
+    outliers: null as OutlierSummary | null,
   };
 
   if (type === 'Multiple Choice' || type === 'Multiple Select') {
@@ -137,7 +175,10 @@ export function describeItem(q: Question, responses: Response[] | undefined, tot
 
   if (type === 'Slider' || type === 'Time Scale Slider' || q['Data.Type'] === 'numeric' || q['Data.Type'] === 'integer') {
     const nums = answered.map((r) => Number(r.value)).filter(Number.isFinite);
-    if (nums.length) return { ...base, frequencies: null, numeric: summarize(nums) };
+    if (nums.length) {
+      const pts = answered.filter((r) => Number.isFinite(Number(r.value))).map((r) => ({ value: Number(r.value), participant: r.participant ?? '' }));
+      return { ...base, frequencies: null, numeric: summarize(nums), outliers: outlierScreen(pts) };
+    }
   }
   return { ...base, frequencies: null, numeric: null };
 }
@@ -155,6 +196,42 @@ function missingness(responses: Response[]): MissingnessSummary | null {
   const mean = perPerson.reduce((a, b) => a + b, 0) / perPerson.length;
   const sd = perPerson.length > 1 ? Math.sqrt(perPerson.reduce((a, b) => a + (b - mean) ** 2, 0) / (perPerson.length - 1)) : 0;
   return { min: Math.min(...perPerson), max: Math.max(...perPerson), mean, sd, icc: icc1([...byPerson.values()]) };
+}
+
+function rates(responses: Response[], key: (r: Response) => string): Array<[string, { delivered: number; answered: number }]> {
+  const m = new Map<string, { delivered: number; answered: number }>();
+  for (const r of responses) {
+    const k = key(r);
+    const x = m.get(k) ?? { delivered: 0, answered: 0 };
+    x.delivered++;
+    if (!isMissing(r.value)) x.answered++;
+    m.set(k, x);
+  }
+  return [...m.entries()];
+}
+
+function quantile(sorted: number[], p: number): number {
+  const i = (sorted.length - 1) * p;
+  const lo = Math.floor(i);
+  return sorted[lo]! + (sorted[Math.min(lo + 1, sorted.length - 1)]! - sorted[lo]!) * (i - lo);
+}
+
+/** Tukey fences (1.5 * IQR) on the answered values; z-scores reported for context. */
+export function outlierScreen(points: Array<{ value: number; participant: string }>): OutlierSummary | null {
+  if (points.length < 5) return null;
+  const sorted = points.map((p) => p.value).sort((a, b) => a - b);
+  const q1 = quantile(sorted, 0.25);
+  const q3 = quantile(sorted, 0.75);
+  const iqr = q3 - q1;
+  const lower = q1 - 1.5 * iqr;
+  const upper = q3 + 1.5 * iqr;
+  const mean = sorted.reduce((a, b) => a + b, 0) / sorted.length;
+  const sd = Math.sqrt(sorted.reduce((a, b) => a + (b - mean) ** 2, 0) / Math.max(1, sorted.length - 1)) || 1;
+  const flagged = points
+    .filter((p) => p.value < lower || p.value > upper)
+    .map((p) => ({ ...p, z: (p.value - mean) / sd }))
+    .sort((a, b) => Math.abs(b.z) - Math.abs(a.z));
+  return { q1, median: quantile(sorted, 0.5), q3, lower, upper, min: sorted[0]!, max: sorted[sorted.length - 1]!, points, flagged };
 }
 
 /** One-way random-effects ICC(1) with unequal group sizes. */

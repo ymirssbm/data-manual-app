@@ -17,10 +17,33 @@ export interface FlowchartOptions {
   /** Show Question.ID above the text. */
   showIds?: boolean;
   direction?: 'TD' | 'LR';
+  /** Block Item.IDs drawn folded into a single node. */
+  collapsed?: string[];
+}
+
+export interface FlowchartBlock {
+  itemId: string;
+  label: string;
+  /** Questions inside (including nested blocks). */
+  questions: number;
+  /** Mermaid ids of this block when expanded (subgraph) and folded (node). */
+  clusterId: string;
+  collapsedId: string;
+}
+
+/** Blocks in a survey, with the ids the rendered flowchart uses for them (for click-to-fold). */
+export function flowchartBlocks(survey: Survey): FlowchartBlock[] {
+  const model = buildSurveyModel(survey);
+  const count = (id: string): number => (model.members.get(id) ?? []).reduce((n, m) => n + (isBlock(m) ? count(m['Item.ID']) : 1), 0);
+  return model.items
+    .map((q, i) => ({ q, i }))
+    .filter(({ q }) => isBlock(q))
+    .map(({ q, i }) => ({ itemId: q['Item.ID'], label: itemLabel(q), questions: count(q['Item.ID']), clusterId: `n${i}_g`, collapsedId: `n${i}_c` }));
 }
 
 export function generateFlowchart(survey: Survey, opts: FlowchartOptions = {}): string {
   const { wrap = 32, showIds = false, direction = 'TD' } = opts;
+  const collapsed = new Set(opts.collapsed ?? []);
   const model = buildSurveyModel(survey);
   const order = model.items;
   const index = new Map(order.map((q, i) => [q['Item.ID'], i]));
@@ -77,10 +100,33 @@ export function generateFlowchart(survey: Survey, opts: FlowchartOptions = {}): 
     return false;
   };
 
+  /** Outermost folded block containing an item (or the item itself when it's a folded block). */
+  const owner = (q: Question): Question | undefined => {
+    let found: Question | undefined;
+    const seen = new Set<string>();
+    let cur: Question | undefined = q;
+    while (cur && !seen.has(cur['Item.ID'])) {
+      seen.add(cur['Item.ID']);
+      if (isBlock(cur) && collapsed.has(cur['Item.ID'])) found = cur;
+      cur = cur.Parent ? model.byId.get(cur.Parent) : undefined;
+    }
+    return found;
+  };
+  /** Map an item/decision node id onto its folded block's node. */
+  const remap = (id: string): string => {
+    const m = /^n(\d+)(?:_d\d*)?$/.exec(id);
+    if (!m) return id;
+    const own = owner(order[Number(m[1])]!);
+    return own ? `${nodeId.get(own['Item.ID'])}_c` : id;
+  };
+
   const lines: string[] = [`flowchart ${direction}`];
   const edges: string[] = [];
   const edgeSet = new Set<string>();
-  const addEdge = (from: string, to: string, label?: string) => {
+  const addEdge = (rawFrom: string, rawTo: string, label?: string) => {
+    const from = remap(rawFrom);
+    const to = remap(rawTo);
+    if (from === to) return; // both ends inside the same folded block
     const e = label ? `  ${from} -->|"${escapeLabel(label)}"| ${to}` : `  ${from} --> ${to}`;
     if (!edgeSet.has(e)) {
       edgeSet.add(e);
@@ -89,31 +135,29 @@ export function generateFlowchart(survey: Survey, opts: FlowchartOptions = {}): 
   };
 
   // Nodes, nested inside block subgraphs.
-  const renderNode = (q: Question) =>
-    `${nodeId.get(q['Item.ID'])}["${escapeLabel(nodeText(q, wrap, showIds))}"]`;
+  /** Decision diamonds per question, declared next to the question so they stay inside its block. */
+  const decisions = new Map<string, string[]>();
+  const renderNode = (q: Question, pad = '  ') =>
+    [`${nodeId.get(q['Item.ID'])}["${escapeLabel(nodeText(q, wrap, showIds))}"]`, ...(decisions.get(q['Item.ID']) ?? [])].join(`\n${pad}`);
+  const questionsIn = (id: string): number => (model.members.get(id) ?? []).reduce((n, m) => n + (isBlock(m) ? questionsIn(m['Item.ID']) : 1), 0);
+  const folded: string[] = [];
   const renderBlock = (block: Question, depth: number): string[] => {
     const pad = '  '.repeat(depth);
+    if (collapsed.has(block['Item.ID'])) {
+      const id = `${nodeId.get(block['Item.ID'])}_c`;
+      folded.push(id);
+      const n = questionsIn(block['Item.ID']);
+      return [`${pad}${id}[["${escapeLabel(`▸ ${wrapText(itemLabel(block), 36)}<br/>${n} question${n === 1 ? '' : 's'}`)}"]]`];
+    }
     const out = [`${pad}subgraph ${nodeId.get(block['Item.ID'])}_g["${escapeLabel(wrapText(itemLabel(block), 40))}"]`];
     for (const m of model.members.get(block['Item.ID']) ?? []) {
       if (isBlock(m)) out.push(...renderBlock(m, depth + 1));
-      else out.push(`${pad}  ${renderNode(m)}`);
+      else out.push(`${pad}  ${renderNode(m, `${pad}  `)}`);
     }
     out.push(`${pad}end`);
     return out;
   };
-  for (const q of order) {
-    const parent = q.Parent ? model.byId.get(q.Parent) : undefined;
-    if (parent && isBlock(parent)) continue; // drawn inside its block
-    if (isBlock(q)) lines.push(...renderBlock(q, 1));
-    else lines.push(`  ${renderNode(q)}`);
-  }
-
   // Edges.
-  const start = order.find((q) => !isBlock(q) && gates.get(q['Item.ID'])!.length === 0);
-  if (start) {
-    lines.push('  start(["Start"])');
-    addEdge('start', nodeId.get(start['Item.ID'])!);
-  }
   let endUsed = false;
   const target = (q: Question | undefined) => {
     if (q) return nodeId.get(q['Item.ID'])!;
@@ -121,30 +165,88 @@ export function generateFlowchart(survey: Survey, opts: FlowchartOptions = {}): 
     return 'finish';
   };
 
+  // Multi-select parents (several branches can apply) become a chain of yes/no checks, one per
+  // option, so the drawing runs straight down: check 1 -> follow-up 1 -> check 2 -> ... -> continue.
+  // When a follow-up unit ends, flow resumes at the next check rather than skipping past it.
+  const resumeAt = new Map<string, string>(); // gate (child Item.ID) -> node to continue at
+  const isMultiParent = (q: Question) => q['Question.Type.Display.Name'] === 'Multiple Select' && (model.branchesFrom.get(q['Item.ID'])?.length ?? 0) > 1;
+  const sortedBranches = (q: Question) => [...(model.branchesFrom.get(q['Item.ID']) ?? [])].sort((a, b) => (index.get(a.childId) ?? 0) - (index.get(b.childId) ?? 0));
+  for (const q of order) {
+    if (!isMultiParent(q)) continue;
+    const id = nodeId.get(q['Item.ID'])!;
+    sortedBranches(q).forEach((b, k, all) => {
+      if (k < all.length - 1) resumeAt.set(b.childId, `${id}_d${k + 1}`);
+    });
+  }
+
+  /** Where flow goes after item i: the next item on its path, or the next pending check when leaving a follow-up. */
+  const continuation = (i: number): string => {
+    const q = order[i]!;
+    const chain = gates.get(q['Item.ID'])!;
+    const next = nextFrom(i, chain);
+    const stillIn = new Set(next ? gates.get(next['Item.ID'])! : []);
+    for (let g = chain.length - 1; g >= 0; g--) {
+      const gate = chain[g]!;
+      if (stillIn.has(gate)) break;
+      const resume = resumeAt.get(gate);
+      if (resume) return resume;
+      // Leaving a follow-up continues wherever the question that opened it continues
+      // (e.g. a nested follow-up inside a multi-select chain resumes at the next check).
+      const opener = model.branchesTo.get(gate)?.[0]?.parentId;
+      const oi = opener ? index.get(opener) : undefined;
+      if (oi != null && oi < i) return continuation(oi);
+    }
+    return target(next);
+  };
+
+  const branchLabel = (b: { definitions: string[]; condition: string | null }) => (b.definitions.length ? b.definitions.join(' / ') : (b.condition ?? 'Yes'));
   order.forEach((q, i) => {
     if (isBlock(q)) return;
     const id = nodeId.get(q['Item.ID'])!;
-    const chain = gates.get(q['Item.ID'])!;
-    const next = nextFrom(i, chain);
-    const branches = model.branchesFrom.get(q['Item.ID']) ?? [];
-
+    const branches = sortedBranches(q);
     if (branches.length === 0) {
-      addEdge(id, target(next));
+      addEdge(id, continuation(i));
+      return;
+    }
+    const failId = model.failTargets.get(q['Item.ID']);
+    const otherwise = failId ? target(entry(failId)) : continuation(i);
+    const folded = !!owner(q); // a branching question inside a folded block branches from the folded node
+    if (isMultiParent(q)) {
+      const checks = branches.map((_, k) => `${id}_d${k}`);
+      if (!folded) decisions.set(q['Item.ID'], checks.map((c, k) => `${c}{"${escapeLabel(wrapText(`${branchLabel(branches[k]!)}?`, 18))}"}`));
+      addEdge(id, checks[0]!);
+      branches.forEach((b, k) => {
+        addEdge(checks[k]!, target(entry(b.childId)), 'Yes');
+        addEdge(checks[k]!, k < branches.length - 1 ? checks[k + 1]! : otherwise, 'No');
+      });
       return;
     }
     const decision = `${id}_d`;
-    lines.push(`  ${decision}{" "}`);
+    if (!folded) decisions.set(q['Item.ID'], [`${decision}{" "}`]);
     addEdge(id, decision);
-    for (const b of branches) {
-      const label = b.definitions.length ? b.definitions.join(' / ') : (b.condition ?? 'Yes');
-      addEdge(decision, target(entry(b.childId)), wrapText(label, 24));
-    }
-    const failId = model.failTargets.get(q['Item.ID']);
-    addEdge(decision, target(failId ? entry(failId) : next), 'Otherwise');
+    for (const b of branches) addEdge(decision, target(entry(b.childId)), wrapText(branchLabel(b), 24));
+    addEdge(decision, otherwise, 'Otherwise');
   });
+
+  // Nodes, nested inside block subgraphs (decision diamonds travel with their question).
+  for (const q of order) {
+    const parent = q.Parent ? model.byId.get(q.Parent) : undefined;
+    if (parent && isBlock(parent)) continue; // drawn inside its block
+    if (isBlock(q)) lines.push(...renderBlock(q, 1));
+    else lines.push(`  ${renderNode(q)}`);
+  }
+  const start = order.find((q) => !isBlock(q) && gates.get(q['Item.ID'])!.length === 0);
+  if (start) {
+    lines.push('  start(["Start"])');
+    edges.unshift(`  start --> ${remap(nodeId.get(start['Item.ID'])!)}`);
+  }
 
   if (endUsed) lines.push('  finish(["End"])');
   lines.push(...edges);
+  if (folded.length) {
+    lines.push('  classDef folded fill:#eef3f9,stroke:#6f8fb8,stroke-width:1.5px,stroke-dasharray:5 3,color:#1e293b');
+    lines.push(`  class ${folded.join(',')} folded`);
+  }
   return lines.join('\n');
 }
 
@@ -176,3 +278,74 @@ function escapeLabel(s: string): string {
 }
 
 export type { SurveyModel };
+
+/**
+ * The survey's flow as an indented text outline (the prior tool's "text" flowchart output):
+ * blocks and skip-logic conditions open nested sections, questions are listed inside them.
+ *
+ *   ev_used: Did you use any alcohol or drugs today?
+ *     IF ev_used is "Yes":
+ *       Block: Substance use details
+ *         ev_substances: Which did you use?
+ *           IF ev_substances includes "Alcohol":
+ *             ev_alc_drinks: How many standard drinks did you have?
+ */
+export function flowchartText(survey: Survey): string {
+  const model = buildSurveyModel(survey);
+  const isTarget = (id: string) => (model.branchesTo.get(id)?.length ?? 0) > 0;
+  const condition = (id: string) =>
+    (model.branchesTo.get(id) ?? [])
+      .map((b) => {
+        const parent = model.byId.get(b.parentId);
+        const name = parent?.['Question.ID'] ?? b.parentId;
+        const verb = parent?.['Question.Type.Display.Name'] === 'Multiple Select' ? 'includes' : 'is';
+        return b.definitions.length ? `${name} ${verb} ${b.definitions.map((d) => `"${d}"`).join(' or ')}` : `${name} ${b.condition ?? 'meets its condition'}`;
+      })
+      .join(', or ');
+
+  /**
+   * Open contexts for an item, outermost first. A skip-logic target nests under the question that
+   * opens it ("if:<id>"); a block member nests under its block ("block:<id>").
+   */
+  const memo = new Map<string, string[]>();
+  const contexts = (q: Question, guard = new Set<string>()): string[] => {
+    const id = q['Item.ID'];
+    if (memo.has(id)) return memo.get(id)!;
+    if (guard.has(id)) return [];
+    guard.add(id);
+    let out: string[] = [];
+    const opener = model.branchesTo.get(id)?.[0]?.parentId;
+    const parentBlock = q.Parent ? model.byId.get(q.Parent) : undefined;
+    if (isTarget(id) && opener && model.byId.has(opener)) {
+      // "under:" adds one indent level so the IF sits beneath the question that opens it.
+      out = [...contexts(model.byId.get(opener)!, guard), `under:${opener}`, `if:${id}`];
+    } else if (parentBlock && isBlock(parentBlock)) {
+      out = [...contexts(parentBlock, guard), `block:${parentBlock['Item.ID']}`];
+    }
+    // A block member whose block is itself a target: the block's contexts already carry the IF.
+    if (isTarget(id) && parentBlock && isBlock(parentBlock) && !out.includes(`block:${parentBlock['Item.ID']}`)) {
+      const inBlock = contexts(parentBlock, guard);
+      if (inBlock.length >= out.length - 1) out = [...inBlock, `block:${parentBlock['Item.ID']}`, `if:${id}`];
+    }
+    memo.set(id, out);
+    return out;
+  };
+
+  const lines = [survey['Survey.LongName'] || survey['Survey.Name']];
+  let open: string[] = [];
+  for (const q of model.items) {
+    if (isBlock(q)) continue;
+    const ctx = contexts(q);
+    let common = 0;
+    while (common < open.length && common < ctx.length && open[common] === ctx[common]) common++;
+    for (let k = common; k < ctx.length; k++) {
+      const [kind, id] = [ctx[k]!.slice(0, ctx[k]!.indexOf(':')), ctx[k]!.slice(ctx[k]!.indexOf(':') + 1)];
+      const pad = '  '.repeat(k + 1);
+      if (kind === 'under') continue;
+      lines.push(kind === 'if' ? `${pad}IF ${condition(id)}:` : `${pad}Block: ${itemLabel(model.byId.get(id)!)}`);
+    }
+    open = ctx;
+    lines.push(`${'  '.repeat(ctx.length + 1)}${q['Question.ID']}: ${itemLabel(q)} [${q['Question.Type.Display.Name']}]`);
+  }
+  return lines.join('\n');
+}

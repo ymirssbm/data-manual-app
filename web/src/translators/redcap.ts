@@ -2,7 +2,7 @@
 // Each REDCap instrument (form) becomes a survey; each section header starts a block.
 // Simple branching logic ([field] = 'x' or ...) becomes skip logic; anything more
 // complex is kept verbatim in the item description so nothing is silently lost.
-import { buildBlockMap, parseCsvObjects, stripHtml, type Survey } from '../core';
+import { buildBlockMap, parseCsvObjects, stripHtml, toIsoDateTime, type Survey } from '../core';
 import { TranslationError, type Translator } from './types';
 
 type Obj = Record<string, unknown>;
@@ -39,8 +39,15 @@ export const redcapTranslator: Translator = {
   translate: ({ text, fileName }) => {
     const raw = parseCsvObjects(text);
     if (!raw.length) throw new TranslationError('The CSV has no rows.');
-    const rows = raw.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [norm(k), v.trim()])));
-    if (!('field_name' in rows[0]!) || !('field_type' in rows[0]!)) {
+    const studyName = fileName.replace(/_DataDictionary.*$/i, '').replace(/\.[^.]+$/, '').replace(/_/g, ' ') || 'REDCap project';
+    return redcapDictionaryToSpec(raw, studyName);
+  },
+};
+
+/** REDCap metadata (CSV download or API `content=metadata` JSON rows) -> study spec. */
+export function redcapDictionaryToSpec(raw: Array<Record<string, string>>, studyName: string): { spec: Obj; notes: string[] } {
+    const rows = raw.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [norm(k), String(v ?? '').trim()])));
+    if (!rows.length || !('field_name' in rows[0]!) || !('field_type' in rows[0]!)) {
       throw new TranslationError('Missing the "Variable / Field Name" or "Field Type" column; is this a REDCap data dictionary?');
     }
     const notes: string[] = [];
@@ -129,7 +136,6 @@ export const redcapTranslator: Translator = {
     }
     notes.push('A REDCap data dictionary has no schedule or study details; add them in the spec.');
 
-    const studyName = fileName.replace(/_DataDictionary.*$/i, '').replace(/\.[^.]+$/, '').replace(/_/g, ' ') || 'REDCap project';
     const surveyList = [...surveys.entries()].map(([form, questions]) => ({
       'Survey.Name': form,
       'Survey.LongName': form.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
@@ -144,8 +150,8 @@ export const redcapTranslator: Translator = {
       },
       notes,
     };
-  },
-};
+}
+
 
 function parseChoices(s: string | undefined): Array<{ value: string; label: string }> {
   if (!s) return [];
@@ -216,4 +222,62 @@ export function parseBranching(logic: string): { field: string; op: string; valu
     }
   }
   return field && op ? { field, op, values } : null;
+}
+
+/**
+ * REDCap records (API `content=record`, flat, raw values; or the "raw data" CSV
+ * export) -> the spec's long-format data. One session per record row (event /
+ * repeat instance); a form counts as delivered in a row when any of its fields,
+ * its timestamp or its _complete flag has a value. Checkbox columns
+ * (field___code) are combined into "1,3" style multi-select values.
+ */
+export function redcapRecordsToData(
+  records: Array<Record<string, string>>,
+  spec: { surveys: Array<{ 'Survey.Name': string; questions?: Array<{ 'Question.ID': string; 'Item.Type': string | null; 'Question.Type.Display.Name': string }> }> },
+  { timeZone, now = new Date() }: { timeZone?: string; now?: Date } = {},
+): { data: Record<string, unknown[]>; notes: string[] } {
+  const notes: string[] = [];
+  if (!records.length) return { data: emptyData(), notes: ['The project has no records yet.'] };
+  const idField = Object.keys(records[0]!)[0]!;
+  const fallback = now.toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const cols = emptyData();
+  let undated = 0;
+  records.forEach((rec, rowIndex) => {
+    for (const survey of spec.surveys) {
+      const form = survey['Survey.Name'];
+      const fields = (survey.questions ?? []).filter((q) => q['Item.Type'] === 'Question' && q['Question.Type.Display.Name'] !== 'Informational Fullscreen');
+      const value = (q: (typeof fields)[number]) => {
+        if (q['Question.Type.Display.Name'] === 'Multiple Select') {
+          const prefix = `${q['Question.ID']}___`;
+          const codes = Object.keys(rec).filter((k) => k.startsWith(prefix) && rec[k] === '1').map((k) => k.slice(prefix.length));
+          return codes.join(',');
+        }
+        return String(rec[q['Question.ID']] ?? '');
+      };
+      const vals = fields.map((q) => [q['Question.ID'], value(q)] as const);
+      const stamp = rec[`${form}_timestamp`];
+      const delivered = vals.some(([, v]) => v !== '') || (stamp && stamp !== '[not completed]') || (rec[`${form}_complete`] ?? '') !== '';
+      if (!delivered || !fields.length) continue;
+      let time = stamp && stamp !== '[not completed]' ? toIsoDateTime(stamp, timeZone) : null;
+      if (!time) {
+        undated++;
+        time = fallback;
+      }
+      for (const [q, v] of vals) {
+        if (q === idField) continue;
+        cols['Participant.ID'].push(String(rec[idField] ?? ''));
+        cols['Session.ID'].push(rowIndex + 1);
+        cols['Survey.Date.Completed'].push(time);
+        cols['Question.ID'].push(q);
+        cols['User.Response'].push(v);
+      }
+    }
+  });
+  notes.push(`Read ${records.length} record row(s) for ${new Set(records.map((r) => r[idField])).size} participant(s).`);
+  if (undated) notes.push(`${undated} form instance(s) had no survey timestamp (data-entry forms don't record one), so they're dated ${fallback.slice(0, 10)}, the import date.`);
+  return { data: cols, notes };
+}
+
+function emptyData() {
+  return { 'Participant.ID': [] as string[], 'Session.ID': [] as number[], 'Survey.Date.Completed': [] as string[], 'Question.ID': [] as string[], 'User.Response': [] as string[] };
 }

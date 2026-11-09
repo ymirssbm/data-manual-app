@@ -10,7 +10,9 @@ import {
   generateFlowchart,
   indexResponses,
 } from '../src/generators';
-import example from '../../examples/minimal-study.json';
+import example from './fixtures/minimal-study.json';
+
+const TITLE_PAGE = { nameOfStudy: true, authors: true, studyMetadata: true, funding: true };
 
 const spec = (): StudySpec => {
   const r = validateSpec(structuredClone(example));
@@ -99,10 +101,10 @@ describe('descriptives', () => {
 
 describe('codebook', () => {
   it('keeps the prior codebook structure', () => {
-    const html = generateCodebookHtml(spec(), {}, { generatedAt: new Date('2026-01-01') });
+    const html = generateCodebookHtml(spec(), TITLE_PAGE, { generatedAt: new Date('2026-01-01') });
     expect(html.startsWith('<!doctype html>')).toBe(true);
     for (const s of ['Title Page', 'Name of study', 'Abstract Page', 'Effective Summary', 'Study Schedule', 'Variable List', 'Codebook Generated 2026-01-01',
-      'header-shading', '[item_stress]', 'Way the question was delivered:', 'Click to view visuals', 'Frequency Table', 'Barplot', 'Missingness Descriptives',
+      'header-shading', '[item_stress]', 'cb-q-head', 'cb-q-meta', 'Frequency Table', 'Barplot', 'Missingness Descriptives',
       'Answered / Delivered', 'This question is only delivered if participant answered', 'Data Collection Period:', 'id="backToTopBtn"']) {
       expect(html, s).toContain(s);
     }
@@ -119,7 +121,7 @@ describe('codebook', () => {
   });
 
   it('has a sections menu, a collapsible TOC and collapsible sections', () => {
-    const html = generateCodebookHtml(spec());
+    const html = generateCodebookHtml(spec(), TITLE_PAGE);
     expect(html).toContain('class="cb-menu-btn"');
     expect(html).toContain('class="cb-toc-toggle"');
     expect(html).toContain('class="cb-twisty"');
@@ -137,10 +139,18 @@ describe('codebook', () => {
   });
 
   it('nests the table of contents', () => {
-    const html = generateCodebookHtml(spec());
+    const html = generateCodebookHtml(spec(), TITLE_PAGE);
     const toc = html.slice(html.indexOf('id="cb-toc-body"'), html.indexOf('</nav>', html.indexOf('id="cb-toc-body"')));
-    expect((toc.match(/<ul>/g) ?? []).length).toBe((toc.match(/<\/ul>/g) ?? []).length);
+    expect((toc.match(/<ul[ >]/g) ?? []).length).toBe((toc.match(/<\/ul>/g) ?? []).length);
     expect((toc.match(/<li[ >]/g) ?? []).length).toBe((toc.match(/<\/li>/g) ?? []).length);
     expect(toc.indexOf('Title Page')).toBeLessThan(toc.indexOf('Name of study'));
+  });
+});
+
+describe('codebook defaults', () => {
+  it('leaves out the title page and never prints authors under the title', () => {
+    const html = generateCodebookHtml(spec());
+    expect(html).not.toContain('Title Page');
+    expect(html).not.toContain('class="author"');
   });
 });

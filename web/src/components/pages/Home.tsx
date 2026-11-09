@@ -5,7 +5,9 @@ import { Box, Icon, Row } from '../ui';
 import { download, safeFileName } from '../util';
 
 const FEATURES: Array<{ icon: string; title: string; text: string; page: PageId }> = [
-  { icon: 'download', title: 'Data Pull', text: 'Pull a study from Wear-IT, or import Qualtrics, REDCap and study spec files.', page: 'datapull' },
+  { icon: 'import', title: 'Data Import', text: 'Pull from Wear-IT, REDCap or Qualtrics, open study files, or bring your own CSV dataset.', page: 'datapull' },
+  { icon: 'edit', title: 'Survey Editor', text: 'Edit questions, blocks and skip logic, and try the survey as a live form.', page: 'editor' },
+  { icon: 'export', title: 'Data Export', text: 'Export the study to REDCap, Qualtrics or SurveyJS, and responses as CSV.', page: 'export' },
   { icon: 'book', title: 'Codebook', text: 'Generate a full HTML codebook with descriptives, and save it as a PDF.', page: 'codebook_gen' },
   { icon: 'table', title: 'Data Dictionary', text: 'One row per variable with types, ranges, response options and skip logic.', page: 'datadict_gen' },
   { icon: 'diagram', title: 'Study Flowchart', text: 'See how each survey flows, including blocks and skip logic.', page: 'flowchart' },

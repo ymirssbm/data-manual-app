@@ -5,7 +5,7 @@ import { validateSpec, type StudySpec } from '../src/core';
 import { detectTranslator, legacyTranslator, qualtricsTranslator, redcapTranslator } from '../src/translators';
 import { parseBranching } from '../src/translators/redcap';
 
-const ex = (p: string) => ({ fileName: p.split('/').pop()!, text: readFileSync(resolve(__dirname, '../../examples', p), 'utf8') });
+const ex = (p: string) => ({ fileName: p.split('/').pop()!, text: readFileSync(resolve(__dirname, 'fixtures', p), 'utf8') });
 
 function translateValid(p: string) {
   const input = ex(p);

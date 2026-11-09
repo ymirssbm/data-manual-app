@@ -34,6 +34,13 @@ export function renderMermaid(code: string): Promise<string> {
       // The generator inserts its own line breaks, so mermaid's wrapping is set wide enough not to re-wrap.
       flowchart: { htmlLabels: false, curve: 'basis', useMaxWidth: false, nodeSpacing: 30, rankSpacing: 40, wrappingWidth: 420 },
       markdownAutoWrap: false,
+      // Blocks as a quiet tinted panel instead of the default yellow cluster fill.
+      themeCSS: [
+        '.cluster rect { fill: #f5f8fc !important; stroke: #c3d0e0 !important; stroke-width: 1px !important; rx: 10px; ry: 10px; }',
+        '.cluster-label text, .cluster text { fill: #334155 !important; font-weight: 600; }',
+        '.cluster .nodeLabel, .cluster-label .nodeLabel { color: #334155 !important; font-weight: 600; }',
+        '.edgeLabel rect, .labelBkg { fill: #ffffff !important; opacity: 0.92; }',
+      ].join('\n'),
       maxTextSize: 1_000_000,
       maxEdges: 5000,
       fontFamily: 'system-ui, -apple-system, Segoe UI, sans-serif',

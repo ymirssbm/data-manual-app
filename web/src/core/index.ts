@@ -6,3 +6,5 @@ export type { ValidationResult } from './validate';
 export { checkCrossReferences } from './crossRefs';
 export * from './model';
 export * from './csv';
+export * from './time';
+export * from './dataset';

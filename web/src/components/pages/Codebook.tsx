@@ -60,6 +60,8 @@ const TREE: TreeNode[] = [
       { label: 'Bar Plot', key: 'barPlot', needsData: true },
       { label: 'Histograms', key: 'histograms', needsData: true },
       { label: 'Missingness Page', key: 'missingness', needsData: true },
+      { label: 'Missingness Plots', key: 'missingnessPlots', needsData: true },
+      { label: 'Outlier Plots', key: 'outlierPlots', needsData: true },
       { label: 'Screenshot', key: 'screenshots' },
     ],
   },
@@ -225,19 +227,31 @@ export function CodebookGeneratorPage({ spec, settings, setSettings, codebook, o
               <div className="dm-grid-2 dm-gap-sm">
                 <Field label="Body font">
                   <select className="dm-input" value={theme.bodyFont} onChange={(e) => setTheme({ bodyFont: e.target.value as CodebookFont })}>
-                    {Object.entries(CODEBOOK_FONTS).map(([k, f]) => (
-                      <option key={k} value={k}>
-                        {f.label}
-                      </option>
+                    {(['System', 'Web'] as const).map((g) => (
+                      <optgroup key={g} label={g === 'System' ? 'System fonts (work offline)' : 'Web fonts (load online)'}>
+                        {Object.entries(CODEBOOK_FONTS)
+                          .filter(([, f]) => f.group === g)
+                          .map(([k, f]) => (
+                            <option key={k} value={k}>
+                              {f.label}
+                            </option>
+                          ))}
+                      </optgroup>
                     ))}
                   </select>
                 </Field>
                 <Field label="Heading font">
                   <select className="dm-input" value={theme.headingFont} onChange={(e) => setTheme({ headingFont: e.target.value as CodebookFont })}>
-                    {Object.entries(CODEBOOK_FONTS).map(([k, f]) => (
-                      <option key={k} value={k}>
-                        {f.label}
-                      </option>
+                    {(['System', 'Web'] as const).map((g) => (
+                      <optgroup key={g} label={g === 'System' ? 'System fonts (work offline)' : 'Web fonts (load online)'}>
+                        {Object.entries(CODEBOOK_FONTS)
+                          .filter(([, f]) => f.group === g)
+                          .map(([k, f]) => (
+                            <option key={k} value={k}>
+                              {f.label}
+                            </option>
+                          ))}
+                      </optgroup>
                     ))}
                   </select>
                 </Field>
@@ -246,8 +260,8 @@ export function CodebookGeneratorPage({ spec, settings, setSettings, codebook, o
                 </Field>
                 <Field label="Charts">
                   <select className="dm-input" value={theme.charts} onChange={(e) => setTheme({ charts: e.target.value as CodebookTheme['charts'] })}>
-                    <option value="ggplot">ggplot grey</option>
                     <option value="accent">Accent color</option>
+                    <option value="ggplot">ggplot grey</option>
                   </select>
                 </Field>
               </div>

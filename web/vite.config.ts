@@ -15,50 +15,64 @@ const wearitProxy: Record<string, ProxyOptions> = {
 };
 
 /**
- * Relay for OpenAI-compatible chat endpoints (Azure AI Foundry, OpenAI, ...),
- * which usually reject browser requests. POST /proxy/ai with the real URL in
- * x-target-url. Only https URLs ending in /chat/completions are forwarded, and
- * only the auth and content-type headers are passed on.
+ * Relay for APIs that refuse browser requests (no CORS): REDCap, Qualtrics, and
+ * OpenAI-compatible chat endpoints. The browser sends the real URL in
+ * x-target-url to /proxy/http (or /proxy/ai). Only https URLs of these shapes
+ * are forwarded, and only auth/content headers are passed on:
+ *   - REDCap API:      https://<host>/<...>/api/          (POST)
+ *   - Qualtrics API:   https://<dc>.qualtrics.com/API/v3/... (GET/POST)
+ *   - Chat completions https://<host>/.../chat/completions (POST)
  */
-function aiRelay(): Plugin {
+export function relayAllowed(url: URL, method: string): boolean {
+  if (url.protocol !== 'https:') return false;
+  if (/\.qualtrics\.com$/i.test(url.hostname) && url.pathname.startsWith('/API/v3/')) return method === 'GET' || method === 'POST';
+  if (method !== 'POST') return false;
+  return /\/api\/?$/i.test(url.pathname) || url.pathname.endsWith('/chat/completions');
+}
+
+function apiRelay(): Plugin {
+  const forward = ['authorization', 'api-key', 'x-api-token', 'content-type', 'accept'];
   const handler: Connect.NextHandleFunction = async (req, res, next) => {
-    if (req.url !== '/proxy/ai') return next();
+    if (req.url !== '/proxy/http' && req.url !== '/proxy/ai') return next();
     const send = (status: number, message: string) => {
       res.statusCode = status;
       res.setHeader('content-type', 'application/json');
       res.end(JSON.stringify({ error: { message } }));
     };
-    if (req.method !== 'POST') return send(405, 'POST only');
-    const target = String(req.headers['x-target-url'] ?? '');
     let url: URL;
     try {
-      url = new URL(target);
+      url = new URL(String(req.headers['x-target-url'] ?? ''));
     } catch {
       return send(400, 'Missing or invalid x-target-url');
     }
-    if (url.protocol !== 'https:' || !url.pathname.endsWith('/chat/completions')) return send(400, 'Only https …/chat/completions endpoints can be relayed');
-    const chunks: Buffer[] = [];
-    for await (const c of req) chunks.push(c as Buffer);
-    const headers: Record<string, string> = { 'content-type': 'application/json' };
-    for (const h of ['authorization', 'api-key']) if (typeof req.headers[h] === 'string') headers[h] = req.headers[h] as string;
+    const method = req.method ?? 'GET';
+    if (!relayAllowed(url, method)) return send(403, 'This URL is not one the relay forwards (REDCap /api/, Qualtrics /API/v3/, or /chat/completions over https).');
+    const headers: Record<string, string> = {};
+    for (const h of forward) if (typeof req.headers[h] === 'string') headers[h] = req.headers[h] as string;
+    let body: Buffer | undefined;
+    if (method === 'POST') {
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      body = Buffer.concat(chunks);
+    }
     try {
-      const upstream = await fetch(url, { method: 'POST', headers, body: Buffer.concat(chunks) });
+      const upstream = await fetch(url, { method, headers, body: body ? new Uint8Array(body) : undefined });
       res.statusCode = upstream.status;
-      res.setHeader('content-type', upstream.headers.get('content-type') ?? 'application/json');
+      res.setHeader('content-type', upstream.headers.get('content-type') ?? 'application/octet-stream');
       res.end(Buffer.from(await upstream.arrayBuffer()));
     } catch (e) {
       send(502, `Could not reach ${url.host}: ${(e as Error).message}`);
     }
   };
   return {
-    name: 'data-manual-ai-relay',
+    name: 'data-manual-api-relay',
     configureServer: (server) => void server.middlewares.use(handler),
     configurePreviewServer: (server) => void server.middlewares.use(handler),
   };
 }
 
 export default defineConfig({
-  plugins: [react(), aiRelay()],
+  plugins: [react(), apiRelay()],
   // Relative asset paths so the built app works from any static host or subfolder.
   base: './',
   server: {

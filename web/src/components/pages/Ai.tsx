@@ -3,7 +3,7 @@ import { isQuestion, surveyModels, type StudySpec, type ValidationResult } from 
 import { CLAUDE_MODELS, type AiConfig, type ChatTurn } from '../../ai/providers';
 import { replyProse, runStudyAi } from '../../ai/studyAi';
 import type { LoadedSource } from './DataPull';
-import { Box, Field, Icon, PageTitle, Row } from '../ui';
+import { Box, Field, Icon, PageTitle } from '../ui';
 import { download, safeFileName } from '../util';
 
 interface Props {
@@ -54,8 +54,8 @@ export function AiPage({ spec, onLoaded, notify }: Props) {
     { role: 'assistant', text: "Hi! I'm your AI Study Assistant. Add your API key in AI Settings, then describe a study to create or the changes you want to the loaded one." },
   ]);
   const [input, setInput] = useState('');
-  const [directGen, setDirectGen] = useState('');
-  const [directMod, setDirectMod] = useState('');
+  // Settings start open until a key is entered, then stay out of the way.
+  const [settingsOpen, setSettingsOpen] = useState(() => !loadConfig().apiKey);
   const [busy, setBusy] = useState<string | null>(null);
   const [streaming, setStreaming] = useState('');
   const abort = useRef<AbortController | null>(null);
@@ -124,89 +124,106 @@ export function AiPage({ spec, onLoaded, notify }: Props) {
 
   const lastPromptBefore = (i: number) => [...messages.slice(0, i)].reverse().find((m) => m.role === 'user')?.text ?? '';
 
+  const modelLabel =
+    config.provider === 'anthropic'
+      ? (CLAUDE_MODELS.find((m) => m.id === config.model)?.label.replace(/ \(.*\)$/, '') ?? config.model)
+      : config.model || 'No model set';
+  const send = () => {
+    const p = input;
+    setInput('');
+    void run(p, spec, true);
+  };
+
   return (
     <>
-      <PageTitle>AI Study Assistant</PageTitle>
-      <Box title="AI Settings">
-        <div className="dm-grid-2">
-          <div>
-            <Field label="Provider">
-              <select
-                className="dm-input"
-                value={config.provider}
-                onChange={(e) => {
-                  const provider = e.target.value as AiConfig['provider'];
-                  setConfig((c) => ({ ...c, provider, model: provider === 'anthropic' ? 'claude-opus-5-5' : c.provider === 'anthropic' ? '' : c.model }));
-                }}
-              >
-                <option value="anthropic">Claude (Anthropic API)</option>
-                <option value="openai">OpenAI-compatible endpoint (Azure AI Foundry, OpenAI, local)</option>
-              </select>
-            </Field>
-            <Field label="AI API Token">
-              <input className="dm-input" type="password" value={config.apiKey} onChange={(e) => set('apiKey', e.target.value)} placeholder="Enter API key" autoComplete="off" />
-            </Field>
-            <label className="dm-check">
-              <input type="checkbox" checked={rememberKey} onChange={(e) => setRememberKey(e.target.checked)} /> Remember key on this computer
-            </label>
-          </div>
-          <div>
-            {config.provider === 'anthropic' ? (
-              <>
-                <Field label="Model">
-                  <select className="dm-input" value={CLAUDE_MODELS.some((m) => m.id === config.model) ? config.model : ''} onChange={(e) => set('model', e.target.value)}>
-                    {CLAUDE_MODELS.map((m) => (
-                      <option key={m.id} value={m.id}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Effort" hint="Higher effort thinks longer: better for big or tricky studies, slower and costlier.">
-                  <select className="dm-input" value={config.effort} onChange={(e) => set('effort', e.target.value as AiConfig['effort'])}>
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
-                </Field>
-              </>
-            ) : (
-              <>
-                <Field label="AI URL" hint="Base URL ending in /v1 (or your Azure AI Foundry …/openai/v1).">
-                  <input className="dm-input" value={config.baseUrl} onChange={(e) => set('baseUrl', e.target.value)} placeholder="https://api.openai.com/v1" />
-                </Field>
-                <Field label="Model">
-                  <input className="dm-input" value={config.model} onChange={(e) => set('model', e.target.value)} placeholder="Model or deployment name" />
-                </Field>
-                <label className="dm-check">
-                  <input type="checkbox" checked={config.useRelay} onChange={(e) => set('useRelay', e.target.checked)} /> Relay through this app (avoids browser blocking)
-                </label>
-              </>
-            )}
-          </div>
-        </div>
-        <div className="dm-security-note">
-          <Icon name="lock" /> Your key is sent only to the AI provider{config.provider === 'openai' && config.useRelay ? ' (through this app\'s local server)' : ''}. Response data in your study is never sent.
-        </div>
-      </Box>
-
-      <Box
-        title="Chat"
-        tools={
-          <div className="dm-inline dm-inline-tight">
-            <button className="dm-btn dm-btn-ghost dm-btn-sm" onClick={() => setMessages((m) => [...m, { role: 'assistant', text: HELP }])}>
-              Help
+      <PageTitle
+        actions={
+          messages.length > 1 && (
+            <button className="dm-btn dm-btn-secondary" onClick={() => setMessages((m) => m.slice(0, 1))} disabled={!!busy}>
+              New chat
             </button>
-            <button className="dm-btn dm-btn-ghost dm-btn-sm" onClick={() => setInput(EXAMPLE_GENERATE)}>
-              Example: Generate
-            </button>
-            <button className="dm-btn dm-btn-ghost dm-btn-sm" onClick={() => setInput(EXAMPLE_MODIFY)}>
-              Example: Modify
-            </button>
-          </div>
+          )
         }
       >
-        <p className="dm-hint">{spec ? `Working on: ${spec['Study.Metadata']['Study.Name']}` : 'No study loaded: the assistant will create a new one.'}</p>
+        AI Study Assistant
+      </PageTitle>
+
+      <section className="dm-box">
+        <button className="dm-box-header dm-box-header-btn" onClick={() => setSettingsOpen((o) => !o)} aria-expanded={settingsOpen}>
+          <h3 className="dm-box-title">
+            <span className="dm-caret-light">{settingsOpen ? '▾' : '▸'}</span> AI Settings
+          </h3>
+          <span className="dm-settings-summary">
+            {modelLabel} · {config.apiKey ? 'key added' : 'no key yet'}
+          </span>
+        </button>
+        {settingsOpen && (
+          <div className="dm-box-body">
+            <div className="dm-settings-grid">
+              <Field label="Provider">
+                <select
+                  className="dm-input"
+                  value={config.provider}
+                  onChange={(e) => {
+                    const provider = e.target.value as AiConfig['provider'];
+                    setConfig((c) => ({ ...c, provider, model: provider === 'anthropic' ? 'claude-opus-5-5' : c.provider === 'anthropic' ? '' : c.model }));
+                  }}
+                >
+                  <option value="anthropic">Claude (Anthropic API)</option>
+                  <option value="openai">OpenAI-compatible (Azure AI Foundry, OpenAI, local)</option>
+                </select>
+              </Field>
+              {config.provider === 'anthropic' ? (
+                <>
+                  <Field label="Model">
+                    <select className="dm-input" value={CLAUDE_MODELS.some((m) => m.id === config.model) ? config.model : ''} onChange={(e) => set('model', e.target.value)}>
+                      {CLAUDE_MODELS.map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Effort">
+                    <select className="dm-input" value={config.effort} onChange={(e) => set('effort', e.target.value as AiConfig['effort'])}>
+                      <option value="low">Low (fastest)</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High (best for big studies)</option>
+                    </select>
+                  </Field>
+                </>
+              ) : (
+                <>
+                  <Field label="AI URL">
+                    <input className="dm-input" value={config.baseUrl} onChange={(e) => set('baseUrl', e.target.value)} placeholder="https://…/v1" />
+                  </Field>
+                  <Field label="Model">
+                    <input className="dm-input" value={config.model} onChange={(e) => set('model', e.target.value)} placeholder="Model or deployment name" />
+                  </Field>
+                </>
+              )}
+              <Field label="AI API Token">
+                <input className="dm-input" type="password" value={config.apiKey} onChange={(e) => set('apiKey', e.target.value)} placeholder="Enter API key" autoComplete="off" />
+              </Field>
+            </div>
+            <div className="dm-inline dm-inline-tight dm-settings-foot">
+              <label className="dm-check">
+                <input type="checkbox" checked={rememberKey} onChange={(e) => setRememberKey(e.target.checked)} /> Remember key on this computer
+              </label>
+              {config.provider === 'openai' && (
+                <label className="dm-check">
+                  <input type="checkbox" checked={config.useRelay} onChange={(e) => set('useRelay', e.target.checked)} /> Relay through this app
+                </label>
+              )}
+              <span className="dm-hint dm-push-right">
+                <Icon name="lock" size={13} /> Your key goes only to the AI provider. Response data is never sent.
+              </span>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <Box title="Chat" tools={<span className="dm-chat-context">{spec ? `Working on: ${spec['Study.Metadata']['Study.Name']}` : 'No study loaded: a new one will be created'}</span>}>
         <div className="dm-chat">
           {messages.map((m, i) => (
             <div key={i} className={`dm-msg dm-msg-${m.role} ${m.error ? 'is-error' : ''}`}>
@@ -216,10 +233,10 @@ export function AiPage({ spec, onLoaded, notify }: Props) {
           ))}
           {busy && (
             <div className="dm-msg dm-msg-assistant is-pending">
-              <div className="dm-msg-text">{streaming || busy}</div>
+              {streaming && <div className="dm-msg-text">{streaming}</div>}
               <div className="dm-msg-status">
                 <span className="dm-spinner" /> {busy}
-                <button className="dm-btn dm-btn-ghost dm-btn-sm" onClick={() => abort.current?.abort()}>
+                <button className="dm-link-btn" onClick={() => abort.current?.abort()}>
                   Stop
                 </button>
               </div>
@@ -228,54 +245,37 @@ export function AiPage({ spec, onLoaded, notify }: Props) {
           <div ref={chatEnd} />
         </div>
         <form
-          className="dm-chat-input"
+          className="dm-composer"
           onSubmit={(e) => {
             e.preventDefault();
-            const p = input;
-            setInput('');
-            void run(p, spec, true);
+            send();
           }}
         >
           <textarea
-            className="dm-input"
-            rows={3}
+            rows={2}
             value={input}
-            placeholder="Describe a study, or the changes you want…"
+            placeholder={spec ? 'Describe a change to this study, or a new study…' : 'Describe the study you want to create…'}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                (e.currentTarget.form as HTMLFormElement).requestSubmit();
+                send();
               }
             }}
           />
-          <div className="dm-inline dm-inline-tight">
-            <button className="dm-btn dm-btn-primary" type="submit" disabled={!!busy || !input.trim()}>
-              Send
-            </button>
-            <button className="dm-btn dm-btn-secondary" type="button" onClick={() => setMessages((m) => m.slice(0, 1))} disabled={!!busy}>
-              Clear
-            </button>
-          </div>
+          <button className="dm-btn dm-btn-primary" type="submit" disabled={!!busy || !input.trim()}>
+            Send
+          </button>
         </form>
+        <div className="dm-chips">
+          <button onClick={() => setInput(EXAMPLE_GENERATE)}>Example: generate a study</button>
+          <button onClick={() => setInput(EXAMPLE_MODIFY)} disabled={!spec}>
+            Example: modify this study
+          </button>
+          <button onClick={() => setMessages((m) => [...m, { role: 'assistant', text: HELP }])}>What can it do?</button>
+          <span className="dm-hint dm-push-right">Enter to send · Shift+Enter for a new line</span>
+        </div>
       </Box>
-
-      <Row>
-        <Box title="Direct Generation" width={6}>
-          <p className="dm-hint">Create a brand-new study from one description (ignores the loaded study).</p>
-          <textarea className="dm-input" rows={4} value={directGen} onChange={(e) => setDirectGen(e.target.value)} placeholder="Describe the study to generate…" />
-          <button className="dm-btn dm-btn-primary dm-mt" disabled={!!busy || !directGen.trim()} onClick={() => void run(directGen, null, false)}>
-            Generate (Direct)
-          </button>
-        </Box>
-        <Box title="Direct Modification" width={6}>
-          <p className="dm-hint">Apply one change to the loaded study.</p>
-          <textarea className="dm-input" rows={4} value={directMod} onChange={(e) => setDirectMod(e.target.value)} placeholder={spec ? 'Describe the change…' : 'Load a study first'} disabled={!spec} />
-          <button className="dm-btn dm-btn-primary dm-mt" disabled={!!busy || !directMod.trim() || !spec} onClick={() => void run(directMod, spec, false)}>
-            Modify (Direct)
-          </button>
-        </Box>
-      </Row>
     </>
   );
 }

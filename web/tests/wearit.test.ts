@@ -6,7 +6,9 @@ import { wearitPagesToSpec } from '../src/connectors/wearit/convert';
 import { generateCodebookHtml, generateDataDictionary, generateFlowchart, icc1 } from '../src/generators';
 import { detectTranslator } from '../src/translators';
 
-const raw = readFileSync(resolve(__dirname, '../../examples/wearit/sample-getData.json'), 'utf8');
+const TITLE_PAGE = { nameOfStudy: true, authors: true, studyMetadata: true, funding: true };
+
+const raw = readFileSync(resolve(__dirname, 'fixtures/wearit/sample-getData.json'), 'utf8');
 
 function convert(): { spec: StudySpec; notes: string[] } {
   const { spec, notes } = wearitPagesToSpec(JSON.parse(raw), { studyId: '365' });
@@ -63,7 +65,7 @@ describe('Wear-IT getData conversion', () => {
     expect(flow).toContain('-->|"Recovery Community<br/>Center (RCC)"|');
     expect(flow).toContain('-->|"Otherwise"|');
     expect(generateDataDictionary(spec).some((r) => r['Question.ID'] === 'Question 5976')).toBe(true);
-    const html = generateCodebookHtml(spec);
+    const html = generateCodebookHtml(spec, TITLE_PAGE);
     expect(html).toContain('N = ');
     expect(html).toContain('Devices Used:');
     expect(html).toContain('America/New_York');

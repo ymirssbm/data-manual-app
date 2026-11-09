@@ -1,0 +1,1368 @@
+{
+ "responses": [
+  {
+   "responseId": "R_991f2d1df26e",
+   "values": {
+    "startDate": "2026-03-06T15:34:00Z",
+    "endDate": "2026-03-06T15:37:00Z",
+    "recordedDate": "2026-03-06T15:37:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 180,
+    "QID2": 1,
+    "QID3": 0,
+    "QID5_1": 7,
+    "QID6": [
+     1,
+     2
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_98894356c018",
+   "values": {
+    "startDate": "2026-03-06T09:25:00Z",
+    "endDate": "2026-03-06T09:34:00Z",
+    "recordedDate": "2026-03-06T09:34:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 540,
+    "QID2": 1,
+    "QID3": 0,
+    "QID5_1": 59,
+    "QID6": [
+     1,
+     4,
+     5
+    ],
+    "QID7_TEXT": "My dog"
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_6d030475f9dc",
+   "values": {
+    "startDate": "2026-03-11T11:13:00Z",
+    "endDate": "2026-03-11T11:16:00Z",
+    "recordedDate": "2026-03-11T11:16:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 180,
+    "QID2": 3,
+    "QID3": 0,
+    "QID5_1": 27,
+    "QID6": [
+     2,
+     5
+    ],
+    "QID7_TEXT": "Music"
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_0769141d23e8",
+   "values": {
+    "startDate": "2026-03-08T16:15:00Z",
+    "endDate": "2026-03-08T16:19:00Z",
+    "recordedDate": "2026-03-08T16:19:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 240,
+    "QID2": 2,
+    "QID3": 1,
+    "QID4_TEXT": "25",
+    "QID5_1": 95,
+    "QID6": [
+     2,
+     5
+    ],
+    "QID7_TEXT": "Music"
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_fb5b63b91af1",
+   "values": {
+    "startDate": "2026-03-03T13:08:00Z",
+    "endDate": "2026-03-03T13:16:00Z",
+    "recordedDate": "2026-03-03T13:16:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 480,
+    "QID2": 3,
+    "QID3": 0,
+    "QID5_1": 96,
+    "QID6": [
+     1,
+     5
+    ],
+    "QID7_TEXT": "My dog"
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_3577f2a02489",
+   "values": {
+    "startDate": "2026-03-13T19:02:00Z",
+    "endDate": "2026-03-13T19:04:00Z",
+    "recordedDate": "2026-03-13T19:04:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 120,
+    "QID2": 1,
+    "QID3": 0,
+    "QID5_1": 53,
+    "QID6": [
+     1,
+     2,
+     5
+    ],
+    "QID7_TEXT": "Music"
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_24f282fa4b78",
+   "values": {
+    "startDate": "2026-03-06T11:29:00Z",
+    "endDate": "2026-03-06T11:33:00Z",
+    "recordedDate": "2026-03-06T11:33:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 240,
+    "QID2": 2,
+    "QID3": 1,
+    "QID4_TEXT": "8",
+    "QID5_1": 51,
+    "QID6": [
+     1
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_d46db37c25fe",
+   "values": {
+    "startDate": "2026-03-04T08:30:00Z",
+    "endDate": "2026-03-04T08:35:00Z",
+    "recordedDate": "2026-03-04T08:35:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 300,
+    "QID2": 4,
+    "QID3": 0,
+    "QID5_1": 49,
+    "QID6": [
+     2,
+     3
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_343199759665",
+   "values": {
+    "startDate": "2026-03-14T01:13:00Z",
+    "endDate": "2026-03-14T01:15:00Z",
+    "recordedDate": "2026-03-14T01:15:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 120,
+    "QID2": 2,
+    "QID3": 1,
+    "QID4_TEXT": "10",
+    "QID5_1": 53,
+    "QID6": [
+     2,
+     3
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_b312ed045d17",
+   "values": {
+    "startDate": "2026-03-13T18:19:00Z",
+    "endDate": "2026-03-13T18:25:00Z",
+    "recordedDate": "2026-03-13T18:25:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 360,
+    "QID2": 1,
+    "QID3": 1,
+    "QID4_TEXT": "30",
+    "QID5_1": 74,
+    "QID6": [
+     4,
+     5
+    ],
+    "QID7_TEXT": "Cooking"
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_e122176be08d",
+   "values": {
+    "startDate": "2026-03-12T18:43:00Z",
+    "endDate": "2026-03-12T18:45:00Z",
+    "recordedDate": "2026-03-12T18:45:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 120,
+    "QID2": 2,
+    "QID3": 0,
+    "QID5_1": 44,
+    "QID6": [
+     2,
+     4
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_671b4eb67d5c",
+   "values": {
+    "startDate": "2026-03-16T00:55:00Z",
+    "endDate": "2026-03-16T01:01:00Z",
+    "recordedDate": "2026-03-16T01:01:00Z",
+    "status": 0,
+    "progress": 60,
+    "finished": 0,
+    "duration": 360,
+    "QID2": 2,
+    "QID3": 0,
+    "QID6": [
+     4
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_b229ba0d7efa",
+   "values": {
+    "startDate": "2026-03-06T10:08:00Z",
+    "endDate": "2026-03-06T10:11:00Z",
+    "recordedDate": "2026-03-06T10:11:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 180,
+    "QID2": 3,
+    "QID3": 1,
+    "QID4_TEXT": "20",
+    "QID5_1": 27,
+    "QID6": [
+     2,
+     3
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_d7ab77cdc075",
+   "values": {
+    "startDate": "2026-03-03T20:28:00Z",
+    "endDate": "2026-03-03T20:33:00Z",
+    "recordedDate": "2026-03-03T20:33:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 300,
+    "QID2": 1,
+    "QID3": 0,
+    "QID5_1": 51,
+    "QID6": [
+     1
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_82b16a9af05d",
+   "values": {
+    "startDate": "2026-03-08T20:29:00Z",
+    "endDate": "2026-03-08T20:35:00Z",
+    "recordedDate": "2026-03-08T20:35:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 360,
+    "QID2": 3,
+    "QID3": 0,
+    "QID5_1": 65,
+    "QID6": [
+     1,
+     2,
+     4
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_9bad311600e2",
+   "values": {
+    "startDate": "2026-03-10T17:48:00Z",
+    "endDate": "2026-03-10T17:51:00Z",
+    "recordedDate": "2026-03-10T17:51:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 180,
+    "QID2": 2,
+    "QID3": 0,
+    "QID5_1": 64,
+    "QID6": [
+     2,
+     3,
+     4
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_39177ee5a832",
+   "values": {
+    "startDate": "2026-03-04T01:34:00Z",
+    "endDate": "2026-03-04T01:41:00Z",
+    "recordedDate": "2026-03-04T01:41:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 420,
+    "QID2": 3,
+    "QID3": 1,
+    "QID4_TEXT": "20",
+    "QID5_1": 70,
+    "QID6": [
+     2,
+     3,
+     4
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_3f8f761eaf97",
+   "values": {
+    "startDate": "2026-03-08T06:51:00Z",
+    "endDate": "2026-03-08T06:55:00Z",
+    "recordedDate": "2026-03-08T06:55:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 240,
+    "QID2": 4,
+    "QID3": 1,
+    "QID4_TEXT": "30",
+    "QID5_1": 68,
+    "QID6": [
+     4
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_0bcd0df5f68b",
+   "values": {
+    "startDate": "2026-03-03T16:56:00Z",
+    "endDate": "2026-03-03T16:58:00Z",
+    "recordedDate": "2026-03-03T16:58:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 120,
+    "QID2": 3,
+    "QID3": 0,
+    "QID5_1": 53,
+    "QID6": [
+     2,
+     3,
+     4
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_b9f760b341b1",
+   "values": {
+    "startDate": "2026-03-04T19:36:00Z",
+    "endDate": "2026-03-04T19:42:00Z",
+    "recordedDate": "2026-03-04T19:42:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 360,
+    "QID2": 4,
+    "QID3": 0,
+    "QID5_1": 82,
+    "QID6": [
+     1,
+     2,
+     3
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_bf70a632bd36",
+   "values": {
+    "startDate": "2026-03-03T06:24:00Z",
+    "endDate": "2026-03-03T06:30:00Z",
+    "recordedDate": "2026-03-03T06:30:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 360,
+    "QID2": 3,
+    "QID3": 1,
+    "QID4_TEXT": "20",
+    "QID5_1": 53,
+    "QID6": [
+     2,
+     5
+    ],
+    "QID7_TEXT": "Music"
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_a2dd969187be",
+   "values": {
+    "startDate": "2026-03-08T05:05:00Z",
+    "endDate": "2026-03-08T05:09:00Z",
+    "recordedDate": "2026-03-08T05:09:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 240,
+    "QID2": 2,
+    "QID3": 0,
+    "QID5_1": 44,
+    "QID6": [
+     2,
+     3,
+     5
+    ],
+    "QID7_TEXT": "Music"
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_a5fe7de45b7a",
+   "values": {
+    "startDate": "2026-03-07T18:19:00Z",
+    "endDate": "2026-03-07T18:22:00Z",
+    "recordedDate": "2026-03-07T18:22:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 180,
+    "QID2": 3,
+    "QID3": 0,
+    "QID5_1": 46,
+    "QID6": [
+     2,
+     3
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_ed8d992657c0",
+   "values": {
+    "startDate": "2026-03-03T17:05:00Z",
+    "endDate": "2026-03-03T17:13:00Z",
+    "recordedDate": "2026-03-03T17:13:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 480,
+    "QID2": 1,
+    "QID3": 0,
+    "QID5_1": 51,
+    "QID6": [
+     2
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_a31aa4c62a36",
+   "values": {
+    "startDate": "2026-03-09T11:17:00Z",
+    "endDate": "2026-03-09T11:20:00Z",
+    "recordedDate": "2026-03-09T11:20:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 180,
+    "QID2": 1,
+    "QID3": 0,
+    "QID5_1": 68,
+    "QID6": [
+     5
+    ],
+    "QID7_TEXT": "My dog"
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_cf77337724f7",
+   "values": {
+    "startDate": "2026-03-04T03:21:00Z",
+    "endDate": "2026-03-04T03:26:00Z",
+    "recordedDate": "2026-03-04T03:26:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 300,
+    "QID2": 2,
+    "QID3": 0,
+    "QID5_1": 82,
+    "QID6": [
+     1,
+     3,
+     5
+    ],
+    "QID7_TEXT": "Music"
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_3de762f2bd51",
+   "values": {
+    "startDate": "2026-03-09T06:19:00Z",
+    "endDate": "2026-03-09T06:22:00Z",
+    "recordedDate": "2026-03-09T06:22:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 180,
+    "QID2": 2,
+    "QID3": 1,
+    "QID4_TEXT": "60",
+    "QID5_1": 27,
+    "QID6": [
+     2,
+     4
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_7febc9643954",
+   "values": {
+    "startDate": "2026-03-07T08:34:00Z",
+    "endDate": "2026-03-07T08:43:00Z",
+    "recordedDate": "2026-03-07T08:43:00Z",
+    "status": 0,
+    "progress": 60,
+    "finished": 0,
+    "duration": 540,
+    "QID2": 2,
+    "QID3": 0,
+    "QID6": [
+     2,
+     3,
+     5
+    ],
+    "QID7_TEXT": "My dog"
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_0787b281e46d",
+   "values": {
+    "startDate": "2026-03-12T07:20:00Z",
+    "endDate": "2026-03-12T07:28:00Z",
+    "recordedDate": "2026-03-12T07:28:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 480,
+    "QID2": 2,
+    "QID3": 0,
+    "QID5_1": 41,
+    "QID6": [
+     2,
+     4,
+     5
+    ],
+    "QID7_TEXT": "My dog"
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_a10520a6ef7c",
+   "values": {
+    "startDate": "2026-03-16T08:11:00Z",
+    "endDate": "2026-03-16T08:20:00Z",
+    "recordedDate": "2026-03-16T08:20:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 540,
+    "QID2": 2,
+    "QID3": 0,
+    "QID5_1": 51,
+    "QID6": [
+     5
+    ],
+    "QID7_TEXT": "Cooking"
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_5896c3ad496c",
+   "values": {
+    "startDate": "2026-03-10T11:28:00Z",
+    "endDate": "2026-03-10T11:35:00Z",
+    "recordedDate": "2026-03-10T11:35:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 420,
+    "QID2": 3,
+    "QID3": 1,
+    "QID4_TEXT": "20",
+    "QID5_1": 85,
+    "QID6": [
+     4
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_90e0ad11738d",
+   "values": {
+    "startDate": "2026-03-11T06:52:00Z",
+    "endDate": "2026-03-11T06:55:00Z",
+    "recordedDate": "2026-03-11T06:55:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 180,
+    "QID2": 3,
+    "QID3": 1,
+    "QID4_TEXT": "20",
+    "QID5_1": 43,
+    "QID6": [
+     1,
+     2,
+     3
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_56d5344a4067",
+   "values": {
+    "startDate": "2026-03-08T19:56:00Z",
+    "endDate": "2026-03-08T20:00:00Z",
+    "recordedDate": "2026-03-08T20:00:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 240,
+    "QID2": 1,
+    "QID3": 1,
+    "QID4_TEXT": "12",
+    "QID5_1": 80,
+    "QID6": [
+     1,
+     5
+    ],
+    "QID7_TEXT": "Music"
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_091c8f17ee75",
+   "values": {
+    "startDate": "2026-03-16T04:41:00Z",
+    "endDate": "2026-03-16T04:45:00Z",
+    "recordedDate": "2026-03-16T04:45:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 240,
+    "QID2": 2,
+    "QID3": 0,
+    "QID5_1": 52,
+    "QID6": [
+     1,
+     3,
+     4
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_0a00dd76c0b3",
+   "values": {
+    "startDate": "2026-03-06T05:04:00Z",
+    "endDate": "2026-03-06T05:12:00Z",
+    "recordedDate": "2026-03-06T05:12:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 480,
+    "QID2": 1,
+    "QID3": 1,
+    "QID4_TEXT": "15",
+    "QID5_1": 43,
+    "QID6": [
+     2,
+     5
+    ],
+    "QID7_TEXT": "Music"
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_d1f0fef6663d",
+   "values": {
+    "startDate": "2026-03-09T11:40:00Z",
+    "endDate": "2026-03-09T11:45:00Z",
+    "recordedDate": "2026-03-09T11:45:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 300,
+    "QID2": 3,
+    "QID3": 1,
+    "QID4_TEXT": "15",
+    "QID5_1": 57,
+    "QID6": [
+     2,
+     3
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_0e308940c35e",
+   "values": {
+    "startDate": "2026-03-13T02:46:00Z",
+    "endDate": "2026-03-13T02:48:00Z",
+    "recordedDate": "2026-03-13T02:48:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 120,
+    "QID2": 2,
+    "QID3": 0,
+    "QID5_1": 94,
+    "QID6": [
+     2
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_7a7ad8f71023",
+   "values": {
+    "startDate": "2026-03-12T07:45:00Z",
+    "endDate": "2026-03-12T07:51:00Z",
+    "recordedDate": "2026-03-12T07:51:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 360,
+    "QID2": 1,
+    "QID3": 1,
+    "QID4_TEXT": "15",
+    "QID5_1": 25,
+    "QID6": [
+     1
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_5f7ebcfc8c2e",
+   "values": {
+    "startDate": "2026-03-03T09:17:00Z",
+    "endDate": "2026-03-03T09:25:00Z",
+    "recordedDate": "2026-03-03T09:25:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 480,
+    "QID2": 1,
+    "QID3": 0,
+    "QID5_1": 40,
+    "QID6": [
+     1,
+     3,
+     4
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_a2fb7c0f64aa",
+   "values": {
+    "startDate": "2026-03-10T21:03:00Z",
+    "endDate": "2026-03-10T21:11:00Z",
+    "recordedDate": "2026-03-10T21:11:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 480,
+    "QID2": 2,
+    "QID3": 0,
+    "QID5_1": 0,
+    "QID6": [
+     2,
+     5
+    ],
+    "QID7_TEXT": "Music"
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_cf31df96e67f",
+   "values": {
+    "startDate": "2026-03-14T21:26:00Z",
+    "endDate": "2026-03-14T21:31:00Z",
+    "recordedDate": "2026-03-14T21:31:00Z",
+    "status": 0,
+    "progress": 60,
+    "finished": 0,
+    "duration": 300,
+    "QID2": 3,
+    "QID3": 0,
+    "QID6": [
+     3
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_e6ca356fbbbf",
+   "values": {
+    "startDate": "2026-03-04T16:12:00Z",
+    "endDate": "2026-03-04T16:16:00Z",
+    "recordedDate": "2026-03-04T16:16:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 240,
+    "QID2": 3,
+    "QID3": 0,
+    "QID5_1": 79,
+    "QID6": [
+     2,
+     3,
+     4
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_3ad201d148dd",
+   "values": {
+    "startDate": "2026-03-15T20:42:00Z",
+    "endDate": "2026-03-15T20:47:00Z",
+    "recordedDate": "2026-03-15T20:47:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 300,
+    "QID2": 1,
+    "QID3": 0,
+    "QID5_1": 51,
+    "QID6": [
+     5
+    ],
+    "QID7_TEXT": "My dog"
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_bf4815b2ea8a",
+   "values": {
+    "startDate": "2026-03-13T00:35:00Z",
+    "endDate": "2026-03-13T00:43:00Z",
+    "recordedDate": "2026-03-13T00:43:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 480,
+    "QID2": 2,
+    "QID3": 1,
+    "QID4_TEXT": "20",
+    "QID5_1": 43,
+    "QID6": [
+     3
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_287b15cae1eb",
+   "values": {
+    "startDate": "2026-03-10T02:40:00Z",
+    "endDate": "2026-03-10T02:45:00Z",
+    "recordedDate": "2026-03-10T02:45:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 300,
+    "QID2": 1,
+    "QID3": 1,
+    "QID4_TEXT": "25",
+    "QID5_1": 60,
+    "QID6": [
+     4
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_0db555e32333",
+   "values": {
+    "startDate": "2026-03-03T15:38:00Z",
+    "endDate": "2026-03-03T15:46:00Z",
+    "recordedDate": "2026-03-03T15:46:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 480,
+    "QID2": 3,
+    "QID3": 0,
+    "QID5_1": 60,
+    "QID6": [
+     1,
+     5
+    ],
+    "QID7_TEXT": "Music"
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_4eccc7045da7",
+   "values": {
+    "startDate": "2026-03-06T21:41:00Z",
+    "endDate": "2026-03-06T21:45:00Z",
+    "recordedDate": "2026-03-06T21:45:00Z",
+    "status": 0,
+    "progress": 60,
+    "finished": 0,
+    "duration": 240,
+    "QID2": 1,
+    "QID3": 0,
+    "QID6": [
+     3
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_8504cde57afc",
+   "values": {
+    "startDate": "2026-03-05T19:58:00Z",
+    "endDate": "2026-03-05T20:06:00Z",
+    "recordedDate": "2026-03-05T20:06:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 480,
+    "QID2": 2,
+    "QID3": 0,
+    "QID5_1": 76,
+    "QID6": [
+     1,
+     2,
+     4
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_e5cfc91fc4db",
+   "values": {
+    "startDate": "2026-03-12T20:30:00Z",
+    "endDate": "2026-03-12T20:38:00Z",
+    "recordedDate": "2026-03-12T20:38:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 480,
+    "QID2": 2,
+    "QID3": 1,
+    "QID4_TEXT": "20",
+    "QID5_1": 57,
+    "QID6": [
+     1,
+     5
+    ],
+    "QID7_TEXT": "Music"
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_fcffbced4318",
+   "values": {
+    "startDate": "2026-03-09T20:15:00Z",
+    "endDate": "2026-03-09T20:19:00Z",
+    "recordedDate": "2026-03-09T20:19:00Z",
+    "status": 0,
+    "progress": 60,
+    "finished": 0,
+    "duration": 240,
+    "QID2": 3,
+    "QID3": 1,
+    "QID4_TEXT": "30",
+    "QID6": [
+     1,
+     3
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_1c74c857fe52",
+   "values": {
+    "startDate": "2026-03-10T22:29:00Z",
+    "endDate": "2026-03-10T22:36:00Z",
+    "recordedDate": "2026-03-10T22:36:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 420,
+    "QID2": 2,
+    "QID3": 1,
+    "QID4_TEXT": "30",
+    "QID5_1": 90,
+    "QID6": [
+     4
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_c3619698ad6a",
+   "values": {
+    "startDate": "2026-03-16T04:46:00Z",
+    "endDate": "2026-03-16T04:55:00Z",
+    "recordedDate": "2026-03-16T04:55:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 540,
+    "QID2": 4,
+    "QID3": 1,
+    "QID4_TEXT": "12",
+    "QID5_1": 50,
+    "QID6": [
+     1
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_591705fdcdb1",
+   "values": {
+    "startDate": "2026-03-10T18:59:00Z",
+    "endDate": "2026-03-10T19:02:00Z",
+    "recordedDate": "2026-03-10T19:02:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 180,
+    "QID2": 2,
+    "QID3": 1,
+    "QID4_TEXT": "10",
+    "QID5_1": 77,
+    "QID6": [
+     1,
+     2,
+     5
+    ],
+    "QID7_TEXT": "My dog"
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_6d8014cd7d26",
+   "values": {
+    "startDate": "2026-03-04T00:49:00Z",
+    "endDate": "2026-03-04T00:56:00Z",
+    "recordedDate": "2026-03-04T00:56:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 420,
+    "QID2": 3,
+    "QID3": 0,
+    "QID5_1": 19,
+    "QID6": [
+     1,
+     2,
+     3
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_119a63f3f936",
+   "values": {
+    "startDate": "2026-03-04T13:31:00Z",
+    "endDate": "2026-03-04T13:39:00Z",
+    "recordedDate": "2026-03-04T13:39:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 480,
+    "QID2": 3,
+    "QID3": 1,
+    "QID4_TEXT": "20",
+    "QID5_1": 48,
+    "QID6": [
+     3
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_e8c76c4ac9ff",
+   "values": {
+    "startDate": "2026-03-04T19:46:00Z",
+    "endDate": "2026-03-04T19:51:00Z",
+    "recordedDate": "2026-03-04T19:51:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 300,
+    "QID2": 4,
+    "QID3": 1,
+    "QID4_TEXT": "60",
+    "QID5_1": 79,
+    "QID6": [
+     1,
+     2,
+     5
+    ],
+    "QID7_TEXT": "Cooking"
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_b81d6cc32221",
+   "values": {
+    "startDate": "2026-03-02T20:56:00Z",
+    "endDate": "2026-03-02T21:01:00Z",
+    "recordedDate": "2026-03-02T21:01:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 300,
+    "QID2": 1,
+    "QID3": 1,
+    "QID4_TEXT": "10",
+    "QID5_1": 41,
+    "QID6": [
+     5
+    ],
+    "QID7_TEXT": "Cooking"
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_3ba5e8b4b29b",
+   "values": {
+    "startDate": "2026-03-07T19:48:00Z",
+    "endDate": "2026-03-07T19:53:00Z",
+    "recordedDate": "2026-03-07T19:53:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 300,
+    "QID2": 2,
+    "QID3": 0,
+    "QID5_1": 42,
+    "QID6": [
+     2
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_06e975a21287",
+   "values": {
+    "startDate": "2026-03-14T06:52:00Z",
+    "endDate": "2026-03-14T06:59:00Z",
+    "recordedDate": "2026-03-14T06:59:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 420,
+    "QID2": 3,
+    "QID3": 0,
+    "QID5_1": 21,
+    "QID6": [
+     2,
+     4,
+     5
+    ],
+    "QID7_TEXT": "Sleep"
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  },
+  {
+   "responseId": "R_5fd379682ff7",
+   "values": {
+    "startDate": "2026-03-07T21:28:00Z",
+    "endDate": "2026-03-07T21:30:00Z",
+    "recordedDate": "2026-03-07T21:30:00Z",
+    "status": 0,
+    "progress": 100,
+    "finished": 1,
+    "duration": 120,
+    "QID2": 1,
+    "QID3": 0,
+    "QID5_1": 5,
+    "QID6": [
+     1,
+     2,
+     3
+    ]
+   },
+   "labels": {},
+   "displayedFields": [],
+   "displayedValues": {}
+  }
+ ]
+}

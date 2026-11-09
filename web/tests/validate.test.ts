@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseSpec, validateSpec, checkCrossReferences, type StudySpec } from '../src/core';
-import example from '../../examples/minimal-study.json';
+import example from './fixtures/minimal-study.json';
 
 const clone = (): StudySpec => structuredClone(example) as StudySpec;
 

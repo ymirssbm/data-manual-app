@@ -18,13 +18,27 @@ export interface CodebookSettings {
   text: CodebookText;
 }
 
-const SETTINGS_KEY = 'data-manual:codebook-settings:v2';
+const SETTINGS_KEY = 'data-manual:codebook-settings:v4';
+/**
+ * Older settings carry over, except changed defaults: charts use the accent colour (v3) and the
+ * title page starts unchecked (v4).
+ */
+const OLD_SETTINGS_KEYS = ['data-manual:codebook-settings:v3', 'data-manual:codebook-settings:v2'];
 
 /** Options and theme persist across sessions; the text fields come from the loaded study. */
 export function loadSettings(spec: StudySpec | null): CodebookSettings {
   let saved: Partial<Pick<CodebookSettings, 'options' | 'theme'>> = {};
   try {
-    saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? '{}') ?? {};
+    const current = localStorage.getItem(SETTINGS_KEY);
+    if (current) saved = JSON.parse(current) ?? {};
+    else {
+      const raw = OLD_SETTINGS_KEYS.map((k) => localStorage.getItem(k)).find(Boolean);
+      const old = JSON.parse(raw ?? '{}') ?? {};
+      saved = {
+        options: old.options ? { ...old.options, nameOfStudy: false, authors: false, studyMetadata: false, funding: false } : undefined,
+        theme: old.theme ? { ...old.theme, charts: 'accent' } : undefined,
+      };
+    }
   } catch {
     // No storage: defaults.
   }

@@ -2,7 +2,7 @@
 // Accepts the .qsf file from Qualtrics' "Export Survey" (no API key, no network),
 // and also the JSON returned by the v3 API's GET /surveys/{id}.
 // Both are normalized into one internal shape first, then converted.
-import { buildBlockMap, stripHtml, type Survey } from '../core';
+import { buildBlockMap, stripHtml, toIsoDateTime, type Survey } from '../core';
 import { isObject, parseJson, tryParseJson, TranslationError, type Translator } from './types';
 
 type Obj = Record<string, unknown>;
@@ -27,13 +27,15 @@ interface QBlock {
   description: string;
   questionIds: string[];
 }
-interface QSurvey {
+export interface QSurvey {
   name: string;
   blocks: QBlock[];
   questions: Map<string, QQuestion>;
 }
 
 const isQsf = (d: unknown) => isObject(d) && Array.isArray(d.SurveyElements);
+/** The API's survey-definitions?format=qsf wraps the same document in { result }. */
+const unwrapQsf = (d: unknown): Obj | null => (isQsf(d) ? (d as Obj) : isObject(d) && isQsf(d.result) ? (d.result as Obj) : null);
 const apiResult = (d: unknown): Obj | null => {
   const r = isObject(d) && isObject(d.result) ? d.result : d;
   return isObject(r) && isObject(r.questions) && isObject(r.blocks) ? r : null;
@@ -47,16 +49,54 @@ export const qualtricsTranslator: Translator = {
   detect: ({ fileName, text }) => {
     if (/\.qsf$/i.test(fileName)) return true;
     const d = tryParseJson(text);
-    return isQsf(d) || apiResult(d) != null;
+    return unwrapQsf(d) != null || apiResult(d) != null;
   },
   translate: (input) => {
-    const d = parseJson(input);
-    const notes: string[] = [];
-    const survey = isQsf(d) ? fromQsf(d as Obj) : apiResult(d) ? fromApi(apiResult(d)!) : null;
-    if (!survey) throw new TranslationError('This does not look like a Qualtrics .qsf export.');
-    return { spec: toSpec(survey, notes), notes };
+    return qualtricsToSpec(parseJson(input));
   },
 };
+
+/** A .qsf export, the API's survey definition, or the v3 /surveys/{id} result -> spec. */
+export function qualtricsToSpec(d: unknown): { spec: Obj; notes: string[]; survey: QSurvey } {
+  const notes: string[] = [];
+  const qsf = unwrapQsf(d);
+  const survey = qsf ? fromQsf(qsf) : apiResult(d) ? fromApi(apiResult(d)!) : null;
+  if (!survey) throw new TranslationError('This does not look like a Qualtrics .qsf export.');
+  return { spec: toSpec(survey, notes), notes, survey };
+}
+
+/**
+ * Qualtrics response export (JSON format: { responses: [{ responseId, values: {...} }] })
+ * -> the spec's long-format data. Values are keyed by QID; text entry answers are
+ * QIDx_TEXT, sliders QIDx_1, multi-select answers arrays of recode values.
+ * A question absent from a response wasn't shown to that respondent (display logic).
+ */
+export function qualtricsResponsesToData(exported: unknown, survey: QSurvey, includedQids: Set<string>): { data: Record<string, unknown[]>; notes: string[] } {
+  const responses = (isObject(exported) && Array.isArray(exported.responses) ? exported.responses : Array.isArray(exported) ? exported : []) as Obj[];
+  const cols = { 'Participant.ID': [] as string[], 'Session.ID': [] as number[], 'Survey.Date.Completed': [] as string[], 'Question.ID': [] as string[], 'User.Response': [] as string[] };
+  let incomplete = 0;
+  responses.forEach((r, i) => {
+    const v = (isObject(r.values) ? r.values : r) as Obj;
+    const pid = String(v.externalDataReference || r.externalDataReference || r.responseId || v._recordId || `R${i + 1}`);
+    const time = toIsoDateTime(String(v.endDate ?? v.recordedDate ?? v.startDate ?? ''), null);
+    if (!time) return;
+    if (v.finished === 0 || v.finished === '0' || v.finished === false) incomplete++;
+    for (const q of survey.questions.values()) {
+      if (!includedQids.has(q.qid)) continue;
+      const raw = v[q.qid] ?? v[`${q.qid}_TEXT`] ?? v[`${q.qid}_1`];
+      if (raw === undefined) continue; // not displayed to this respondent
+      const val = Array.isArray(raw) ? raw.map(String).join(',') : raw == null ? '' : String(raw);
+      cols['Participant.ID'].push(pid);
+      cols['Session.ID'].push(i + 1);
+      cols['Survey.Date.Completed'].push(time);
+      cols['Question.ID'].push(q.exportTag);
+      cols['User.Response'].push(val);
+    }
+  });
+  const notes = [`Read ${responses.length} response(s).`];
+  if (incomplete) notes.push(`${incomplete} response(s) were not finished; their answered questions are included.`);
+  return { data: cols, notes };
+}
 
 function fromQsf(qsf: Obj): QSurvey {
   const els = qsf.SurveyElements as Obj[];

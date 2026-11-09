@@ -100,7 +100,7 @@ async function callOpenAiCompatible(config: AiConfig, system: string, turns: Cha
     Authorization: `Bearer ${config.apiKey.trim()}`,
     'api-key': config.apiKey.trim(), // Azure-style auth; ignored elsewhere
   };
-  const res = await fetch(config.useRelay ? '/proxy/ai' : target, {
+  const res = await fetch(config.useRelay ? '/proxy/http' : target, {
     method: 'POST',
     signal,
     headers: config.useRelay ? { ...headers, 'x-target-url': target } : headers,

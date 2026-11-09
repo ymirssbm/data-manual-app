@@ -6,7 +6,7 @@
 // and every page has "data": [ { participant/session fields..., "User Responses": [ {...} ] } ]
 // plus "links": { "next": <url> } for pagination.
 // Key spellings vary (spaces/underscores/dots), so all keys are compared normalized.
-import { buildBlockMap, stripHtml, type Survey } from '../../core';
+import { buildBlockMap, stripHtml, toIsoDateTime, type Survey } from '../../core';
 import { WEARIT_TYPES } from './questionTypes';
 
 type Obj = Record<string, unknown>;
@@ -205,47 +205,8 @@ function resolveConditionals(items: Obj[]) {
   }
 }
 
-/**
- * Wear-IT timestamps come as local wall-clock times without an offset
- * ("2022-06-02 20:15:00"). The spec wants RFC 3339, so attach the offset of
- * the record's IANA timezone at that moment (DST-aware). With no timezone,
- * the time is treated as UTC. Returns null for unparseable input.
- */
-export function toIsoDateTime(raw: string | null, timeZone: string | null): string | null {
-  if (!raw) return null;
-  const s = raw.trim().replace(' ', 'T');
-  if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(s)) {
-    const d = new Date(s);
-    return Number.isNaN(d.getTime()) ? null : s.replace(/([+-]\d{2})(\d{2})$/, '$1:$2');
-  }
-  const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(\.\d+)?)?)?$/.exec(s);
-  if (!m) return null;
-  const [, y, mo, d, h = '00', mi = '00', sec = '00'] = m;
-  const wall = `${y}-${mo}-${d}T${h}:${mi}:${sec}`;
-  if (!timeZone) return `${wall}Z`;
-  const offset = offsetMinutes(Date.UTC(+y!, +mo! - 1, +d!, +h, +mi, +sec), timeZone);
-  if (offset == null) return `${wall}Z`;
-  const sign = offset < 0 ? '-' : '+';
-  const abs = Math.abs(offset);
-  return `${wall}${sign}${String(Math.floor(abs / 60)).padStart(2, '0')}:${String(abs % 60).padStart(2, '0')}`;
-}
-
-/** UTC offset (minutes) of `timeZone` at the given wall-clock time, or null for an unknown zone. */
-function offsetMinutes(wallAsUtcMs: number, timeZone: string): number | null {
-  try {
-    const fmt = new Intl.DateTimeFormat('en-US', { timeZone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    const at = (ms: number) => {
-      const p = Object.fromEntries(fmt.formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
-      return Date.UTC(+p.year!, +p.month! - 1, +p.day!, +p.hour!, +p.minute!, +p.second!);
-    };
-    // Two passes so times near a DST switch resolve to the right side.
-    let guess = wallAsUtcMs - (at(wallAsUtcMs) - wallAsUtcMs);
-    guess = wallAsUtcMs - (at(guess) - guess);
-    return Math.round((wallAsUtcMs - guess) / 60000);
-  } catch {
-    return null;
-  }
-}
+// Wear-IT timestamps are local wall-clock times without an offset; core/time attaches the zone's offset.
+export { toIsoDateTime };
 
 /** All pages' data records -> the spec's long-format column vectors. */
 function collectData(pages: Obj[], notes: string[]): Record<string, unknown[]> | null {

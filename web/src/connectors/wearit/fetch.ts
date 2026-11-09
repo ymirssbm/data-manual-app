@@ -9,7 +9,9 @@ export const WEARIT_SERVERS = [
 export type WearitServer = (typeof WEARIT_SERVERS)[number]['id'];
 
 export const WEARIT_HOST = 'https://wearables.vmhost.psu.edu';
-const proxyBase = (server: string) => `/proxy/wearit/${server}`;
+/** Browser: the local proxy. Node (MCP server): the Wear-IT host itself. */
+const DIRECT = typeof window === 'undefined';
+const proxyBase = (server: string) => (DIRECT ? `${WEARIT_HOST}/${server}` : `/proxy/wearit/${server}`);
 
 export interface PullOptions {
   server: WearitServer;
@@ -52,9 +54,9 @@ export async function pullWearit({ server, studyId, token, maxPages = 5000, sign
 }
 
 function withToken(url: string, token: string): string {
-  const u = new URL(url, window.location.origin);
+  const u = new URL(url, DIRECT ? WEARIT_HOST : window.location.origin);
   u.searchParams.set('api_token', token);
-  return u.pathname + u.search;
+  return DIRECT ? u.href : u.pathname + u.search;
 }
 
 /** Rewrite the server's absolute "next" links onto the proxy. */

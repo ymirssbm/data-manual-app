@@ -20,6 +20,7 @@ import {
   type SurveyModel,
 } from '../core';
 import { buildStudySchedule } from './schedule';
+import { generateFlowchart } from './flowchart';
 import { dataOverview, describeItem, hasResponseData, indexResponses, type ItemDescriptives } from './descriptives';
 
 export const QUESTION_TYPES = [
@@ -53,14 +54,19 @@ export interface CodebookOptions {
   barPlot: boolean;
   histograms: boolean;
   missingness: boolean;
+  /** Response-rate plots (by participant, over time) on the Missingness tab. */
+  missingnessPlots: boolean;
+  /** Outlier screen (box plot + flagged values) for numeric items. */
+  outlierPlots: boolean;
   screenshots: boolean;
 }
 
 export const DEFAULT_CODEBOOK_OPTIONS: CodebookOptions = {
-  nameOfStudy: true,
-  authors: true,
-  studyMetadata: true,
-  funding: true,
+  // Title page off by default; switch it on in the generator's Content tab.
+  nameOfStudy: false,
+  authors: false,
+  studyMetadata: false,
+  funding: false,
   abstract: true,
   effectiveSummary: true,
   studySchedule: true,
@@ -74,18 +80,58 @@ export const DEFAULT_CODEBOOK_OPTIONS: CodebookOptions = {
   barPlot: true,
   histograms: true,
   missingness: true,
+  missingnessPlots: true,
+  outlierPlots: true,
   screenshots: true,
 };
 
 // ---------------------------------------------------------------- themes (colours and fonts only; layout is fixed)
 
-export type CodebookFont = 'sans' | 'serif' | 'times' | 'mono';
-export const CODEBOOK_FONTS: Record<CodebookFont, { label: string; stack: string }> = {
-  times: { label: 'Times New Roman', stack: "'Times New Roman', Times, serif" },
-  serif: { label: 'Book serif', stack: "Charter, 'Bitstream Charter', 'Sitka Text', Cambria, Georgia, serif" },
-  sans: { label: 'Modern sans', stack: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" },
-  mono: { label: 'Monospace', stack: "ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace" },
+/**
+ * Fonts. "System" fonts ship with Windows/macOS and work offline; "Web" fonts load from Google Fonts
+ * when the codebook is opened online, and fall back to a similar system font otherwise.
+ */
+export type CodebookFont = string;
+export interface CodebookFontDef {
+  label: string;
+  stack: string;
+  group: 'System' | 'Web';
+  /** Google Fonts family spec (css2 `family=` value), for web fonts. */
+  google?: string;
+}
+export const CODEBOOK_FONTS: Record<string, CodebookFontDef> = {
+  times: { label: 'Times New Roman', group: 'System', stack: "'Times New Roman', Times, serif" },
+  georgia: { label: 'Georgia', group: 'System', stack: "Georgia, 'Times New Roman', serif" },
+  serif: { label: 'Book serif (Charter)', group: 'System', stack: "Charter, 'Bitstream Charter', 'Sitka Text', Cambria, Georgia, serif" },
+  cambria: { label: 'Cambria', group: 'System', stack: "Cambria, Georgia, serif" },
+  palatino: { label: 'Palatino', group: 'System', stack: "'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif" },
+  garamond: { label: 'Garamond', group: 'System', stack: "Garamond, 'EB Garamond', 'Times New Roman', serif" },
+  sans: { label: 'Modern sans (system UI)', group: 'System', stack: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" },
+  arial: { label: 'Arial / Helvetica', group: 'System', stack: "Arial, 'Helvetica Neue', Helvetica, sans-serif" },
+  calibri: { label: 'Calibri', group: 'System', stack: "Calibri, Carlito, 'Segoe UI', Arial, sans-serif" },
+  verdana: { label: 'Verdana', group: 'System', stack: "Verdana, Geneva, Tahoma, sans-serif" },
+  trebuchet: { label: 'Trebuchet MS', group: 'System', stack: "'Trebuchet MS', 'Lucida Grande', Arial, sans-serif" },
+  mono: { label: 'Monospace', group: 'System', stack: "ui-monospace, 'Cascadia Code', Consolas, 'SF Mono', Menlo, monospace" },
+  inter: { label: 'Inter', group: 'Web', google: 'Inter:wght@400;600;700', stack: "Inter, 'Segoe UI', Arial, sans-serif" },
+  lato: { label: 'Lato', group: 'Web', google: 'Lato:wght@400;700', stack: "Lato, 'Segoe UI', Arial, sans-serif" },
+  opensans: { label: 'Open Sans', group: 'Web', google: 'Open+Sans:wght@400;600;700', stack: "'Open Sans', 'Segoe UI', Arial, sans-serif" },
+  sourcesans: { label: 'Source Sans 3', group: 'Web', google: 'Source+Sans+3:wght@400;600;700', stack: "'Source Sans 3', 'Segoe UI', Arial, sans-serif" },
+  ibmplex: { label: 'IBM Plex Sans', group: 'Web', google: 'IBM+Plex+Sans:wght@400;600;700', stack: "'IBM Plex Sans', 'Segoe UI', Arial, sans-serif" },
+  merriweather: { label: 'Merriweather', group: 'Web', google: 'Merriweather:wght@400;700', stack: "Merriweather, Georgia, serif" },
+  lora: { label: 'Lora', group: 'Web', google: 'Lora:wght@400;600;700', stack: "Lora, Georgia, serif" },
+  sourceserif: { label: 'Source Serif 4', group: 'Web', google: 'Source+Serif+4:wght@400;600;700', stack: "'Source Serif 4', Georgia, serif" },
+  ebgaramond: { label: 'EB Garamond', group: 'Web', google: 'EB+Garamond:wght@400;600;700', stack: "'EB Garamond', Garamond, Georgia, serif" },
+  crimson: { label: 'Crimson Pro', group: 'Web', google: 'Crimson+Pro:wght@400;600;700', stack: "'Crimson Pro', Georgia, serif" },
+  robotoslab: { label: 'Roboto Slab', group: 'Web', google: 'Roboto+Slab:wght@400;600;700', stack: "'Roboto Slab', Rockwell, Georgia, serif" },
+  jetbrains: { label: 'JetBrains Mono', group: 'Web', google: 'JetBrains+Mono:wght@400;700', stack: "'JetBrains Mono', Consolas, monospace" },
 };
+
+/** <link> tags for any web fonts the theme uses (nothing for system fonts). */
+function fontLinks(t: CodebookTheme): string {
+  const fams = [...new Set([t.bodyFont, t.headingFont].map((f) => CODEBOOK_FONTS[f]?.google).filter((g): g is string => !!g))];
+  if (!fams.length) return '';
+  return `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?${fams.map((f) => `family=${f}`).join('&amp;')}&amp;display=swap">`;
+}
 
 export interface CodebookTheme {
   /** Links, item IDs, tabs, toggles, chart bars. */
@@ -110,7 +156,7 @@ export interface CodebookTheme {
 export const CODEBOOK_PRESETS: Record<string, { label: string; theme: CodebookTheme }> = {
   classic: {
     label: 'Classic',
-    theme: { accent: '#2a5caa', background: '#003d7a', surface: '#ffffff', headerBg: '#f0f0f0', text: '#333333', bodyFont: 'times', headingFont: 'times', fontSize: 19, charts: 'ggplot', expandVisuals: false },
+    theme: { accent: '#2a5caa', background: '#003d7a', surface: '#ffffff', headerBg: '#f0f0f0', text: '#333333', bodyFont: 'times', headingFont: 'times', fontSize: 19, charts: 'accent', expandVisuals: false },
   },
   light: {
     label: 'Light',
@@ -143,6 +189,11 @@ export interface CodebookText {
 export interface CodebookExtras {
   /** Pre-rendered flowchart SVG markup keyed by Survey.Name (rendering needs a DOM). */
   flowchartSvgs?: Record<string, string>;
+  /**
+   * Without a DOM (the MCP server), embed each flowchart's Mermaid code and let the codebook draw it
+   * when opened, with Mermaid loaded from a CDN. Needs internet when the codebook is viewed.
+   */
+  flowchartsInBrowser?: boolean;
   generatedAt?: Date;
   theme?: Partial<CodebookTheme>;
 }
@@ -198,11 +249,11 @@ export function generateCodebookHtml(
     toc.push({ id, label, level });
     return id;
   };
-  const caret = (label: string) => `<button class="cb-sec-toggle" type="button" aria-expanded="true" aria-label="Collapse ${esc(label)}" title="Collapse / expand">▾</button>`;
+  const caret = (label: string) => `<button class="cb-sec-toggle" type="button" aria-expanded="true" aria-label="Collapse ${esc(label)}" title="Collapse / expand">▲</button>`;
   /** A collapsible top-level page between rules, as in the prior codebook. */
   const page = (label: string, body: string, cls = '') => {
     const id = entry(label, 1);
-    return `<section class="cb-page ${cls}"><hr><h1 id="${id}">${caret(label)}${esc(label)}</h1><hr><div class="cb-sec-body">${body}</div></section>`;
+    return `<section class="cb-page ${cls}"><hr><h1 id="${id}">${esc(label)}${caret(label)}</h1><hr><div class="cb-sec-body">${body}</div></section>`;
   };
   const out: string[] = [];
 
@@ -220,7 +271,7 @@ export function generateCodebookHtml(
   }
   if (o.funding && funding) titleParts.push(h2('Funding source'), `<p>${esc(funding)}</p>`);
   if (titleParts.length) {
-    out.push(`<section class="cb-page"><hr><h1 id="${titleId}">${caret('Title Page')}Title Page</h1><hr><div class="cb-sec-body">${titleParts.join('\n')}</div></section>`);
+    out.push(`<section class="cb-page"><hr><h1 id="${titleId}">Title Page${caret('Title Page')}</h1><hr><div class="cb-sec-body">${titleParts.join('\n')}</div></section>`);
   } else toc.splice(tocMark, 1);
 
   if (o.abstract && abstract) out.push(page('Abstract Page', `<p class="cb-prose">${esc(abstract)}</p>`));
@@ -240,9 +291,10 @@ export function generateCodebookHtml(
     const sid = entry(m.label, 2, m.label);
     const parts: string[] = [];
     const svg = extras.flowchartSvgs?.[m.name];
-    if (o.flowcharts && svg) {
+    const lazy = !svg && extras.flowchartsInBrowser ? `<pre class="cb-mermaid">${esc(generateFlowchart(m.survey))}</pre>` : '';
+    if (o.flowcharts && (svg || lazy)) {
       const pid = `flow-${slug(m.name)}`;
-      parts.push(`<div class="cb-anchor cb-flow">${toggleButton(pid, 'Click to view survey flowchart', t.expandVisuals)}<div id="${pid}" class="cb-visuals" ${t.expandVisuals ? '' : 'hidden'}><div class="cb-flowchart">${svg}</div></div></div>`);
+      parts.push(`<div class="cb-anchor cb-flow">${toggleButton(pid, 'Click to view survey flowchart', t.expandVisuals)}<div id="${pid}" class="cb-visuals" ${t.expandVisuals ? '' : 'hidden'}><div class="cb-flowchart">${svg ?? lazy}</div></div></div>`);
     }
     type OpenBlock = { path: string; items: string[]; id: string; note: string };
     let openBlock = null as OpenBlock | null;
@@ -251,7 +303,7 @@ export function generateCodebookHtml(
     const closeBlock = () => {
       if (!openBlock) return;
       parts.push(
-        `<section class="cb-block"><h3 id="${openBlock.id}">${caret(`Block: ${openBlock.path}`)}Block: ${esc(openBlock.path)}</h3><div class="cb-sec-body">${openBlock.note}${openBlock.items.join('\n')}</div></section>`,
+        `<section class="cb-block"><h3 id="${openBlock.id}">Block: ${esc(openBlock.path)}${caret(`Block: ${openBlock.path}`)}</h3><div class="cb-sec-body">${openBlock.note}${openBlock.items.join('\n')}</div></section>`,
       );
       openBlock = null;
     };
@@ -273,9 +325,9 @@ export function generateCodebookHtml(
       else parts.push(html);
     }
     closeBlock();
-    surveysHtml.push(`<section class="cb-survey"><h2 id="${sid}" class="cb-survey-name">${caret(m.label)}${esc(m.label)}</h2><div class="cb-sec-body">${parts.join('\n')}</div></section>`);
+    surveysHtml.push(`<section class="cb-survey"><h2 id="${sid}" class="cb-survey-name">${esc(m.label)}${caret(m.label)}</h2><div class="cb-sec-body">${parts.join('\n')}</div></section>`);
   }
-  if (models.length) out.push(`<section class="cb-page"><hr><h1 id="${varId}">${caret('Variable List')}Variable List</h1><hr><div class="cb-sec-body">${surveysHtml.join('\n')}</div></section>`);
+  if (models.length) out.push(`<section class="cb-page"><hr><h1 id="${varId}">Variable List${caret('Variable List')}</h1><hr><div class="cb-sec-body">${surveysHtml.join('\n')}</div></section>`);
   else toc.splice(varTocMark, 1);
 
   const menu = toc
@@ -289,7 +341,7 @@ export function generateCodebookHtml(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
-<style>${themeCss(t)}${CODEBOOK_CSS}</style>
+${fontLinks(t)}<style>${themeCss(t)}${CODEBOOK_CSS}</style>
 </head>
 <body class="cb charts-${t.charts}">
 <header class="cb-topbar">
@@ -302,12 +354,11 @@ export function generateCodebookHtml(
 <div class="content" id="top">
 <div id="header">
 <h1 class="title">${esc(title)}</h1>
-${authors ? `<h4 class="author">${esc(authors)}</h4>` : ''}
 <h4 class="date">Codebook Generated ${esc(generated)}</h4>
 </div>
 <nav id="TOC" class="cb-toc" aria-label="Table of contents">
 <div class="cb-toc-head">
-<button class="cb-toc-toggle" type="button" aria-expanded="true" aria-controls="cb-toc-body"><span class="cb-twisty-icon">▾</span> Table of Contents</button>
+<button class="cb-toc-toggle" type="button" aria-expanded="true" aria-controls="cb-toc-body">Table of Contents <span class="cb-twisty-icon">▲</span></button>
 <span class="cb-toc-actions"><button type="button" data-toc="expand">Expand all</button><button type="button" data-toc="collapse">Collapse all</button></span>
 </div>
 <div id="cb-toc-body">${renderToc(toc)}</div>
@@ -315,7 +366,11 @@ ${authors ? `<h4 class="author">${esc(authors)}</h4>` : ''}
 ${out.join('\n')}
 </div>
 <a href="#top" id="backToTopBtn" title="Back to top" aria-label="Back to top">↑</a>
-<script>${CODEBOOK_JS}</script>
+${
+  extras.flowchartsInBrowser
+    ? `<script src="https://cdn.jsdelivr.net/npm/mermaid@12.3.0/dist/mermaid.min.js"></script><script>window.mermaid && window.mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', flowchart: { htmlLabels: false } });</script>`
+    : ''
+}<script>${CODEBOOK_JS}</script>
 </body>
 </html>`;
 }
@@ -341,13 +396,15 @@ function variablePage(m: SurveyModel, q: Question, o: CodebookOptions, t: Codebo
   const text = stripHtml(q['Question.Text'] ?? '') || itemLabel(q);
   const lines: string[] = [];
   if (o.skipLogic) lines.push(skipNote(m, q['Item.ID']));
-  lines.push(`<p><strong>Question ID:</strong> ${esc(q['Question.ID'])}</p>`);
-  if (o.deliveryType) lines.push(`<p><strong>Way the question was delivered:</strong> ${esc(q['Question.Type.Display.Name'])}</p>`);
-  if (o.typeOfData) lines.push(`<p><strong>Type of data:</strong> ${esc(q['Data.Type'] ?? 'NA')}</p>`);
-  if (q['Question.Description']) lines.push(`<p><strong>Description:</strong> ${esc(q['Question.Description'])}</p>`);
+  // Delivery and data type sit in the question header as one quiet line ("Multiple Choice • Integer").
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  const meta = [o.deliveryType ? q['Question.Type.Display.Name'] : '', o.typeOfData && q['Data.Type'] ? cap(q['Data.Type']) : ''].filter(Boolean);
+  // Everything else opens by clicking the question header.
+  const body: string[] = [];
+  if (q['Question.Description']) body.push(`<p><strong>Description:</strong> ${esc(q['Question.Description'])}</p>`);
   const opts = responseOptions(q);
   if (o.responseOptions && opts.length && !stats?.frequencies) {
-    lines.push(
+    body.push(
       `<table class="cb-table cb-options"><thead><tr><th>Value</th><th>Label</th></tr></thead><tbody>${opts
         .map((r) => `<tr><td>${esc(r.value)}</td><td>${esc(r.label)}</td></tr>`)
         .join('')}</tbody></table>`,
@@ -358,7 +415,8 @@ function variablePage(m: SurveyModel, q: Question, o: CodebookOptions, t: Codebo
   if (stats?.frequencies && o.frequencyTable) tabs.push({ name: 'Frequency Table', html: frequencyTableHtml(stats) });
   if (stats?.frequencies && o.barPlot) tabs.push({ name: 'Barplot', html: barplotSvg(text, stats.frequencies) });
   if (stats?.numeric && o.histograms) tabs.push({ name: 'Histogram', html: histogramHtml(stats) });
-  if (stats && o.missingness) tabs.push({ name: 'Missingness', html: missingnessHtml(q, stats, m) });
+  if (stats && o.missingness) tabs.push({ name: 'Missingness', html: missingnessHtml(q, stats, m, o.missingnessPlots) });
+  if (stats?.outliers && o.outlierPlots) tabs.push({ name: 'Outliers', html: outliersHtml(stats) });
   if (o.screenshots && screenshotsURL) {
     const base = screenshotsURL.replace(/\/+$/, '');
     tabs.push({
@@ -366,18 +424,25 @@ function variablePage(m: SurveyModel, q: Question, o: CodebookOptions, t: Codebo
       html: `<img class="cb-screenshot" alt="Screenshot of ${esc(q['Item.ID'])}" src="${esc(`${base}/${encodeURIComponent(q['Item.ID'])}.png`)}" onerror="this.replaceWith(Object.assign(document.createElement('p'),{textContent:'No screenshot available.'}))">`,
     });
   }
+  const vid = `vis-${id}`;
   if (tabs.length) {
-    const vid = `vis-${id}`;
-    lines.push(
-      toggleButton(vid, 'Click to view visuals', t.expandVisuals),
-      `<div id="${vid}" class="cb-visuals" ${t.expandVisuals ? '' : 'hidden'}><h3 class="cb-visuals-title">Descriptives</h3>
+    body.push(`<h3 class="cb-visuals-title">Descriptives</h3>
 <div class="cb-tabs" role="tablist">${tabs.map((tab, i) => `<button type="button" role="tab" class="cb-tab${i === 0 ? ' is-active' : ''}" data-tab="${vid}-${i}" aria-selected="${i === 0}">${esc(tab.name)}</button>`).join('')}</div>
-${tabs.map((tab, i) => `<div class="cb-pane${i === 0 ? ' is-active' : ''}" id="${vid}-${i}" role="tabpanel"><h4 class="cb-print-only">${esc(tab.name)}</h4>${tab.html}</div>`).join('')}</div>`,
-    );
+${tabs.map((tab, i) => `<div class="cb-pane${i === 0 ? ' is-active' : ''}" id="${vid}-${i}" role="tabpanel"><h4 class="cb-print-only">${esc(tab.name)}</h4>${tab.html}</div>`).join('')}`);
   }
+  const open = t.expandVisuals;
+  const foldable = body.length > 0;
+  if (foldable) lines.push(`<div id="${vid}" class="cb-visuals cb-q-body" ${open ? '' : 'hidden'}>${body.join('\n')}</div>`);
 
+  const head = `<h4 id="${id}">${esc(text)}<span class="cb-q-sub"><span class="item-id">[${esc(q['Item.ID'])}]</span>${
+    meta.length ? `<span class="cb-q-meta">${meta.map(esc).join(' • ')}</span>` : ''
+  }</span></h4>${foldable ? `<span class="cb-arrow cb-q-arrow" aria-hidden="true">${open ? '▲' : '▼'}</span>` : ''}`;
   return `<div class="cb-var">
-<div class="header-shading"><h4 id="${id}">${esc(text)}<span class="item-id">[${esc(q['Item.ID'])}]</span></h4></div>
+${
+  foldable
+    ? `<div class="header-shading cb-q-head" role="button" tabindex="0" data-target="${vid}" aria-expanded="${open}" title="Click to show or hide descriptives">${head}</div>`
+    : `<div class="header-shading">${head}</div>`
+}
 <div class="cb-anchor">
 ${lines.join('\n')}
 </div>
@@ -392,21 +457,90 @@ function frequencyTableHtml(s: ItemDescriptives): string {
     .join('')}</tbody></table>`;
 }
 
-function missingnessHtml(q: Question, s: ItemDescriptives, m: SurveyModel): string {
-  const r = (x: number) => Number(x.toFixed(2));
-  const parts: string[] = ['<p><strong>Missingness Descriptives</strong></p>'];
-  if ((m.branchesTo.get(q['Item.ID'])?.length ?? 0) > 0 || s.participants < s.totalParticipants) {
-    parts.push(
-      `<p>${s.totalParticipants && s.participants >= s.totalParticipants ? `This question/item was delivered to all ${s.totalParticipants} participants` : `This question/item was delivered only to ${s.participants} out of ${s.totalParticipants || s.participants} participants`}</p>`,
-    );
-  }
-  parts.push(`<p>Answered / Delivered = ${s.answered} / ${s.delivered}</p>`);
+function missingnessHtml(q: Question, s: ItemDescriptives, m: SurveyModel, plots: boolean): string {
+  const r2 = (x: number) => Number(x.toFixed(2));
+  const pct = s.delivered ? (s.answered / s.delivered) * 100 : 0;
+  const conditional = (m.branchesTo.get(q['Item.ID'])?.length ?? 0) > 0 || s.participants < s.totalParticipants;
   const mm = s.missingness;
-  parts.push(
-    `<p>Missing = ${s.missing}${mm ? `<br>Min = ${r(mm.min)}, Max = ${r(mm.max)}, Mean = ${r(mm.mean)}, SD = ${r(mm.sd)}<br><span class="cb-small">(Missing responses per participant; descriptives are rounded to 2 decimals)</span>` : ''}</p>`,
-  );
-  if (mm) parts.push(`<p>Missingness Intraclass Correlation (ICC) = ${mm.icc == null ? 'NA' : r(mm.icc)}</p>`);
-  return parts.join('\n');
+  const tiles = [
+    `<div class="cb-stat"><span class="cb-stat-l">Answered / Delivered</span><span class="cb-stat-n">${s.answered} / ${s.delivered}</span><span class="cb-meter"><span style="width:${pct.toFixed(1)}%"></span></span><span class="cb-stat-sub">${pct.toFixed(1)}% response rate</span></div>`,
+    `<div class="cb-stat"><span class="cb-stat-l">Missing</span><span class="cb-stat-n">${s.missing}</span><span class="cb-stat-sub">${s.delivered ? ((s.missing / s.delivered) * 100).toFixed(1) : '0'}% of deliveries</span></div>`,
+    `<div class="cb-stat"><span class="cb-stat-l">Participants</span><span class="cb-stat-n">${s.participants}${s.totalParticipants ? ` / ${s.totalParticipants}` : ''}</span><span class="cb-stat-sub">${conditional ? (s.participants >= s.totalParticipants ? 'all were delivered this item' : 'were delivered this item') : 'delivered this item'}</span></div>`,
+    mm ? `<div class="cb-stat"><span class="cb-stat-l">Missingness ICC</span><span class="cb-stat-n">${mm.icc == null ? 'NA' : r2(mm.icc)}</span><span class="cb-stat-sub">share of missingness between people</span></div>` : '',
+  ].join('');
+  const perPerson = mm
+    ? `<table class="cb-table cb-compact"><thead><tr><th>Missing per participant</th><th>Min</th><th>Max</th><th>Mean</th><th>SD</th></tr></thead><tbody><tr><td>Count of missed deliveries</td><td>${r2(mm.min)}</td><td>${r2(mm.max)}</td><td>${r2(mm.mean)}</td><td>${r2(mm.sd)}</td></tr></tbody></table>`
+    : '';
+  const charts = plots
+    ? `${s.byParticipant.length > 1 ? `<h4 class="cb-chart-h">Response rate by participant</h4>${participantRateSvg(s.byParticipant)}` : ''}`
+    : '';
+  return `<p><strong>Missingness Descriptives</strong></p><div class="cb-stats">${tiles}</div>${perPerson}${charts}<p class="cb-small">ICC(1) of answered vs. missed across participants: near 0 means missed prompts are spread evenly; near 1 means a few participants account for most of them.</p>`;
+}
+
+function outliersHtml(s: ItemDescriptives): string {
+  const o = s.outliers!;
+  const f = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(2));
+  // Summary only: no per-response listing, so the codebook never exposes individual records.
+  return `<p><strong>Outlier screen</strong>: values below ${f(o.lower)} or above ${f(o.upper)} (1.5 × IQR beyond the quartiles) are flagged. ${o.flagged.length} of ${o.points.length} responses flagged.</p>${boxPlotSvg(o)}`;
+}
+
+function participantRateSvg(rows: Array<{ participant: string; delivered: number; answered: number }>): string {
+  const shown = rows.slice(0, 40);
+  const W = 760;
+  const L = 110;
+  const rowH = 16;
+  const top = 8;
+  const plotW = W - L - 60;
+  const H = top + shown.length * rowH + 30;
+  const x = (p: number) => L + p * plotW;
+  const grid = [0, 0.25, 0.5, 0.75, 1];
+  return `<svg class="cb-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Response rate by participant">
+<rect class="cb-panel" x="${L}" y="${top}" width="${plotW}" height="${shown.length * rowH}"/>
+${grid.map((g) => `<line class="cb-grid" x1="${x(g)}" x2="${x(g)}" y1="${top}" y2="${top + shown.length * rowH}"/><text class="cb-axis" x="${x(g)}" y="${top + shown.length * rowH + 14}" text-anchor="middle">${g * 100}%</text>`).join('')}
+${shown
+  .map((r, i) => {
+    const rate = r.delivered ? r.answered / r.delivered : 0;
+    const y = top + i * rowH;
+    return `<rect class="cb-bar" x="${L}" y="${y + 3}" width="${(rate * plotW).toFixed(1)}" height="${rowH - 6}"><title>${esc(r.participant)}: ${r.answered}/${r.delivered}</title></rect><text class="cb-axis" x="${L - 6}" y="${y + rowH / 2 + 4}" text-anchor="end">${esc(r.participant.length > 16 ? `${r.participant.slice(0, 15)}…` : r.participant)}</text><text class="cb-axis" x="${x(rate) + 4}" y="${y + rowH / 2 + 4}">${Math.round(rate * 100)}%</text>`;
+  })
+  .join('')}
+</svg>${rows.length > 40 ? `<p class="cb-small">Showing the 40 participants with the lowest response rates of ${rows.length}.</p>` : ''}`;
+}
+
+function boxPlotSvg(o: NonNullable<ItemDescriptives['outliers']>): string {
+  const W = 760;
+  const H = 150;
+  const L = 30;
+  const R = 30;
+  const lo = Math.min(o.min, o.lower);
+  const hi = Math.max(o.max, o.upper);
+  const span = hi - lo || 1;
+  const x = (v: number) => L + ((v - lo) / span) * (W - L - R);
+  const mid = 52;
+  const whiskLo = Math.max(o.min, o.lower);
+  const whiskHi = Math.min(o.max, o.upper);
+  const f = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1));
+  // Deterministic jitter so the file is stable between builds.
+  const jitter = (i: number) => (((i * 9301 + 49297) % 233280) / 233280 - 0.5) * 34;
+  const pts = o.points.slice(0, 1500);
+  // Keep edge labels inside the chart.
+  const anchor = (px: number) => (px < L + 70 ? 'start' : px > W - R - 70 ? 'end' : 'middle');
+  return `<svg class="cb-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Box plot with outliers">
+<line class="cb-whisker" x1="${x(whiskLo)}" x2="${x(o.q1)}" y1="${mid}" y2="${mid}"/><line class="cb-whisker" x1="${x(o.q3)}" x2="${x(whiskHi)}" y1="${mid}" y2="${mid}"/>
+<line class="cb-whisker" x1="${x(whiskLo)}" x2="${x(whiskLo)}" y1="${mid - 10}" y2="${mid + 10}"/><line class="cb-whisker" x1="${x(whiskHi)}" x2="${x(whiskHi)}" y1="${mid - 10}" y2="${mid + 10}"/>
+<rect class="cb-box" x="${x(o.q1)}" y="${mid - 20}" width="${Math.max(1, x(o.q3) - x(o.q1))}" height="40"/>
+<line class="cb-median" x1="${x(o.median)}" x2="${x(o.median)}" y1="${mid - 20}" y2="${mid + 20}"/>
+<line class="cb-fence" x1="${x(o.lower)}" x2="${x(o.lower)}" y1="12" y2="${H - 28}"/><line class="cb-fence" x1="${x(o.upper)}" x2="${x(o.upper)}" y1="12" y2="${H - 28}"/>
+${pts
+  .map((p, i) => {
+    const out = p.value < o.lower || p.value > o.upper;
+    return `<circle class="${out ? 'cb-dot-out' : 'cb-dot-in'}" cx="${x(p.value).toFixed(1)}" cy="${(mid + 48 + jitter(i) * 0.5).toFixed(1)}" r="${out ? 3.5 : 2.2}"></circle>`;
+  })
+  .join('')}
+<text class="cb-axis" x="${x(o.lower)}" y="${H - 14}" text-anchor="${anchor(x(o.lower))}">lower fence ${f(o.lower)}</text>
+<text class="cb-axis" x="${x(o.upper)}" y="${H - 14}" text-anchor="${anchor(x(o.upper))}">upper fence ${f(o.upper)}</text>
+<text class="cb-axis" x="${x(o.median)}" y="${mid - 26}" text-anchor="middle">median ${f(o.median)}</text>
+</svg>`;
 }
 
 function histogramHtml(s: ItemDescriptives): string {
@@ -417,32 +551,52 @@ function histogramHtml(s: ItemDescriptives): string {
 
 // Charts take their colours from CSS (ggplot2 grey, or the theme accent).
 function barplotSvg(title: string, freqs: Array<{ label: string; count: number }>): string {
-  const rows = freqs;
-  const labelW = Math.min(280, Math.max(60, ...rows.map((r) => r.label.length * 6.2)));
-  const rowH = 26;
+  const n = Math.max(1, freqs.length);
+  const L = 54;
+  const T = 34;
   const W = 760;
-  const plotW = W - labelW - 30;
-  const top = 34;
-  const H = top + rows.length * rowH + 40;
-  const max = Math.max(1, ...rows.map((r) => r.count));
+  const plotW = W - L - 16;
+  const slot = plotW / n;
+  const charW = 6.2;
+  // Labels wrap onto up to three lines under their column.
+  const perLine = Math.max(4, Math.floor((slot - 6) / charW));
+  const wrap = (label: string): string[] => {
+    const words = label.split(/\s+/);
+    const lines: string[] = [];
+    let cur = '';
+    for (const w of words) {
+      if (cur && (cur + ' ' + w).length > perLine) {
+        lines.push(cur);
+        cur = w;
+      } else cur = cur ? `${cur} ${w}` : w;
+    }
+    if (cur) lines.push(cur);
+    if (lines.length > 3) lines.splice(2, lines.length, `${lines.slice(2).join(' ').slice(0, perLine - 1)}…`);
+    return lines.map((l) => (l.length > perLine ? `${l.slice(0, perLine - 1)}…` : l));
+  };
+  const labels = freqs.map((f) => wrap(f.label));
+  const labelLines = Math.max(1, ...labels.map((l) => l.length));
+  const plotH = 240;
+  const H = T + plotH + 16 + labelLines * 13 + 22;
+  const max = Math.max(1, ...freqs.map((r) => r.count));
   const step = niceStep(max);
+  const top = Math.ceil(max / step) * step || 1;
   const ticks: number[] = [];
-  for (let v = 0; v <= max + step * 0.01; v += step) ticks.push(v);
-  if (ticks[ticks.length - 1]! < max) ticks.push(ticks[ticks.length - 1]! + step);
-  const x = (v: number) => labelW + 10 + (v / (ticks[ticks.length - 1] || 1)) * plotW;
-  const trunc = (s: string) => (s.length * 6.2 > labelW ? `${s.slice(0, Math.floor(labelW / 6.2) - 1)}…` : s);
+  for (let v = 0; v <= top + step * 0.01; v += step) ticks.push(v);
+  const y = (v: number) => T + plotH - (v / top) * plotH;
+  const barW = Math.min(90, slot * 0.7);
   return `<svg class="cb-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Barplot">
-<text class="cb-chart-title" x="${labelW + 10}" y="18">${esc(title.length > 90 ? `${title.slice(0, 89)}…` : title)}</text>
-<rect class="cb-panel" x="${labelW + 10}" y="${top}" width="${plotW}" height="${rows.length * rowH}"/>
-${ticks.map((v) => `<line class="cb-grid" x1="${x(v)}" x2="${x(v)}" y1="${top}" y2="${top + rows.length * rowH}"/>`).join('')}
-${rows
+<text class="cb-chart-title" x="${L}" y="18">${esc(title.length > 90 ? `${title.slice(0, 89)}…` : title)}</text>
+<rect class="cb-panel" x="${L}" y="${T}" width="${plotW}" height="${plotH}"/>
+${ticks.map((v) => `<line class="cb-grid" x1="${L}" x2="${L + plotW}" y1="${y(v)}" y2="${y(v)}"/><text class="cb-axis" x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`).join('')}
+${freqs
   .map((r, i) => {
-    const y = top + i * rowH;
-    return `<rect class="cb-bar" x="${labelW + 10}" y="${y + 5}" width="${Math.max(0, x(r.count) - labelW - 10)}" height="${rowH - 10}"><title>${esc(r.label)}: ${r.count}</title></rect><text class="cb-axis" x="${labelW + 4}" y="${y + rowH / 2 + 4}" text-anchor="end">${esc(trunc(r.label))}</text>`;
+    const cx = L + slot * i + slot / 2;
+    const lab = labels[i]!.map((l, k) => `<tspan x="${cx}" dy="${k ? 13 : 0}">${esc(l)}</tspan>`).join('');
+    return `<rect class="cb-bar" x="${cx - barW / 2}" y="${y(r.count)}" width="${barW}" height="${Math.max(0, T + plotH - y(r.count))}"><title>${esc(r.label)}: ${r.count}</title></rect><text class="cb-axis" x="${cx}" y="${T + plotH + 15}" text-anchor="middle">${lab}</text>`;
   })
   .join('')}
-${ticks.map((v) => `<text class="cb-axis" x="${x(v)}" y="${top + rows.length * rowH + 15}" text-anchor="middle">${v}</text>`).join('')}
-<text class="cb-axis-title" x="${labelW + 10 + plotW / 2}" y="${H - 6}" text-anchor="middle">count</text>
+<text class="cb-axis-title" transform="translate(14 ${T + plotH / 2}) rotate(-90)" text-anchor="middle">count</text>
 </svg>`;
 }
 
@@ -522,7 +676,7 @@ function scheduleHtml(spec: StudySpec, models: SurveyModel[]): string {
     .join('')}</tbody></table>`;
 }
 
-/** Nested TOC; every node with children gets a twisty so it can fold. */
+/** Nested TOC: every node with children folds; surveys and blocks start folded and show how many entries they hold. */
 function renderToc(nodes: TocNode[]): string {
   interface T {
     node: TocNode;
@@ -536,16 +690,21 @@ function renderToc(nodes: TocNode[]): string {
     stack[stack.length - 1]!.children.push(t);
     stack.push({ level: node.level, children: t.children });
   }
-  const render = (ts: T[]): string =>
+  const leaves = (t: T): number => (t.children.length ? t.children.reduce((n, c) => n + leaves(c), 0) : 1);
+  const render = (ts: T[], depth: number): string =>
     ts.length
-      ? `<ul>${ts
-          .map(
-            (t) =>
-              `<li${t.children.length ? ' class="has-children"' : ''}>${t.children.length ? `<button class="cb-twisty" type="button" aria-expanded="true" aria-label="Collapse ${esc(t.node.label)}">▾</button>` : '<span class="cb-twisty-spacer"></span>'}<a href="#${t.node.id}">${esc(t.node.label)}</a>${render(t.children)}</li>`,
-          )
+      ? `<ul class="cb-toc-d${depth}">${ts
+          .map((t) => {
+            const kids = t.children.length > 0;
+            const open = !kids || depth < 2;
+            const count = kids && depth >= 2 ? `<span class="cb-toc-count">(${leaves(t)})</span>` : '';
+            return `<li class="${kids ? 'has-children' : ''}${open ? '' : ' is-collapsed'}"><div class="cb-toc-row"><a href="#${t.node.id}">${esc(t.node.label)}</a>${count}${
+              kids ? `<button class="cb-twisty" type="button" aria-expanded="${open}" aria-label="Show or hide ${esc(t.node.label)}">${open ? '▲' : '▼'}</button>` : ''
+            }</div>${render(t.children, depth + 1)}</li>`;
+          })
           .join('')}</ul>`
       : '';
-  return render(root);
+  return render(root, 1);
 }
 
 function isEmpty(v: unknown): boolean {
@@ -600,7 +759,7 @@ function themeCss(t: CodebookTheme): string {
   return `:root{
 --cb-accent:${accent};--cb-bg:${color(t.background, '#003d7a')};--cb-surface:${surface};--cb-header:${color(t.headerBg, '#f0f0f0')};--cb-text:${text};
 --cb-muted:${mix(62, text, surface)};--cb-border:${mix(16, text, surface)};--cb-faint:${mix(6, text, surface)};--cb-accent-soft:${mix(10, accent, surface)};
---cb-font:${(CODEBOOK_FONTS[t.bodyFont] ?? CODEBOOK_FONTS.times).stack};--cb-heading-font:${(CODEBOOK_FONTS[t.headingFont] ?? CODEBOOK_FONTS.times).stack};--cb-size:${size}px;
+--cb-font:${(CODEBOOK_FONTS[t.bodyFont] ?? CODEBOOK_FONTS.times!).stack};--cb-heading-font:${(CODEBOOK_FONTS[t.headingFont] ?? CODEBOOK_FONTS.times!).stack};--cb-size:${size}px;
 --cb-bar:${ggplot ? '#595959' : accent};--cb-panel:${ggplot ? '#EBEBEB' : 'transparent'};--cb-grid:${ggplot ? '#FFFFFF' : mix(12, text, surface)};--cb-axis:${ggplot ? '#4D4D4D' : mix(62, text, surface)};
 --cb-count:${ggplot ? '#1e7b34' : accent};
 }
@@ -614,17 +773,25 @@ const CODEBOOK_JS = `
     if (!panel) return;
     if (open) panel.removeAttribute('hidden'); else panel.setAttribute('hidden', '');
     var btn = document.querySelector('[data-target="' + id + '"]');
+    if (open) drawFlowcharts(panel);
     if (btn) { btn.setAttribute('aria-expanded', open); btn.querySelector('.cb-arrow').textContent = open ? '\\u25B2' : '\\u25BC'; }
+  }
+  // Flowcharts embedded as Mermaid code are drawn the first time their panel opens.
+  function drawFlowcharts(root) {
+    var pending = root.querySelectorAll('pre.cb-mermaid:not([data-drawn])');
+    if (!pending.length || !window.mermaid) return;
+    pending.forEach(function (el) { el.setAttribute('data-drawn', ''); el.classList.add('mermaid'); });
+    window.mermaid.run({ nodes: pending });
   }
   function setSection(sec, open) {
     sec.classList.toggle('is-collapsed', !open);
     var b = sec.querySelector(':scope > h1 .cb-sec-toggle, :scope > h2 .cb-sec-toggle, :scope > h3 .cb-sec-toggle');
-    if (b) b.setAttribute('aria-expanded', open);
+    if (b) { b.setAttribute('aria-expanded', open); b.textContent = open ? '\\u25B2' : '\\u25BC'; }
   }
   function setTocNode(li, open) {
     li.classList.toggle('is-collapsed', !open);
-    var b = li.querySelector(':scope > .cb-twisty');
-    if (b) b.setAttribute('aria-expanded', open);
+    var b = li.querySelector(':scope > .cb-toc-row > .cb-twisty');
+    if (b) { b.setAttribute('aria-expanded', open); b.textContent = open ? '\\u25B2' : '\\u25BC'; }
   }
   // In-page links: reveal the target (open folded sections and panels), then scroll this window only,
   // so a page that embeds the codebook in a frame never moves.
@@ -651,9 +818,9 @@ const CODEBOOK_JS = `
     var sec = t.closest('.cb-sec-toggle');
     if (sec) { var s = sec.closest('section'); setSection(s, s.classList.contains('is-collapsed')); return; }
     var tw = t.closest('.cb-twisty');
-    if (tw) { var li = tw.parentNode; setTocNode(li, li.classList.contains('is-collapsed')); return; }
+    if (tw) { var li = tw.closest('li'); setTocNode(li, li.classList.contains('is-collapsed')); return; }
     var tt = t.closest('.cb-toc-toggle');
-    if (tt) { var body = document.getElementById('cb-toc-body'); body.hidden = !body.hidden; tt.setAttribute('aria-expanded', !body.hidden); tt.querySelector('.cb-twisty-icon').textContent = body.hidden ? '\\u25B8' : '\\u25BE'; return; }
+    if (tt) { var body = document.getElementById('cb-toc-body'); body.hidden = !body.hidden; tt.setAttribute('aria-expanded', !body.hidden); tt.querySelector('.cb-twisty-icon').textContent = body.hidden ? '\\u25BC' : '\\u25B2'; return; }
     var ta = t.closest('[data-toc]');
     if (ta) {
       var open = ta.getAttribute('data-toc') === 'expand';
@@ -661,6 +828,8 @@ const CODEBOOK_JS = `
       document.querySelectorAll('.cb-toc li.has-children').forEach(function (li) { setTocNode(li, open || !li.parentNode.parentNode.closest('li')); });
       return;
     }
+    var qh = t.closest('.cb-q-head');
+    if (qh) { var qid = qh.getAttribute('data-target'); setVisuals(qid, document.getElementById(qid).hasAttribute('hidden')); return; }
     var vt = t.closest('.cb-toggle');
     if (vt) { var id = vt.getAttribute('data-target'); setVisuals(id, document.getElementById(id).hasAttribute('hidden')); return; }
     var tab = t.closest('.cb-tab');
@@ -672,7 +841,11 @@ const CODEBOOK_JS = `
       pane.classList.add('is-active');
     }
   });
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && menu) setMenu(false); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && menu) setMenu(false);
+    var qh = (e.key === 'Enter' || e.key === ' ') && e.target.closest && e.target.closest('.cb-q-head');
+    if (qh) { e.preventDefault(); qh.click(); }
+  });
   var top = document.getElementById('backToTopBtn');
   function onScroll() { top.classList.toggle('is-visible', window.scrollY > 400); }
   window.addEventListener('scroll', onScroll, { passive: true }); onScroll();
@@ -708,22 +881,27 @@ code{font-size:.9em}
 #header .title{font-size:2em;margin:8px 0 10px}
 #header .author,#header .date{font-weight:normal;font-style:italic;font-size:1em;margin:4px 0;color:var(--cb-muted)}
 
-/* Table of contents: collapsible as a whole and per node */
-.cb-toc{border:1px solid var(--cb-border);border-radius:6px;padding:12px 16px 14px;margin:0 0 28px;background:var(--cb-faint)}
-.cb-toc-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.cb-toc-toggle{font:inherit;font-weight:bold;font-size:1.05em;color:var(--cb-text);background:none;border:0;padding:0;cursor:pointer}
-.cb-toc-actions{display:flex;gap:6px}
-.cb-toc-actions button{font:inherit;font-size:.72em;color:var(--cb-accent);background:var(--cb-surface);border:1px solid var(--cb-border);border-radius:4px;padding:2px 9px;cursor:pointer}
-#cb-toc-body{margin-top:10px}
+/* Table of contents: part of the document (same font and link colour), arrows like "Click to view visuals" */
+.cb-toc{margin:4px 0 32px}
+.cb-toc-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-bottom:8px;margin-bottom:10px;border-bottom:1px solid var(--cb-border)}
+.cb-toc-toggle{font:inherit;font-family:var(--cb-heading-font);font-size:1.15em;font-weight:bold;color:var(--cb-text);background:none;border:0;padding:0;cursor:pointer}
+.cb-toc-toggle .cb-twisty-icon{font-size:calc(var(--cb-size) * .8);color:var(--cb-accent);vertical-align:.2em;margin-left:.3em}
+.cb-toc-actions{display:flex;gap:14px;font-size:.8em}
+.cb-toc-actions button{font:inherit;color:var(--cb-accent);background:none;border:0;padding:0;cursor:pointer}
+.cb-toc-actions button:hover{text-decoration:underline}
 #cb-toc-body[hidden]{display:none}
 .cb-toc ul{list-style:none;margin:0;padding:0}
-.cb-toc ul ul{padding-left:22px}
-.cb-toc li{margin:2px 0}
+.cb-toc ul ul{padding-left:1.5em;margin:.15em 0 .35em}
 .cb-toc li.is-collapsed > ul{display:none}
-.cb-toc > div > ul > li > a{font-weight:bold}
-.cb-twisty,.cb-twisty-spacer{display:inline-block;width:1.2em;text-align:center}
-.cb-twisty{font:inherit;font-size:.85em;color:var(--cb-muted);background:none;border:0;padding:0;cursor:pointer;transition:transform .15s}
-.cb-toc li.is-collapsed > .cb-twisty{transform:rotate(-90deg)}
+.cb-toc-d1 > li{margin:.45em 0}
+.cb-toc-row{display:flex;align-items:baseline;gap:.4em;padding:.08em 0}
+.cb-toc-row a{color:var(--cb-accent);text-decoration:none}
+.cb-toc-row a:hover{text-decoration:underline}
+.cb-toc-d1 > li > .cb-toc-row a{font-weight:bold}
+.cb-toc-d3 .cb-toc-row,.cb-toc-d4 .cb-toc-row,.cb-toc-d5 .cb-toc-row{font-size:.92em}
+.cb-toc-count{font-size:.8em;color:var(--cb-muted)}
+.cb-twisty{font:inherit;font-size:calc(var(--cb-size) * .8);line-height:1;color:var(--cb-accent);background:none;border:0;padding:0 .2em;cursor:pointer;align-self:center}
+.cb-twisty:hover{opacity:.7}
 
 /* Pages: rules + centred title, collapsible */
 .cb-page{margin-top:8px}
@@ -731,10 +909,10 @@ hr{border:0;border-top:1px solid var(--cb-border);margin:18px 0}
 .cb-page > h1{text-align:center;font-size:1.75em;margin:0}
 .cb-page h2{font-size:1.4em;margin:26px 0 10px}
 .cb-page h3{font-size:1.15em;margin:24px 0 10px}
-.cb-sec-toggle{font:inherit;font-size:.6em;vertical-align:.25em;width:1.6em;height:1.6em;margin-right:.35em;border-radius:4px;border:1px solid var(--cb-border);background:var(--cb-surface);color:var(--cb-muted);cursor:pointer;transition:transform .15s}
-.cb-sec-toggle:hover{color:var(--cb-accent);border-color:var(--cb-accent)}
+.cb-sec-toggle{font:inherit;font-size:calc(var(--cb-size) * .8);font-weight:normal;vertical-align:.2em;margin-left:.5em;padding:0 .2em;border:0;background:none;color:var(--cb-accent);cursor:pointer}
+.cb-sec-toggle:hover{opacity:.7}
 section.is-collapsed > .cb-sec-body{display:none}
-section.is-collapsed > h1 .cb-sec-toggle,section.is-collapsed > h2 .cb-sec-toggle,section.is-collapsed > h3 .cb-sec-toggle{transform:rotate(-90deg)}
+
 .cb-survey-name{padding-bottom:6px;border-bottom:2px solid var(--cb-accent)}
 .cb-prose{max-width:72ch}
 .cb-small{font-size:.82em;color:var(--cb-muted)}
@@ -749,7 +927,17 @@ section.is-collapsed > h1 .cb-sec-toggle,section.is-collapsed > h2 .cb-sec-toggl
 .cb-note{font-size:.88em;line-height:1.5;margin:.4em 0 .8em;padding:.5em 1em;border-left:4px solid var(--cb-accent);background:var(--cb-accent-soft);color:var(--cb-text)}
 .cb-toggle{font:inherit;font-weight:bold;font-size:.92em;color:var(--cb-accent);background:none;border:0;padding:0;margin:.3em 0 .6em;cursor:pointer}
 .cb-toggle:hover{text-decoration:underline}
+.cb-arrow{font-size:calc(var(--cb-size) * .8)}
 .cb-visuals{margin:0 0 1em}
+.cb-q-sub{display:flex;flex-wrap:wrap;align-items:baseline;gap:.25em 1em;margin-top:3px}
+.cb-q-sub .item-id{display:inline;margin-top:0}
+.cb-q-meta{font-size:.85em;font-weight:normal;color:var(--cb-muted)}
+.cb-q-head{display:flex;align-items:flex-start;gap:12px;cursor:pointer;user-select:none;transition:box-shadow .15s}
+.cb-q-head h4{flex:1;min-width:0}
+.cb-q-head:hover{box-shadow:inset 0 0 0 1px var(--cb-border)}
+.cb-q-head:focus-visible{outline:2px solid var(--cb-accent);outline-offset:2px}
+.cb-q-arrow{font-size:.75em;color:var(--cb-accent);padding-top:.25em}
+.cb-q-body{margin-top:.4em}
 .cb-visuals[hidden]{display:none}
 .cb-visuals-title{font-size:1.1em;margin:.4em 0 .6em}
 .cb-flow{margin:4px 0 12px}
@@ -782,6 +970,25 @@ section.is-collapsed > h1 .cb-sec-toggle,section.is-collapsed > h2 .cb-sec-toggl
 .cb-chart .cb-axis{fill:var(--cb-axis);font-size:11px}
 .cb-chart .cb-axis-title{fill:var(--cb-text);font-size:12px}
 .cb-chart .cb-chart-title{fill:var(--cb-text);font-size:13px}
+.cb-chart .cb-line{fill:none;stroke:var(--cb-bar);stroke-width:2}
+.cb-chart .cb-dot{fill:var(--cb-bar)}
+.cb-chart .cb-box{fill:var(--cb-accent-soft);stroke:var(--cb-bar);stroke-width:1.5}
+.cb-chart .cb-median{stroke:var(--cb-text);stroke-width:2.5}
+.cb-chart .cb-whisker{stroke:var(--cb-muted);stroke-width:1.5}
+.cb-chart .cb-fence{stroke:#c0392b;stroke-width:1;stroke-dasharray:4 3}
+.cb-chart .cb-dot-in{fill:var(--cb-bar);opacity:.45}
+.cb-chart .cb-dot-out{fill:#c0392b}
+.cb-chart-h{font-size:.95em;margin:16px 0 6px}
+/* Missingness summary tiles */
+.cb-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:8px 0 14px}
+.cb-stat{display:grid;gap:3px;padding:10px 12px;border:1px solid var(--cb-border);border-radius:6px;background:var(--cb-faint)}
+.cb-stat-l{font-size:.72em;font-weight:bold;text-transform:uppercase;letter-spacing:.05em;color:var(--cb-muted)}
+.cb-stat-n{font-size:1.35em;font-weight:bold;font-variant-numeric:tabular-nums;line-height:1.2}
+.cb-stat-sub{font-size:.78em;color:var(--cb-muted)}
+.cb-meter{display:block;height:6px;border-radius:3px;background:var(--cb-border);overflow:hidden;margin:2px 0}
+.cb-meter > span{display:block;height:100%;background:var(--cb-bar)}
+.cb-compact{font-size:.85em;max-width:620px}
+.cb-compact th,.cb-compact td{padding:5px 8px}
 
 /* Back to top */
 #backToTopBtn{position:fixed;bottom:20px;right:20px;z-index:30;width:42px;height:42px;border-radius:50%;display:grid;place-items:center;font-size:20px;background:var(--cb-surface);color:var(--cb-text);border:1px solid var(--cb-border);box-shadow:0 2px 6px rgba(0,0,0,.25);text-decoration:none;opacity:0;pointer-events:none;transition:opacity .2s}
@@ -795,7 +1002,7 @@ section.is-collapsed > h1 .cb-sec-toggle,section.is-collapsed > h2 .cb-sec-toggl
 }
 @media print{
   body{background:#fff;font-size:11pt}
-  .cb-topbar,#backToTopBtn,.cb-toggle,.cb-tabs,.cb-sec-toggle,.cb-twisty,.cb-toc-actions{display:none}
+  .cb-topbar,#backToTopBtn,.cb-toggle,.cb-q-arrow,.cb-tabs,.cb-sec-toggle,.cb-twisty,.cb-toc-actions{display:none}
   .content{margin:0;max-width:none;padding:0;box-shadow:none;border-radius:0}
   .cb-toc{border:0;background:none;padding:0}
   #cb-toc-body[hidden],.cb-visuals[hidden]{display:block}

@@ -110,6 +110,14 @@ export async function runStudyAi({ config, history, prompt, base, onText, onStat
 
 /** Attach what the app manages: rebuilt blockMap, the base study's response data, and AI provenance. */
 function finalize(raw: unknown, base: StudySpec | null, prompt: string, config: AiConfig): unknown {
+  return applyAiProvenance(raw, base, prompt, config.model);
+}
+
+/**
+ * Shared by the in-app assistant and the MCP save_study tool: rebuilds the block map, keeps the base
+ * study's response data (models never supply data), and records AI disclosure and prompts.
+ */
+export function applyAiProvenance(raw: unknown, base: StudySpec | null, prompt: string, model: string): unknown {
   if (!raw || typeof raw !== 'object') return raw;
   const spec = { ...(raw as Record<string, unknown>) };
   delete spec['AI.Information'];
@@ -120,7 +128,7 @@ function finalize(raw: unknown, base: StudySpec | null, prompt: string, config: 
 
   const prev = base?.['AI.Information'];
   const disclosure = [...(prev?.['AI.Disclosure'] ?? [])];
-  if (!disclosure.some((d) => d.Model === config.model)) disclosure.push({ Characteristic: base ? 'Modification' : 'All', Model: config.model });
+  if (!disclosure.some((d) => d.Model === model)) disclosure.push({ Characteristic: base ? 'Modification' : 'All', Model: model });
   spec['AI.Information'] = {
     'AI.Disclosure': disclosure,
     'AI.Generation.Prompt': base ? (prev?.['AI.Generation.Prompt'] ?? null) : prompt,

@@ -1,0 +1,44 @@
+# Outputs
+
+Every output is generated from the study spec alone, so it works the same whatever platform the study came from, and before any data has been collected.
+
+## Codebook
+
+**Codebook → Generator** builds a self-contained HTML codebook with a live preview; **Codebook → Viewer** shows it full size. Download it as HTML, or **Save as PDF** (the print version expands every section).
+
+Structure:
+
+- **Title page** (off by default): study name, authors, study metadata (data collection period, participants, devices, timezones) and funding.
+- **Abstract** and **Effective Summary** (your own text).
+- **Study Schedule**: each delivery event, window and recurrence.
+- **Variable List**: per survey, an optional flowchart, then every question:
+  - a header with the question text, its variable name, and how it was delivered and stored (for example "Multiple Choice • Integer");
+  - the skip-logic note ("only delivered if …");
+  - click the header to open **Descriptives**: frequency table, bar plot, histogram (numeric), missingness (answered/delivered, missed per participant, response rate by participant, missingness ICC) and an outlier screen (box plot with Tukey fences).
+- A table of contents and a "Sections" menu; every section folds.
+
+Options (**Content** tab) switch sections, question types and descriptives on or off. **Appearance** sets the theme (five presets, or your own colors), body and heading fonts (system fonts that work offline, or web fonts), text size, and chart style. Charts use the accent color by default.
+
+The codebook never lists individual responses: tables and plots are aggregates (see [Privacy](privacy.md)).
+
+## Data dictionary
+
+One row per variable: survey, variable name, question text, delivery type, data type, missingness codes, response range, response options (value = label) and **Shown When** (the skip logic in words). Search it, and download it as CSV.
+
+## Study flowchart
+
+One chart per survey (pick from the menu on the left), drawn top to bottom:
+
+- Questions in order; blocks drawn as panels.
+- Decision diamonds right under the question that controls them. Multi-select questions become a column of yes/no checks, one per option, so the flow never doubles back.
+- Fold a block into one node by clicking it, or **Collapse all blocks**.
+- Scroll to move, Ctrl + scroll (or pinch) to zoom, drag to pan; a minimap shows where you are.
+- Export SVG or PNG; **Show text outline** gives an indented text version (copy or download); **Show Mermaid code** gives the source.
+
+## Study schedule
+
+Event cards (survey, window, recurrence), a **typical day** view, and a **study timeline** across every date.
+
+## Generating outside the app
+
+The MCP server's `generate_codebook`, `generate_data_dictionary`, `survey_flowchart` and `study_schedule` tools produce the same outputs from a folder on your computer. See [AI tools and the MCP server](ai-and-mcp.md).

@@ -10,6 +10,8 @@ export default defineConfig({
   plugins: [react()],
   define: {
     'process.env.NODE_ENV': JSON.stringify('production'),
+    // Leaves the multi-MB example files out of the single-file widget (see DataPull.tsx).
+    __DM_WIDGET__: 'true',
   },
   build: {
     outDir: resolve(__dirname, '../r-package/inst/htmlwidgets/lib/app'),

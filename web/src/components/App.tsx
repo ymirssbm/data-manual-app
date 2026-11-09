@@ -10,19 +10,31 @@ import { DictionaryGeneratorPage, DictionaryViewerPage } from './pages/Dictionar
 import { FlowchartPage } from './pages/Flowchart';
 import { SchedulePage } from './pages/Schedule';
 import { AiPage } from './pages/Ai';
+import { DatasetPage } from './pages/Dataset';
+import { DataExportPage } from './pages/DataExport';
+import { SurveyEditorPage } from './pages/SurveyEditor';
+import { appStyle, ContactDialog, loadAppSettings, saveAppSettings, SettingsDialog, useResolvedMode, type AppSettings } from './AppSettings';
 
-export type PageId = 'home' | 'datapull' | 'codebook_gen' | 'codebook_view' | 'datadict_gen' | 'datadict_view' | 'flowchart' | 'schedule' | 'ai';
+export type PageId = 'home' | 'datapull' | 'dataset' | 'export' | 'editor' | 'codebook_gen' | 'codebook_view' | 'datadict_gen' | 'datadict_view' | 'flowchart' | 'schedule' | 'ai';
 
 interface MenuItem {
   id?: PageId;
   label: string;
   icon: string;
-  children?: Array<{ id: PageId; label: string; icon: string }>;
+  children?: Array<{ id: PageId; label: string; icon: string; also?: PageId[] }>;
 }
 
 const MENU: MenuItem[] = [
   { id: 'home', label: 'Home', icon: 'home' },
-  { id: 'datapull', label: 'Data Pull', icon: 'download' },
+  {
+    label: 'Data',
+    icon: 'table',
+    children: [
+      { id: 'datapull', label: 'Data Import', icon: 'import', also: ['dataset'] },
+      { id: 'export', label: 'Data Export', icon: 'export' },
+    ],
+  },
+  { id: 'editor', label: 'Survey Editor', icon: 'edit' },
   {
     label: 'Codebook',
     icon: 'book',
@@ -72,6 +84,7 @@ export function App({ adapter }: { adapter: HostAdapter }) {
   const [collapsed, setCollapsed] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches);
   const [codebook, setCodebook] = useState<GeneratedCodebook | null>(null);
   const { toasts, notify, dismiss } = useToasts();
+  const [datasetFile, setDatasetFile] = useState<{ name: string; text: string } | null>(null);
   const spec: StudySpec | null = session?.result.spec ?? null;
   const [cbSettings, setCbSettingsState] = useState<CodebookSettings>(() => loadSettings(spec));
   const setCbSettings = useCallback((s: CodebookSettings) => {
@@ -100,13 +113,21 @@ export function App({ adapter }: { adapter: HostAdapter }) {
     [notify],
   );
 
+  const [look, setLook] = useState<AppSettings>(loadAppSettings);
+  const [dialog, setDialog] = useState<'settings' | 'contact' | null>(null);
+  const mode = useResolvedMode(look.mode);
+  const changeLook = (s: AppSettings) => {
+    setLook(s);
+    saveAppSettings(s);
+  };
+
   const go = (id: PageId) => {
     setPage(id);
     if (window.matchMedia('(max-width: 767px)').matches) setCollapsed(true);
   };
 
   return (
-    <div className={`dm-app ${collapsed ? 'is-collapsed' : ''}`}>
+    <div className={`dm-app ${collapsed ? 'is-collapsed' : ''}`} data-theme={mode} data-sidebar={look.sidebar} style={appStyle(look, mode)}>
       <header className="dm-topbar">
         <div className="dm-logo">
           <span className="dm-logo-mark">
@@ -133,7 +154,7 @@ export function App({ adapter }: { adapter: HostAdapter }) {
                 </span>
                 <ul className="dm-submenu">
                   {m.children.map((c) => (
-                    <li key={c.id} className={page === c.id ? 'active' : ''}>
+                    <li key={c.id} className={page === c.id || c.also?.includes(page) ? 'active' : ''}>
                       <a href={`#${c.id}`} onClick={(e) => (e.preventDefault(), go(c.id))}>
                         <Icon name={c.icon} size={14} />
                         <span>{c.label}</span>
@@ -152,11 +173,44 @@ export function App({ adapter }: { adapter: HostAdapter }) {
             ),
           )}
         </ul>
+        <div className="dm-side-foot">
+          <button className="dm-side-btn" aria-haspopup="dialog" aria-expanded={dialog === 'settings'} onClick={() => setDialog('settings')}>
+            <Icon name="cog" size={15} /> Settings
+          </button>
+          <button className="dm-side-btn" aria-haspopup="dialog" aria-expanded={dialog === 'contact'} onClick={() => setDialog('contact')}>
+            <Icon name="mail" size={15} /> Contact
+          </button>
+        </div>
       </aside>
+      {dialog === 'settings' && <SettingsDialog value={look} onChange={changeLook} onClose={() => setDialog(null)} />}
+      {dialog === 'contact' && <ContactDialog onClose={() => setDialog(null)} />}
 
       <main className="dm-content">
         {page === 'home' && <HomePage session={session} go={go} />}
-        {page === 'datapull' && <DataPullPage session={session} onLoaded={onLoaded} notify={notify} />}
+        {page === 'datapull' && (
+          <DataPullPage
+            session={session}
+            onLoaded={onLoaded}
+            notify={notify}
+            go={go}
+            openDataset={(f) => {
+              setDatasetFile(f);
+              go('dataset');
+            }}
+          />
+        )}
+        {page === 'dataset' && (
+          <DatasetPage spec={spec} go={go} file={datasetFile} setFile={setDatasetFile} onLoaded={(s, r) => { onLoaded(s, r); go('home'); }} notify={notify} />
+        )}
+        {page === 'export' && <DataExportPage spec={spec} go={go} notify={notify} />}
+        {page === 'editor' && (
+          <SurveyEditorPage
+            spec={spec}
+            go={go}
+            notify={notify}
+            onApply={(_s, r) => onLoaded({ fileName: 'Edited in the Survey Editor', translatorLabel: 'Study spec (JSON)', notes: [] }, r)}
+          />
+        )}
         {page === 'codebook_gen' && (
           <CodebookGeneratorPage spec={spec} settings={cbSettings} setSettings={setCbSettings} codebook={codebook} onBuilt={setCodebook} go={go} notify={notify} />
         )}
