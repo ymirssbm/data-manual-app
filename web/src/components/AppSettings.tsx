@@ -1,5 +1,6 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { Icon } from './ui';
+import { SavedKeysList } from './KeyField';
 
 /** App look (not the codebook's): colour mode, accent, sidebar, text size and font. */
 export interface AppSettings {
@@ -152,6 +153,10 @@ export function SettingsDialog({ value, onChange, onClose }: { value: AppSetting
       <div>
         <div className="dm-set-label">Font</div>
         <Segmented label="Font" value={value.font} onChange={(font) => set({ font })} options={[['system', 'System'], ['humanist', 'Humanist'], ['serif', 'Serif']]} />
+      </div>
+      <div>
+        <div className="dm-set-label">Saved API keys</div>
+        <SavedKeysList />
       </div>
       <div className="dm-modal-foot">
         <span className="dm-hint">Saved in this browser. Codebook colors are set in the Codebook Generator.</span>

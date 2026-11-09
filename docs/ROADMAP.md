@@ -23,6 +23,9 @@ Rough order. Check items off as they land.
 - [x] Survey Editor: items, blocks, response options, skip logic; live SurveyJS preview; SurveyJS JSON import/export
 - [x] MCP server (stdio + HTTP + optional public tunnel): schema, study, save/validate, import, pull, export, codebook, dictionary, flowchart, schedule, describe_variable
 - [x] Documentation in `docs/`
+- [x] Saved API keys in the OS secure store (DPAPI / Keychain / Secret Service), picked by name; browser never holds secrets; shared with the MCP server
+- [x] Codebook Participation page: enrollment (Sisyphus) plot and surveys-by-day plot colored by burst; Executive Summary
+- [x] Example study: three 7-day bursts, rolling enrollment over six months
 - [ ] Qualtrics "Sign in with Qualtrics" (OAuth): needs each institution's Qualtrics admin to register the app; revisit if a partner institution can
 - [ ] REDCap super-token support (admins only) to list every project on a server
 

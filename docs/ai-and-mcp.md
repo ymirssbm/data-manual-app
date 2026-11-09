@@ -9,7 +9,7 @@ In both, response data never goes to the model, every result is validated agains
 
 ## AI Study Generator
 
-Open **AI Study Generator**, choose a provider (Claude via the Anthropic API, or any OpenAI-compatible endpoint), add your API key, and chat. Replies that contain a study are validated; if validation fails, the model is shown the errors and asked to fix them, automatically. "New chat" starts over; the loaded study is the starting point for changes.
+Open **AI Study Generator**, choose a provider (Claude via the Anthropic API, or any OpenAI-compatible endpoint), pick or save your API key (kept in your computer's secure storage, see [Privacy](privacy.md#api-keys)), and chat. Replies that contain a study are validated; if validation fails, the model is shown the errors and asked to fix them, automatically. "New chat" starts over; the loaded study is the starting point for changes.
 
 ## MCP server
 
@@ -56,7 +56,7 @@ node web/dist-mcp/data-manual-mcp.mjs --http --dir /path/to/my-study
 node web/dist-mcp/data-manual-mcp.mjs --public --dir /path/to/my-study
 ```
 
-Anyone with that link can use the tools while the server runs, so stop it (Ctrl+C) when you're done. In public mode `pull_data` is switched off, because it uses API tokens stored on your computer.
+Anyone with that link can use the tools while the server runs, so stop it (Ctrl+C) when you're done. In public mode `pull_data` and `list_saved_keys` are switched off, because they use keys stored on your computer.
 
 ### Tools
 
@@ -67,7 +67,8 @@ Anyone with that link can use the tools while the server runs, so stop it (Ctrl+
 | `save_study` | Validates a whole study and saves it; returns the errors to fix if it's invalid. Keeps existing response data and records the AI disclosure. |
 | `validate_study` | Lists every error and warning in the current study. |
 | `import_file` | Translates a `.qsf`, REDCap dictionary, Wear-IT export or spec file into the current study. |
-| `pull_data` | Pulls from Wear-IT, REDCap or Qualtrics (or lists Qualtrics surveys). Tokens come from environment variables, never from the chat. |
+| `pull_data` | Pulls from Wear-IT, REDCap or Qualtrics (or lists Qualtrics surveys). Uses keys saved in the app (or environment variables), never keys typed into the chat. |
+| `list_saved_keys` | Names of the keys saved on this computer, with platform and server; never the keys. |
 | `export_study` | Writes the study for REDCap, Qualtrics, SurveyJS, or responses as CSV. |
 | `generate_codebook` | Writes Codebook.html. `include` / `exclude` take the same section names as the app's options (for example `["Title Page"]`, `["Outlier Plots"]`). |
 | `generate_data_dictionary` | Writes DataDictionary.csv and returns the first 50 rows. |
@@ -75,9 +76,11 @@ Anyone with that link can use the tools while the server runs, so stop it (Ctrl+
 | `study_schedule` | Summarizes when each survey is delivered. |
 | `describe_variable` | Aggregate statistics for one question: deliveries, response rate, frequencies or mean/SD/range. |
 
-### API tokens for `pull_data`
+### API keys for `pull_data`
 
-Set tokens as environment variables before starting the server, so they never pass through the AI:
+The MCP server uses the **same saved keys as the app** (saved through Data Import or the AI page, and kept in your computer's secure storage). Ask for a key by name ("pull REDCap with my Sleep study key"); when only one saved key fits, it's used automatically.
+
+Alternatively, set environment variables before starting the server:
 
 | Variable | Platform |
 | --- | --- |
@@ -85,7 +88,7 @@ Set tokens as environment variables before starting the server, so they never pa
 | `DATA_MANUAL_REDCAP_TOKEN` | REDCap |
 | `DATA_MANUAL_QUALTRICS_TOKEN` | Qualtrics |
 
-Or name any variable with the tool's `token_env` argument (useful for several REDCap projects). In MCP config files, put them in the server's `env` block.
+Or name any variable with the tool's `token_env` argument. In MCP config files, put them in the server's `env` block. Either way, keys never pass through the AI.
 
 ### Example requests
 

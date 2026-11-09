@@ -12,7 +12,7 @@ Studies come in through **Data → Data Import** and go out through **Data → D
 | **REDCap** | API URL (e.g. `https://redcap.example.edu/api/`) and a project API token | Instruments, fields, branching logic; optionally records. Save several projects under "My REDCap projects" (REDCap issues one token per project). |
 | **Qualtrics** | Datacenter ID (e.g. `iad1`) and an API token | Connect once to list and search every survey the token can see; pull the definition and, optionally, responses. |
 
-Tokens are sent only to the platform, through the app's local server. You choose whether the app remembers them (this browser only) or forgets them when the tab closes. See [Privacy](privacy.md).
+Keys are saved once in your computer's secure storage (Windows encryption, macOS Keychain or the Linux keyring) and then picked by name; the browser never holds them. "Use once without saving" is there for one-off pulls. Keys are only sent to their own platform, through the app's local server. See [Privacy](privacy.md#api-keys).
 
 ### Open a file
 

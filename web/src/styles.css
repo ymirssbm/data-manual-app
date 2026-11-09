@@ -559,3 +559,18 @@ label.dm-link-btn { display: inline-block; }
   .dm-editor { grid-template-columns: 1fr; }
   .dm-editor-list { position: static; max-height: none; }
 }
+
+/* ---- Saved API keys */
+.dm-keyfield .dm-label { margin-bottom: 5px; }
+.dm-keyfield > .dm-hint { display: block; margin-top: 4px; }
+.dm-key-pick, .dm-key-once { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dm-key-pick select, .dm-key-once input { flex: 1 1 220px; }
+.dm-key-add { display: grid; gap: 8px; padding: 10px; border: 1px dashed var(--border-2); border-radius: 8px; background: var(--surface-2); }
+.dm-key-secret { display: flex; gap: 8px; }
+.dm-key-secret input { flex: 1; }
+.dm-key-add .dm-input-sm { width: 100%; }
+.dm-key-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+.dm-keys { list-style: none; margin: 0 0 6px; padding: 0; display: grid; gap: 6px; }
+.dm-keys li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; }
+.dm-keys li > span { display: grid; min-width: 0; }
+.dm-keys strong { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

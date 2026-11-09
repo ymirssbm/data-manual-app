@@ -33,6 +33,7 @@ import { pullRedcap } from '../connectors/redcap';
 import { listQualtricsSurveys, pullQualtrics } from '../connectors/qualtrics';
 import { pullWearit, WEARIT_SERVERS } from '../connectors/wearit/fetch';
 import { wearitPagesToSpec } from '../connectors/wearit/convert';
+import { findKey, listKeys } from '../keystore/node';
 
 export interface ToolContext {
   /** Folder holding study.json and generated outputs. */
@@ -52,8 +53,9 @@ const SECTION_KEYS: Record<string, keyof CodebookOptions | Array<keyof CodebookO
   'Study Metadata': 'studyMetadata',
   Funding: 'funding',
   Abstract: 'abstract',
-  'Effective Summary': 'effectiveSummary',
+  'Executive Summary': 'executiveSummary',
   'Study Schedule': 'studySchedule',
+  'Participation Plots': 'participationPlots',
   'Survey Flowcharts': 'flowcharts',
   'Variable Pages': ['deliveryType', 'typeOfData', 'responseOptions', 'skipLogic', 'frequencyTable', 'barPlot', 'histograms', 'missingness', 'missingnessPlots', 'outlierPlots', 'screenshots'],
   'Way question was delivered': 'deliveryType',
@@ -233,7 +235,7 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
       {
         title: 'Pull a study from a data platform',
         description:
-          'Pull a study (and optionally its responses) from Wear-IT, REDCap or Qualtrics and make it the current study. The API token is read from an environment variable on this computer, never passed through the AI: DATA_MANUAL_WEARIT_TOKEN, DATA_MANUAL_REDCAP_TOKEN or DATA_MANUAL_QUALTRICS_TOKEN by default, or name another variable with token_env. For Qualtrics without survey_id, lists the surveys the token can see.',
+          'Pull a study (and optionally its responses) from Wear-IT, REDCap or Qualtrics and make it the current study. Keys never pass through the AI: use a key saved in the Data Manual app (name it with `key`; see list_saved_keys; when only one saved key fits, it is used automatically), or an environment variable (DATA_MANUAL_WEARIT_TOKEN, DATA_MANUAL_REDCAP_TOKEN, DATA_MANUAL_QUALTRICS_TOKEN, or name one with token_env). For Qualtrics without survey_id, lists the surveys the key can see.',
         inputSchema: {
           source: z.enum(['wearit', 'redcap', 'qualtrics']),
           study_id: z.string().optional().describe('Wear-IT study ID.'),
@@ -242,13 +244,25 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
           datacenter: z.string().optional().describe('Qualtrics datacenter ID, e.g. iad1 or ca1.'),
           survey_id: z.string().optional().describe('Qualtrics survey ID (SV_...).'),
           include_responses: z.boolean().optional().describe('Also pull response data (REDCap / Qualtrics; default true).'),
-          token_env: z.string().optional().describe('Name of the environment variable holding the token.'),
+          key: z.string().optional().describe('Name of a saved key (from list_saved_keys).'),
+          token_env: z.string().optional().describe('Name of an environment variable holding the token.'),
         },
       },
       guard(async (a) => {
         const envName = a.token_env ?? `DATA_MANUAL_${a.source.toUpperCase()}_TOKEN`;
-        const token = process.env[envName];
-        if (!token) return fail(`Set the ${envName} environment variable to your ${a.source} API token, then restart the server.`);
+        let token = a.token_env ? process.env[envName] : undefined;
+        if (!token && a.key) {
+          const k = findKey(a.key);
+          if (!k || k.kind !== a.source) return fail(`No saved ${a.source} key named "${a.key}". Saved keys: ${listKeys().filter((x) => x.kind === a.source).map((x) => x.label).join(', ') || 'none'}.`);
+          token = `vault:${k.id}`;
+        }
+        if (!token) {
+          const fits = listKeys().filter((k) => k.kind === a.source && (!a.url || !k.meta.url || new URL(k.meta.url).host === new URL(a.url.startsWith('http') ? a.url : `https://${a.url}`).host) && (!a.datacenter || !k.meta.datacenter || k.meta.datacenter === a.datacenter));
+          if (fits.length === 1) token = `vault:${fits[0]!.id}`;
+          else if (fits.length > 1) return fail(`Several saved ${a.source} keys fit: ${fits.map((k) => k.label).join(', ')}. Name one with \`key\`.`);
+        }
+        token ??= process.env[envName];
+        if (!token) return fail(`No ${a.source} key found. Save one in the Data Manual app (Data Import, or Settings → Saved API keys), or set the ${envName} environment variable, then try again.`);
         const withData = a.include_responses ?? true;
         let r: ValidationResult;
         let notes: string[] = [];
@@ -280,6 +294,20 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
     );
   }
 
+  if (!ctx.isPublic) {
+    server.registerTool(
+      'list_saved_keys',
+      {
+        title: 'List saved API keys',
+        description: 'Names of the API keys saved on this computer (by the Data Manual app), with their platform and server. Never returns the keys themselves.',
+      },
+      guard(() => {
+        const keys = listKeys();
+        return text(keys.length ? keys.map((k) => `${k.label}  [${k.kind}]${k.meta.url ? ` ${k.meta.url}` : ''}${k.meta.datacenter ? ` ${k.meta.datacenter}` : ''}  ${k.hint}`).join('\n') : 'No saved keys. Add one in the Data Manual app.');
+      }),
+    );
+  }
+
   // ---------- Outputs ----------
   server.registerTool(
     'generate_codebook',
@@ -291,7 +319,7 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
         authors: z.string().optional(),
         funding: z.string().optional(),
         abstract: z.string().optional(),
-        summary: z.string().optional().describe('Effective summary text.'),
+        summary: z.string().optional().describe('Executive summary text.'),
         include: z.array(z.enum(SECTION_NAMES)).optional().describe('Sections to switch on (e.g. "Title Page").'),
         exclude: z.array(z.enum(SECTION_NAMES)).optional().describe('Sections to leave out.'),
         theme: z.enum(Object.keys(CODEBOOK_PRESETS) as [string, ...string[]]).optional().describe('Color theme preset.'),

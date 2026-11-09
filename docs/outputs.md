@@ -9,8 +9,11 @@ Every output is generated from the study spec alone, so it works the same whatev
 Structure:
 
 - **Title page** (off by default): study name, authors, study metadata (data collection period, participants, devices, timezones) and funding.
-- **Abstract** and **Effective Summary** (your own text).
+- **Abstract** and **Executive Summary** (your own text, or an automatic summary of the study).
 - **Study Schedule**: each delivery event, window and recurrence.
+- **Participation** (with response data):
+  - *Enrollment over time*: cumulative participants by the date of each person's first completed survey (a "Sisyphus" plot).
+  - *Surveys by day since first survey*: one row per participant, one dot per completed survey, with a shaded curve of surveys per day. In measurement-burst designs the dots are colored by burst (a gap of more than a week starts a new burst).
 - **Variable List**: per survey, an optional flowchart, then every question:
   - a header with the question text, its variable name, and how it was delivered and stored (for example "Multiple Choice • Integer");
   - the skip-logic note ("only delivered if …");

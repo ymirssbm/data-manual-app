@@ -6,11 +6,30 @@ export class ConnectorError extends Error {}
 /** Outside a browser (the MCP server runs in Node) there is no CORS, so calls go straight to the API. */
 export const DIRECT = typeof window === 'undefined';
 
+/**
+ * In Node, the host (the MCP server) supplies saved keys: it replaces "vault:<id>" references with
+ * the secret, refusing keys that belong to another server. In the browser the local server does it.
+ */
+type Resolver = (text: string, target: URL) => Promise<string>;
+let resolver: Resolver | null = null;
+export function setSecretResolver(fn: Resolver): void {
+  resolver = fn;
+}
+export async function resolveSecrets(text: string, target: URL): Promise<string> {
+  if (!/vault(?::|%3A)/i.test(text)) return text;
+  if (!resolver) throw new ConnectorError('Saved keys are not available here.');
+  return resolver(text, target);
+}
+
 export async function relayFetch(target: string, init: { method?: 'GET' | 'POST'; headers?: Record<string, string>; body?: string; signal?: AbortSignal } = {}): Promise<Response> {
   let res: Response;
   if (DIRECT) {
     try {
-      return await fetch(target, { method: init.method ?? 'GET', signal: init.signal, headers: init.headers, body: init.body });
+      const url = new URL(target);
+      const headers: Record<string, string> = {};
+      for (const [k, v] of Object.entries(init.headers ?? {})) headers[k] = await resolveSecrets(v, url);
+      const body = init.body == null ? undefined : await resolveSecrets(init.body, url);
+      return await fetch(await resolveSecrets(target, url), { method: init.method ?? 'GET', signal: init.signal, headers, body });
     } catch (e) {
       if ((e as Error).name === 'AbortError') throw e;
       throw new ConnectorError(`Could not reach ${new URL(target).host}: ${(e as Error).message}`);
@@ -20,7 +39,8 @@ export async function relayFetch(target: string, init: { method?: 'GET' | 'POST'
     res = await fetch('/proxy/http', {
       method: init.method ?? 'GET',
       signal: init.signal,
-      headers: { ...init.headers, 'x-target-url': target },
+      // x-data-manual lets the local server swap saved keys into this request (see src/server/relay.ts).
+      headers: { ...init.headers, 'x-target-url': target, 'x-data-manual': '1' },
       body: init.body,
     });
   } catch (e) {

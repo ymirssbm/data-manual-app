@@ -5,6 +5,8 @@ import { replyProse, runStudyAi } from '../../ai/studyAi';
 import type { LoadedSource } from './DataPull';
 import { Box, Field, Icon, PageTitle } from '../ui';
 import { download, safeFileName } from '../util';
+import { isVaultRef, vaultRef } from '../../connectors/keys';
+import { addKey, KeyField, keyLabel, useVault } from '../KeyField';
 
 interface Props {
   spec: StudySpec | null;
@@ -31,25 +33,28 @@ const EXAMPLE_MODIFY =
 const HELP =
   'Describe a study to create one, or ask for changes to the loaded study ("add a sleep block to the morning survey", "make the craving follow-up only appear above 50"). The assistant sees your study and the spec schema, returns a complete updated spec, and the app validates it (and asks the model to fix any errors) before you choose to use it. Response data in the loaded study is never sent.';
 
+/** Settings persist; the key only as a saved-key reference (its secret stays in the computer's key storage). */
 function loadConfig(): AiConfig {
   try {
     const saved = JSON.parse(localStorage.getItem(CONFIG_KEY) ?? '{}') as Partial<AiConfig>;
-    const key = localStorage.getItem(KEY_KEY) ?? sessionStorage.getItem(KEY_KEY) ?? '';
-    return { ...DEFAULT_CONFIG, ...saved, apiKey: key };
+    return { ...DEFAULT_CONFIG, ...saved, apiKey: saved.apiKey && isVaultRef(saved.apiKey) ? saved.apiKey : '' };
   } catch {
     return DEFAULT_CONFIG;
   }
 }
 
+/** A key an older version kept in browser storage, to move into the computer's key storage. */
+function legacyKey(): string {
+  try {
+    return localStorage.getItem(KEY_KEY) ?? sessionStorage.getItem(KEY_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
 export function AiPage({ spec, onLoaded, notify }: Props) {
   const [config, setConfig] = useState<AiConfig>(loadConfig);
-  const [rememberKey, setRememberKey] = useState(() => {
-    try {
-      return !!localStorage.getItem(KEY_KEY);
-    } catch {
-      return false;
-    }
-  });
+  const vault = useVault();
   const [messages, setMessages] = useState<ChatMessage[]>([
     { role: 'assistant', text: "Hi! I'm your AI Study Assistant. Add your API key in AI Settings, then describe a study to create or the changes you want to the loaded one." },
   ]);
@@ -63,20 +68,32 @@ export function AiPage({ spec, onLoaded, notify }: Props) {
 
   useEffect(() => {
     try {
-      const { apiKey: _k, ...rest } = config;
-      void _k;
-      localStorage.setItem(CONFIG_KEY, JSON.stringify(rest));
-      if (rememberKey) {
-        localStorage.setItem(KEY_KEY, config.apiKey);
-        sessionStorage.removeItem(KEY_KEY);
-      } else {
-        localStorage.removeItem(KEY_KEY);
-        sessionStorage.setItem(KEY_KEY, config.apiKey);
-      }
+      // A key typed in for one-off use is never written to browser storage.
+      localStorage.setItem(CONFIG_KEY, JSON.stringify({ ...config, apiKey: isVaultRef(config.apiKey) ? config.apiKey : '' }));
     } catch {
       // storage unavailable
     }
-  }, [config, rememberKey]);
+  }, [config]);
+
+  // Move a key an older version kept in browser storage into the computer's key storage.
+  useEffect(() => {
+    const old = legacyKey();
+    if (!old) return;
+    if (vault === null) {
+      if (!config.apiKey) set('apiKey', old);
+      return;
+    }
+    if (!vault) return;
+    addKey(config.provider, config.provider === 'anthropic' ? 'Claude API key' : 'AI API key', old, config.provider === 'openai' && config.baseUrl ? { baseUrl: config.baseUrl.trim() } : {})
+      .then((k) => {
+        set('apiKey', vaultRef(k));
+        localStorage.removeItem(KEY_KEY);
+        sessionStorage.removeItem(KEY_KEY);
+        notify("Moved your AI key out of the browser and into this computer's secure key storage.");
+      })
+      .catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vault]);
   // Scroll only the chat box (never the page), and return nothing from the effect.
   useEffect(() => {
     const box = chatEnd.current?.parentElement;
@@ -154,7 +171,7 @@ export function AiPage({ spec, onLoaded, notify }: Props) {
             <span className="dm-caret-light">{settingsOpen ? '▾' : '▸'}</span> AI Settings
           </h3>
           <span className="dm-settings-summary">
-            {modelLabel} · {config.apiKey ? 'key added' : 'no key yet'}
+            {modelLabel} · {config.apiKey ? keyLabel(vault, config.apiKey) : 'no key yet'}
           </span>
         </button>
         {settingsOpen && (
@@ -202,14 +219,17 @@ export function AiPage({ spec, onLoaded, notify }: Props) {
                   </Field>
                 </>
               )}
-              <Field label="AI API Token">
-                <input className="dm-input" type="password" value={config.apiKey} onChange={(e) => set('apiKey', e.target.value)} placeholder="Enter API key" autoComplete="off" />
-              </Field>
+              <KeyField
+                key={config.provider}
+                kind={config.provider}
+                label="AI API key"
+                value={config.apiKey}
+                onChange={(v) => set('apiKey', v)}
+                meta={config.provider === 'openai' ? { baseUrl: config.baseUrl.trim() } : {}}
+                suggestedLabel={config.provider === 'anthropic' ? 'Claude API key' : 'AI API key'}
+              />
             </div>
             <div className="dm-inline dm-inline-tight dm-settings-foot">
-              <label className="dm-check">
-                <input type="checkbox" checked={rememberKey} onChange={(e) => setRememberKey(e.target.checked)} /> Remember key on this computer
-              </label>
               {config.provider === 'openai' && (
                 <label className="dm-check">
                   <input type="checkbox" checked={config.useRelay} onChange={(e) => set('useRelay', e.target.checked)} /> Relay through this app

@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { validateSpec, type ValidationResult } from '../../core';
 import { pullWearit, WEARIT_SERVERS, type WearitServer } from '../../connectors/wearit/fetch';
 import { wearitPagesToSpec } from '../../connectors/wearit/convert';
-import { pullRedcap, redcapProjectInfo } from '../../connectors/redcap';
+import { normalizeRedcapUrl, pullRedcap, redcapProjectInfo } from '../../connectors/redcap';
 import { listQualtricsSurveys, pullQualtrics, type QualtricsSurveySummary } from '../../connectors/qualtrics';
-import { loadConnections, maskToken, saveConnections, type SavedConnections } from '../../connectors/saved';
+import { hasPlainTokens, loadConnections, saveConnections, type SavedConnections } from '../../connectors/saved';
+import { isVaultRef, vaultRef } from '../../connectors/keys';
+import { addKey, keyLabel, KeyField, useVault } from '../KeyField';
 import { detectTranslator, TRANSLATORS } from '../../translators';
 import type { PageId, Session } from '../App';
 import { IssueList } from '../IssueList';
@@ -28,6 +30,13 @@ interface Props {
 
 type Source = 'wearit' | 'redcap' | 'qualtrics';
 const LOCAL_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const redcapUrlOrEmpty = (u: string) => {
+  try {
+    return u.trim() ? normalizeRedcapUrl(u) : '';
+  } catch {
+    return '';
+  }
+};
 
 // The standalone app bundles the example files (loaded on demand). The R widget is one script file,
 // so it leaves them out (they are several MB) and fetches them from the repository instead.
@@ -47,7 +56,7 @@ export const readExample = async (path: string) => {
 const EXAMPLE = {
   title: 'Recovery Pathways EMA (example study)',
   detail:
-    'A 21-day study with morning, evening and weekly surveys, complex branching (nested, multi-select, threshold and mutually exclusive paths) and simulated responses from 200 participants (about 80% of surveys completed).',
+    'Three 7-day measurement bursts with morning, evening and weekly surveys, complex branching (nested, multi-select, threshold and mutually exclusive paths) and simulated responses from 200 participants enrolled over six months (about 80% of surveys completed).',
 };
 
 export function DataPullPage({ session, onLoaded, notify, openDataset, go }: Props) {
@@ -59,6 +68,24 @@ export function DataPullPage({ session, onLoaded, notify, openDataset, go }: Pro
     setConnState(c);
     saveConnections(c);
   };
+
+  // Move tokens an older version kept in browser storage into the computer's key storage.
+  const vault = useVault();
+  useEffect(() => {
+    if (!vault || !hasPlainTokens(conn)) return;
+    void (async () => {
+      const next: SavedConnections = { ...conn, redcap: [] };
+      for (const p of conn.redcap) {
+        next.redcap.push(isVaultRef(p.token) ? p : { ...p, token: vaultRef(await addKey('redcap', p.title, p.token, { url: p.url })) });
+      }
+      if (conn.qualtrics && !isVaultRef(conn.qualtrics.token)) {
+        next.qualtrics = { ...conn.qualtrics, token: vaultRef(await addKey('qualtrics', `Qualtrics (${conn.qualtrics.datacenter})`, conn.qualtrics.token, { datacenter: conn.qualtrics.datacenter })) };
+      }
+      setConn(next);
+      notify("Moved your saved tokens out of the browser and into this computer's secure key storage.");
+    })().catch((e: Error) => notify(`Could not move saved tokens: ${e.message}`, 'warning', 8000));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vault]);
 
   // Wear-IT
   const [studyId, setStudyId] = useState('');
@@ -192,9 +219,7 @@ export function DataPullPage({ session, onLoaded, notify, openDataset, go }: Pro
               <Field label="Study ID">
                 <input className="dm-input" value={studyId} onChange={(e) => setStudyId(e.target.value)} placeholder="Enter Study ID" autoComplete="off" />
               </Field>
-              <Field label="API Token">
-                <input className="dm-input" type="password" value={wToken} onChange={(e) => setWToken(e.target.value)} placeholder="Enter API Token" autoComplete="off" />
-              </Field>
+              <KeyField kind="wearit" label="API Token" value={wToken} onChange={setWToken} suggestedLabel="Wear-IT token" />
             </div>
             <div>
               <Field label="Wear-IT URL">
@@ -227,7 +252,7 @@ export function DataPullPage({ session, onLoaded, notify, openDataset, go }: Pro
                       <div>
                         <strong>{p.title}</strong>
                         <span className="dm-hint">
-                          {new URL(p.url).host} · project {p.projectId || '?'} · token {maskToken(p.token)}
+                          {new URL(p.url).host} · project {p.projectId || '?'} · {keyLabel(vault, p.token)}
                         </span>
                       </div>
                       <div className="dm-inline dm-inline-tight">
@@ -260,9 +285,15 @@ export function DataPullPage({ session, onLoaded, notify, openDataset, go }: Pro
                 <Field label="REDCap API URL" hint="Your REDCap address followed by /api/ (shown on the project's API page).">
                   <input className="dm-input" value={rUrl} onChange={(e) => setRUrl(e.target.value)} placeholder="https://redcap.your-university.edu/api/" autoComplete="off" />
                 </Field>
-                <Field label="Project API token" hint="In the project: API → Generate token (needs API Export rights).">
-                  <input className="dm-input" type="password" value={rToken} onChange={(e) => setRToken(e.target.value)} placeholder="Enter API Token" autoComplete="off" />
-                </Field>
+                <KeyField
+                  kind="redcap"
+                  label="Project API token"
+                  value={rToken}
+                  onChange={setRToken}
+                  meta={{ url: redcapUrlOrEmpty(rUrl) }}
+                  suggestedLabel="REDCap project"
+                  hint="In the project: API → Generate token (needs API Export rights)."
+                />
               </div>
               <div className="dm-pull-row">
                 <button className="dm-btn dm-btn-secondary" type="submit" disabled={!!busy || !rUrl.trim() || !rToken.trim()}>
@@ -288,9 +319,15 @@ export function DataPullPage({ session, onLoaded, notify, openDataset, go }: Pro
                   <Field label="Datacenter ID" hint="Account Settings → Qualtrics IDs → User → Datacenter ID (e.g. iad1).">
                     <input className="dm-input" value={qDc} onChange={(e) => setQDc(e.target.value)} placeholder="iad1" autoComplete="off" />
                   </Field>
-                  <Field label="API Token" hint="Account Settings → Qualtrics IDs → API → Generate Token.">
-                    <input className="dm-input" type="password" value={qToken} onChange={(e) => setQToken(e.target.value)} placeholder="Enter API Token" autoComplete="off" />
-                  </Field>
+                  <KeyField
+                    kind="qualtrics"
+                    label="API Token"
+                    value={qToken}
+                    onChange={setQToken}
+                    meta={{ datacenter: qDc.trim() }}
+                    suggestedLabel={`Qualtrics${qDc.trim() ? ` (${qDc.trim()})` : ''}`}
+                    hint="Account Settings → Qualtrics IDs → API → Generate Token."
+                  />
                 </div>
                 <div className="dm-pull-row">
                   <button className="dm-btn dm-btn-primary dm-btn-lg" type="submit" disabled={!!busy || !qDc.trim() || !qToken.trim()}>
@@ -357,12 +394,8 @@ export function DataPullPage({ session, onLoaded, notify, openDataset, go }: Pro
         )}
 
         <div className="dm-security-note">
-          <Icon name="lock" /> Tokens are only sent to {label} (through this app's local server).
-          {source !== 'wearit' && (
-            <label className="dm-check dm-push-right">
-              <input type="checkbox" checked={conn.remember} onChange={(e) => setConn({ ...conn, remember: e.target.checked })} /> Remember my {source === 'redcap' ? 'projects' : 'connection'} on this computer
-            </label>
-          )}
+          <Icon name="lock" /> Keys are only sent to {label}, through this app's local server.{' '}
+          {vault ? `Saved keys are kept by ${vault.storage}, never in the browser.` : 'Keys entered here are forgotten when you close the tab.'}
         </div>
       </Box>
 

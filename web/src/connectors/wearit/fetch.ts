@@ -2,6 +2,8 @@
 // The Wear-IT server sends no CORS headers, so browsers can't call it directly;
 // the dev/preview server forwards /proxy/wearit/<server>/... to it (see vite.config.ts).
 
+import { resolveSecrets } from '../relay';
+
 export const WEARIT_SERVERS = [
   { id: 'wearables-survey', label: 'wearables-survey' },
   { id: 'wearables-survey_sdb', label: 'wearables-survey_sdb' },
@@ -32,7 +34,8 @@ export async function pullWearit({ server, studyId, token, maxPages = 5000, sign
   const pages: unknown[] = [];
   let url: string | null = `${proxyBase(server)}/api/getData/${encodeURIComponent(id)}`;
   while (url && pages.length < maxPages) {
-    const res = await fetch(withToken(url, token.trim()), { signal, headers: { Accept: 'application/json' } });
+    const req = withToken(url, token.trim());
+    const res = await fetch(DIRECT ? await resolveSecrets(req, new URL(req)) : req, { signal, headers: { Accept: 'application/json', 'x-data-manual': '1' } });
     if (res.status === 401 || res.status === 403) throw new WearitError('Wear-IT rejected the request: check the study ID, API token and server.');
     // A static host without the proxy answers 200 with the app's own HTML page (or a 404).
     if ((res.ok && (res.headers.get('content-type') ?? '').includes('text/html')) || (res.status === 404 && pages.length === 0)) {

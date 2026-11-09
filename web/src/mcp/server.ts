@@ -12,6 +12,8 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { registerTools } from './tools';
+import { setSecretResolver } from '../connectors/relay';
+import { fillSecrets } from '../keystore/node';
 
 const VERSION = '0.1.0';
 
@@ -117,6 +119,8 @@ function openTunnel(port: number): ChildProcess | null {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  // Saved keys (the same ones the app saves) are read from this computer's secure storage.
+  setSecretResolver(fillSecrets);
   if (!existsSync(args.dir)) mkdirSync(args.dir, { recursive: true });
   if (args.http) {
     await serveHttp(args);

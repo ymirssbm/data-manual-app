@@ -45,8 +45,9 @@ const TREE: TreeNode[] = [
     ],
   },
   { label: 'Abstract', key: 'abstract' },
-  { label: 'Effective Summary', key: 'effectiveSummary' },
+  { label: 'Executive Summary', key: 'executiveSummary' },
   { label: 'Study Schedule', key: 'studySchedule' },
+  { label: 'Participation Plots', key: 'participationPlots', needsData: true },
   { label: 'Survey Flowcharts', key: 'flowcharts' },
   { label: 'Data Types', children: QUESTION_TYPES.map((t) => ({ label: t, type: t })) },
   {

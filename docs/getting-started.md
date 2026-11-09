@@ -16,7 +16,7 @@ API pulls (Wear-IT, REDCap, Qualtrics) and the OpenAI-compatible AI option go th
 
 ## Load the example
 
-Go to **Data → Data Import** and click **Recovery Pathways EMA (example study)**. It's a 21-day study with morning, evening and weekly surveys, nested and multi-select skip logic, and simulated responses from 200 participants who completed about 80% of their surveys.
+Go to **Data → Data Import** and click **Recovery Pathways EMA (example study)**. It has three 7-day measurement bursts with morning, evening and weekly surveys, nested and multi-select skip logic, and simulated responses from 200 participants who enrolled over six months and completed about 80% of their surveys.
 
 The study name appears in the top bar once it's loaded. Every page then works on that study.
 
@@ -34,7 +34,7 @@ The study name appears in the top bar once it's loaded. Every page then works on
 | **Study Schedule** | When each survey is delivered, as event cards, a typical day and a study timeline. |
 | **AI Study Generator** | Describe a study in plain language and get a valid spec, or ask for changes to the loaded one. |
 
-**Settings** (bottom left) changes the app's look: light or dark mode, accent color, side panel, text size and font. **Contact** has the maintainer's details and links for questions and bug reports.
+**Settings** (bottom left) changes the app's look (light or dark mode, accent color, side panel, text size and font) and lists your saved API keys. **Contact** has the maintainer's details and links for questions and bug reports.
 
 ## Your own study
 

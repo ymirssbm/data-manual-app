@@ -264,3 +264,97 @@ export function summarize(nums: number[], binCount = 10): NumericSummary {
   for (const v of sorted) bins[Math.min(binCount - 1, Math.floor((v - min) / width))]!.count++;
   return { n, mean, sd, min, median, max, bins };
 }
+
+// ---------------------------------------------------------------- participation (study level)
+
+/** A survey sitting: one participant, one session, with at least one answered question. */
+interface Sitting {
+  participant: string;
+  /** YYYY-MM-DD (the local date of the sitting) */
+  date: string;
+}
+
+function completedSittings(spec: StudySpec): Sitting[] {
+  const d = spec.data;
+  if (!d?.['Question.ID']) return [];
+  const pids = d['Participant.ID'] ?? [];
+  const sess = d['Session.ID'] ?? [];
+  const dates = d['Survey.Date.Completed'] ?? [];
+  const resp = d['User.Response'] ?? [];
+  const seen = new Map<string, Sitting>();
+  for (let i = 0; i < d['Question.ID'].length; i++) {
+    const p = pids[i];
+    const date = dates[i] ? String(dates[i]).slice(0, 10) : '';
+    if (!p || !/^\d{4}-\d{2}-\d{2}$/.test(date) || isMissing(resp[i])) continue;
+    const key = `${p}\u0000${sess[i] ?? date}`;
+    if (!seen.has(key)) seen.set(key, { participant: String(p), date });
+  }
+  return [...seen.values()];
+}
+
+const dayNumber = (date: string) => Math.round(Date.UTC(+date.slice(0, 4), +date.slice(5, 7) - 1, +date.slice(8, 10)) / 86_400_000);
+
+export interface EnrollmentPoint {
+  participant: string;
+  /** Date of the participant's first completed survey. */
+  date: string;
+  /** Participants enrolled up to and including this one. */
+  n: number;
+}
+
+/** Cumulative enrollment, using each participant's first completed survey as their start date. */
+export function enrollment(spec: StudySpec): EnrollmentPoint[] {
+  const first = new Map<string, string>();
+  for (const s of completedSittings(spec)) {
+    const f = first.get(s.participant);
+    if (!f || s.date < f) first.set(s.participant, s.date);
+  }
+  return [...first.entries()]
+    .sort((a, b) => a[1].localeCompare(b[1]) || a[0].localeCompare(b[0]))
+    .map(([participant, date], i) => ({ participant, date, n: i + 1 }));
+}
+
+export interface SurveyTimeline {
+  /** One per completed survey sitting. */
+  points: Array<{ row: number; day: number; burst: number }>;
+  participants: number;
+  /** Most bursts any participant had (1 when there are no gaps). */
+  bursts: number;
+  maxDay: number;
+  /** Completed surveys per day since first survey (index = day). */
+  perDay: number[];
+}
+
+/**
+ * Completed surveys by day since each participant's first survey. A gap longer than `gapDays`
+ * starts a new measurement burst. Rows follow enrollment order.
+ */
+export function surveyTimeline(spec: StudySpec, gapDays = 7): SurveyTimeline | null {
+  const sittings = completedSittings(spec);
+  if (!sittings.length) return null;
+  const rowOf = new Map(enrollment(spec).map((e, i) => [e.participant, i]));
+  const byPerson = new Map<string, number[]>();
+  for (const s of sittings) {
+    const list = byPerson.get(s.participant) ?? [];
+    list.push(dayNumber(s.date));
+    byPerson.set(s.participant, list);
+  }
+  const points: SurveyTimeline['points'] = [];
+  let bursts = 1;
+  let maxDay = 0;
+  for (const [p, days] of byPerson) {
+    days.sort((a, b) => a - b);
+    const start = days[0]!;
+    let burst = 1;
+    days.forEach((d, i) => {
+      if (i > 0 && d - days[i - 1]! > gapDays) burst++;
+      const day = d - start;
+      maxDay = Math.max(maxDay, day);
+      points.push({ row: rowOf.get(p) ?? 0, day, burst });
+    });
+    bursts = Math.max(bursts, burst);
+  }
+  const perDay = new Array<number>(maxDay + 1).fill(0);
+  for (const pt of points) perDay[pt.day]!++;
+  return { points, participants: byPerson.size, bursts, maxDay, perDay };
+}

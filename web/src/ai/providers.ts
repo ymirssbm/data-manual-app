@@ -49,7 +49,13 @@ export async function callModel(
 }
 
 async function callClaude(config: AiConfig, system: string, turns: ChatTurn[], onText?: (s: string) => void, signal?: AbortSignal): Promise<string> {
-  const client = new Anthropic({ apiKey: config.apiKey.trim(), dangerouslyAllowBrowser: true });
+  // A saved key ("vault:<id>") goes through the app's local server, which swaps in the secret.
+  const saved = config.apiKey.trim().startsWith('vault:');
+  const client = new Anthropic({
+    apiKey: config.apiKey.trim(),
+    dangerouslyAllowBrowser: true,
+    ...(saved ? { baseURL: `${window.location.origin}/proxy/anthropic`, defaultHeaders: { 'x-data-manual': '1' } } : {}),
+  });
   const model = config.model.trim() || 'claude-opus-5-5';
   const withFallback = FALLBACK_MODELS.has(model);
   try {
@@ -100,14 +106,16 @@ async function callOpenAiCompatible(config: AiConfig, system: string, turns: Cha
     Authorization: `Bearer ${config.apiKey.trim()}`,
     'api-key': config.apiKey.trim(), // Azure-style auth; ignored elsewhere
   };
-  const res = await fetch(config.useRelay ? '/proxy/http' : target, {
+  // Saved keys only work through the local server, which swaps in the secret.
+  const relay = config.useRelay || config.apiKey.trim().startsWith('vault:');
+  const res = await fetch(relay ? '/proxy/http' : target, {
     method: 'POST',
     signal,
-    headers: config.useRelay ? { ...headers, 'x-target-url': target } : headers,
+    headers: relay ? { ...headers, 'x-target-url': target, 'x-data-manual': '1' } : headers,
     body: JSON.stringify({ model: config.model.trim(), messages: [{ role: 'system', content: system }, ...turns] }),
   }).catch((e: Error) => {
     if (e.name === 'AbortError') throw e;
-    throw new AiError(config.useRelay ? 'Could not reach the local relay. Is the app running with "npm run dev"?' : 'The request was blocked. Turn on "Relay through this app" and try again.');
+    throw new AiError(relay ? 'Could not reach the local relay. Is the app running with "npm run dev"?' : 'The request was blocked. Turn on "Relay through this app" and try again.');
   });
   const body = await res.text();
   if (!res.ok) {

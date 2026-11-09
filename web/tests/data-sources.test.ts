@@ -114,3 +114,21 @@ describe('every example has data and the new descriptives', () => {
     expect(d.outliers!.flagged.every((f) => f.value > d.outliers!.upper || f.value < d.outliers!.lower)).toBe(true);
   });
 });
+
+describe('participation plots', () => {
+  it('finds rolling enrollment and three measurement bursts in the example', async () => {
+    const { enrollment, surveyTimeline, generateCodebookHtml } = await import('../src/generators');
+    const { validateSpec } = await import('../src/core');
+    const ex = (await import('../../examples/branching-ema-study.json')).default;
+    const spec = validateSpec(structuredClone(ex)).spec!;
+    const e = enrollment(spec);
+    expect(e).toHaveLength(200);
+    expect(e[0]!.date < e[199]!.date).toBe(true);
+    const tl = surveyTimeline(spec)!;
+    expect(tl.bursts).toBe(3);
+    expect(tl.maxDay).toBeGreaterThanOrEqual(56);
+    const html = generateCodebookHtml(spec);
+    for (const s of ['Enrollment over time', 'Surveys by day since first survey', '>Burst<', 'Executive Summary']) expect(html, s).toContain(s);
+    expect(generateCodebookHtml(spec, { participationPlots: false })).not.toContain('Enrollment over time');
+  });
+});

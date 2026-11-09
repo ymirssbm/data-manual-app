@@ -1,6 +1,6 @@
 // Spec -> self-contained codebook HTML, laid out like the prior R Markdown
 // codebook: title block, table of contents, then <hr>-ruled pages (Title Page,
-// Abstract Page, Effective Summary, Variable List) and, per survey, a shaded
+// Abstract Page, Executive Summary, Variable List) and, per survey, a shaded
 // header per variable with indented field lines and a "Click to view visuals"
 // panel (Frequency Table / Barplot / Missingness / Screenshots tabs).
 // Additions: a sticky "Sections" menu, a collapsible TOC (every node folds),
@@ -21,7 +21,7 @@ import {
 } from '../core';
 import { buildStudySchedule } from './schedule';
 import { generateFlowchart } from './flowchart';
-import { dataOverview, describeItem, hasResponseData, indexResponses, type ItemDescriptives } from './descriptives';
+import { dataOverview, describeItem, enrollment, hasResponseData, indexResponses, surveyTimeline, type EnrollmentPoint, type ItemDescriptives, type SurveyTimeline } from './descriptives';
 
 export const QUESTION_TYPES = [
   'Free Response',
@@ -41,8 +41,10 @@ export interface CodebookOptions {
   studyMetadata: boolean;
   funding: boolean;
   abstract: boolean;
-  effectiveSummary: boolean;
+  executiveSummary: boolean;
   studySchedule: boolean;
+  /** Enrollment over time and surveys by day since first survey (needs response data). */
+  participationPlots: boolean;
   flowcharts: boolean;
   /** Question types to include on variable pages ("Block" controls block headings). */
   dataTypes: string[];
@@ -68,8 +70,9 @@ export const DEFAULT_CODEBOOK_OPTIONS: CodebookOptions = {
   studyMetadata: false,
   funding: false,
   abstract: true,
-  effectiveSummary: true,
+  executiveSummary: true,
   studySchedule: true,
+  participationPlots: true,
   flowcharts: true,
   dataTypes: [...QUESTION_TYPES],
   deliveryType: true,
@@ -275,11 +278,26 @@ export function generateCodebookHtml(
   } else toc.splice(tocMark, 1);
 
   if (o.abstract && abstract) out.push(page('Abstract Page', `<p class="cb-prose">${esc(abstract)}</p>`));
-  if (o.effectiveSummary) {
+  if (o.executiveSummary) {
     const summary = text.summary?.trim();
-    out.push(page('Effective Summary', summary ? `<p class="cb-prose">${esc(summary)}</p>` : autoSummary(models, overview)));
+    out.push(page('Executive Summary', summary ? `<p class="cb-prose">${esc(summary)}</p>` : autoSummary(models, overview)));
   }
   if (o.studySchedule && spec.schedules.length) out.push(page('Study Schedule', scheduleHtml(spec, models)));
+  if (o.participationPlots && hasResponseData(spec)) {
+    const enrolled = enrollment(spec);
+    const tl = surveyTimeline(spec);
+    if (enrolled.length && tl) {
+      out.push(
+        page(
+          'Participation',
+          `<h4 class="cb-chart-h">Enrollment over time</h4>${enrollmentSvg(enrolled)}<p class="cb-small">Cumulative participants by the date of their first completed survey (${enrolled.length} participants, ${esc(enrolled[0]!.date)} to ${esc(enrolled[enrolled.length - 1]!.date)}).</p>
+<h4 class="cb-chart-h">Surveys by day since first survey</h4>${timelineSvg(tl)}<p class="cb-small">Each row is a participant (in enrollment order) and each dot a completed survey. The shaded curve shows how many surveys were completed on each day.${
+            tl.bursts > 1 ? ' Colors mark measurement bursts: a gap of more than a week starts a new burst.' : ''
+          }</p>`,
+        ),
+      );
+    }
+  }
 
   // ---- Variable list: survey > block > variable, each level collapsible
   const included = new Set(o.dataTypes);
@@ -623,6 +641,97 @@ ${bins.map((b, i) => `<rect class="cb-bar" x="${L + i * bw + 0.5}" y="${y(b.coun
 ${[0, Math.floor(bins.length / 2), bins.length].map((i) => `<text class="cb-axis" x="${L + i * bw}" y="${T + plotH + 15}" text-anchor="middle">${fmt(i === bins.length ? bins[bins.length - 1]!.to : bins[i]!.from)}</text>`).join('')}
 <text class="cb-axis-title" x="${L + plotW / 2}" y="${H - 6}" text-anchor="middle">response</text>
 <text class="cb-axis-title" transform="translate(14 ${T + plotH / 2}) rotate(-90)" text-anchor="middle">count</text>
+</svg>`;
+}
+
+const BURST_COLORS = ['#E69F00', '#56B4E9', '#009E73', '#CC79A7', '#0072B2', '#D55E00', '#B8A200', '#7F7F7F'];
+const dayNum = (date: string) => Math.round(Date.UTC(+date.slice(0, 4), +date.slice(5, 7) - 1, +date.slice(8, 10)) / 86_400_000);
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** Cumulative enrollment as a step line (a "Sisyphus" plot). */
+function enrollmentSvg(points: EnrollmentPoint[]): string {
+  const W = 760;
+  const H = 320;
+  const L = 52;
+  const R = 16;
+  const T = 14;
+  const B = 44;
+  const plotW = W - L - R;
+  const plotH = H - T - B;
+  const d0 = dayNum(points[0]!.date);
+  const d1 = Math.max(d0 + 1, dayNum(points[points.length - 1]!.date));
+  const n = points.length;
+  const step = niceStep(n);
+  const top = Math.ceil(n / step) * step || 1;
+  const x = (d: number) => L + ((d - d0) / (d1 - d0)) * plotW;
+  const y = (v: number) => T + plotH - (v / top) * plotH;
+  const ticks: number[] = [];
+  for (let v = 0; v <= top + step * 0.01; v += step) ticks.push(v);
+  // Month ticks, thinned to at most about 8 labels.
+  const months: Array<{ d: number; label: string }> = [];
+  const start = new Date(d0 * 86_400_000);
+  for (let m = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1)); m.getTime() / 86_400_000 <= d1; m = new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() + 1, 1))) {
+    const d = m.getTime() / 86_400_000;
+    if (d >= d0) months.push({ d, label: `${MONTHS[m.getUTCMonth()]} ${m.getUTCFullYear()}` });
+  }
+  const every = Math.max(1, Math.ceil(months.length / 8));
+  let path = `M${x(d0).toFixed(1)},${y(0).toFixed(1)}`;
+  for (const pt of points) path += `H${x(dayNum(pt.date)).toFixed(1)}V${y(pt.n).toFixed(1)}`;
+  return `<svg class="cb-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Enrollment over time">
+<rect class="cb-panel" x="${L}" y="${T}" width="${plotW}" height="${plotH}"/>
+${ticks.map((v) => `<line class="cb-grid" x1="${L}" x2="${L + plotW}" y1="${y(v)}" y2="${y(v)}"/><text class="cb-axis" x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`).join('')}
+${months
+  .filter((_, i) => i % every === 0)
+  .map((m) => `<line class="cb-grid" x1="${x(m.d)}" x2="${x(m.d)}" y1="${T}" y2="${T + plotH}"/><text class="cb-axis" x="${x(m.d)}" y="${T + plotH + 16}" text-anchor="middle">${m.label}</text>`)
+  .join('')}
+${points.map((pt) => `<circle class="cb-dot-in" cx="${x(dayNum(pt.date)).toFixed(1)}" cy="${y(pt.n).toFixed(1)}" r="3"></circle>`).join('')}
+<path class="cb-line" d="${path}"/>
+<text class="cb-axis-title" x="${L + plotW / 2}" y="${H - 6}" text-anchor="middle">enrollment date (first survey)</text>
+<text class="cb-axis-title" transform="translate(13 ${T + plotH / 2}) rotate(-90)" text-anchor="middle"># of participants</text>
+</svg>`;
+}
+
+/** Every completed survey by day since each participant's first survey, colored by burst. */
+function timelineSvg(tl: SurveyTimeline): string {
+  const W = 760;
+  const rows = Math.max(1, tl.participants);
+  const L = 44;
+  const R = tl.bursts > 1 ? 96 : 16;
+  const T = 12;
+  const B = 44;
+  const plotH = Math.min(560, Math.max(240, rows * 3));
+  const H = T + plotH + B;
+  const plotW = W - L - R;
+  const maxDay = Math.max(1, tl.maxDay);
+  const x = (d: number) => L + (d / maxDay) * plotW;
+  const rowH = plotH / rows;
+  const y = (r: number) => T + plotH - (r + 0.5) * rowH;
+  const rDot = Math.max(1.2, Math.min(3, rowH * 0.45));
+  // Smoothed surveys-per-day curve (Gaussian kernel, sd 1.5 days), scaled to 90% of the plot height.
+  const sd = 1.5;
+  const smooth = tl.perDay.map((_, d) => tl.perDay.reduce((acc, c, k) => acc + c * Math.exp(-((k - d) ** 2) / (2 * sd * sd)), 0));
+  const peak = Math.max(1, ...smooth);
+  const area = `M${x(0)},${T + plotH}${smooth.map((v, d) => `L${x(d).toFixed(1)},${(T + plotH - (v / peak) * plotH * 0.9).toFixed(1)}`).join('')}L${x(maxDay)},${T + plotH}Z`;
+  const dStep = niceStep(maxDay);
+  const dTicks: number[] = [];
+  for (let d = 0; d <= maxDay; d += dStep) dTicks.push(d);
+  const rStep = niceStep(rows);
+  const rTicks: number[] = [];
+  for (let r = 0; r <= rows; r += rStep) rTicks.push(r);
+  const color = (b: number) => BURST_COLORS[(b - 1) % BURST_COLORS.length];
+  const legend =
+    tl.bursts > 1
+      ? `<text class="cb-axis-title" x="${W - R + 14}" y="${T + 12}">Burst</text>${Array.from({ length: tl.bursts }, (_, i) => `<circle cx="${W - R + 20}" cy="${T + 30 + i * 18}" r="5" fill="${color(i + 1)}"></circle><text class="cb-axis" x="${W - R + 32}" y="${T + 34 + i * 18}">${i + 1}</text>`).join('')}`
+      : '';
+  return `<svg class="cb-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Surveys by day since first survey">
+<rect class="cb-panel" x="${L}" y="${T}" width="${plotW}" height="${plotH}"/>
+${dTicks.map((d) => `<line class="cb-grid" x1="${x(d)}" x2="${x(d)}" y1="${T}" y2="${T + plotH}"/><text class="cb-axis" x="${x(d)}" y="${T + plotH + 16}" text-anchor="middle">${d}</text>`).join('')}
+${rTicks.map((r) => `<text class="cb-axis" x="${L - 6}" y="${(T + plotH - r * rowH + 4).toFixed(1)}" text-anchor="end">${r}</text>`).join('')}
+<path class="cb-density" d="${area}"/>
+${tl.points.map((pt) => `<circle class="${tl.bursts > 1 ? 'cb-dot-burst' : 'cb-dot-in'}" cx="${x(pt.day).toFixed(1)}" cy="${y(pt.row).toFixed(1)}" r="${rDot.toFixed(1)}"${tl.bursts > 1 ? ` fill="${color(pt.burst)}"` : ''}></circle>`).join('')}
+${legend}
+<text class="cb-axis-title" x="${L + plotW / 2}" y="${H - 6}" text-anchor="middle">day since first survey</text>
+<text class="cb-axis-title" transform="translate(12 ${T + plotH / 2}) rotate(-90)" text-anchor="middle">participant</text>
 </svg>`;
 }
 
@@ -978,6 +1087,8 @@ section.is-collapsed > .cb-sec-body{display:none}
 .cb-chart .cb-fence{stroke:#c0392b;stroke-width:1;stroke-dasharray:4 3}
 .cb-chart .cb-dot-in{fill:var(--cb-bar);opacity:.45}
 .cb-chart .cb-dot-out{fill:#c0392b}
+.cb-chart .cb-dot-burst{opacity:.85}
+.cb-chart .cb-density{fill:var(--cb-accent);opacity:.14;stroke:var(--cb-accent);stroke-opacity:.5}
 .cb-chart-h{font-size:.95em;margin:16px 0 6px}
 /* Missingness summary tiles */
 .cb-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:8px 0 14px}
