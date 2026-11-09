@@ -29,3 +29,7 @@ Wear-IT pulls and the OpenAI-compatible AI option go through the app's local ser
 - `examples/`: sample studies in every supported format, used by the tests and the app's example list.
 
 See `CLAUDE.md` for architecture notes and `docs/ROADMAP.md` for what's planned. Contributions of new translators (other survey platforms) and outputs are welcome.
+
+## License
+
+[MIT](LICENSE)
