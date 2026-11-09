@@ -4,7 +4,7 @@ Every output is generated from the study spec alone, so it works the same whatev
 
 ## Codebook
 
-**Codebook → Generator** builds a self-contained HTML codebook with a live preview; **Codebook → Viewer** shows it full size. Download it as HTML, or **Save as PDF** (the print version expands every section).
+**Codebook → Generator** builds a self-contained HTML codebook with a live preview; **Codebook → Viewer** shows it full size. Download it as HTML, or **Save as PDF**. The print version is its own compact layout: every section expanded, light colors whatever the theme, a two-column contents list, each survey on a new page, charts sized for paper, page numbers and the study title in the margins, and screen-only extras (the per-participant response chart) left out.
 
 Structure:
 
@@ -14,10 +14,9 @@ Structure:
 - **Participation** (with response data):
   - *Enrollment over time*: cumulative participants by the date of each person's first completed survey (a "Sisyphus" plot).
   - *Surveys by day since first survey*: one row per participant, one dot per completed survey, with a shaded curve of surveys per day. In measurement-burst designs the dots are colored by burst (a gap of more than a week starts a new burst).
-- **Variable List**: per survey, an optional flowchart, then every question:
-  - a header with the question text, its variable name, and how it was delivered and stored (for example "Multiple Choice • Integer");
-  - the skip-logic note ("only delivered if …");
-  - click the header to open **Descriptives**: frequency table, bar plot, histogram (numeric), missingness (answered/delivered, missed per participant, response rate by participant, missingness ICC) and an outlier screen (box plot with Tukey fences).
+- **Variable List**: per survey, an optional flowchart, then every question. Blocks are framed panels with their own skip-logic line.
+  - a header with the question text, its variable name, and how it was delivered and stored (for example "Multiple Choice • Integer", plus "Conditional" when skip logic applies);
+  - click the header to open the skip-logic line ("Shown only if …") and **Descriptives**: frequency table, bar plot, histogram (numeric), missingness (answered/delivered, missed per participant, response rate by participant, missingness ICC) and an outlier screen (box plot with Tukey fences).
 - A table of contents and a "Sections" menu; every section folds.
 
 Options (**Content** tab) switch sections, question types and descriptives on or off. **Appearance** sets the theme (five presets, or your own colors), body and heading fonts (system fonts that work offline, or web fonts), text size, and chart style. Charts use the accent color by default.

@@ -321,7 +321,7 @@ export function generateCodebookHtml(
     const closeBlock = () => {
       if (!openBlock) return;
       parts.push(
-        `<section class="cb-block"><h3 id="${openBlock.id}">Block: ${esc(openBlock.path)}${caret(`Block: ${openBlock.path}`)}</h3><div class="cb-sec-body">${openBlock.note}${openBlock.items.join('\n')}</div></section>`,
+        `<section class="cb-block"><div class="cb-block-head"><span class="cb-block-tag">Block</span><h3 id="${openBlock.id}">${esc(openBlock.path)}${caret(`Block: ${openBlock.path}`)}</h3>${openBlock.note}</div><div class="cb-sec-body">${openBlock.items.join('\n')}</div></section>`,
       );
       openBlock = null;
     };
@@ -359,7 +359,7 @@ export function generateCodebookHtml(
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
-${fontLinks(t)}<style>${themeCss(t)}${CODEBOOK_CSS}</style>
+${fontLinks(t)}<style>${themeCss(t)}${CODEBOOK_CSS}${printPageCss(title)}</style>
 </head>
 <body class="cb charts-${t.charts}">
 <header class="cb-topbar">
@@ -397,28 +397,34 @@ function toggleButton(targetId: string, label: string, open: boolean): string {
   return `<button class="cb-toggle" type="button" data-target="${targetId}" aria-expanded="${open}">${esc(label)} <span class="cb-arrow">${open ? '▲' : '▼'}</span></button>`;
 }
 
+/** "Shown only if <variable> (<question>) is/includes <answer>", or '' when always shown. */
 function skipNote(m: SurveyModel, itemId: string): string {
   const branches = m.branchesTo.get(itemId) ?? [];
   if (!branches.length) return '';
   const parts = branches.map((b) => {
     const parent = m.byId.get(b.parentId);
-    const ptext = parent ? itemLabel(parent) : b.parentId;
-    const answer = b.definitions.length ? ` with ${b.definitions.map((d) => `<em>${esc(d)}</em>`).join(' or ')}` : b.condition ? ` (${esc(b.condition)})` : '';
-    return `question <em>${esc(parent?.['Question.ID'] ?? b.parentId)}</em>: <em>${esc(ptext)}</em>${answer}`;
+    const multi = parent?.['Question.Type.Display.Name'] === 'Multiple Select';
+    const answer = b.definitions.length
+      ? ` ${multi ? 'includes' : 'is'} ${b.definitions.map((d) => `<em>${esc(d)}</em>`).join(' or ')}`
+      : b.condition
+        ? ` ${esc(b.condition)}`
+        : '';
+    const text = parent ? stripHtml(itemLabel(parent)) : '';
+    return `<strong>${esc(parent?.['Question.ID'] ?? b.parentId)}</strong>${text ? ` <span class="cb-cond-q">(${esc(text.length > 70 ? `${text.slice(0, 69)}…` : text)})</span>` : ''}${answer}`;
   });
-  const what = m.byId.get(itemId) && isBlock(m.byId.get(itemId)!) ? 'block' : 'question';
-  return `<div class="cb-note"><strong>Note:</strong> This ${what} is only delivered if participant answered ${parts.join('; or ')}.</div>`;
+  return `<p class="cb-cond"><span class="cb-cond-tag">Skip logic</span> Shown only if ${parts.join('; or ')}</p>`;
 }
 
 function variablePage(m: SurveyModel, q: Question, o: CodebookOptions, t: CodebookTheme, stats: ItemDescriptives | null, id: string, screenshotsURL: string | undefined): string {
   const text = stripHtml(q['Question.Text'] ?? '') || itemLabel(q);
   const lines: string[] = [];
-  if (o.skipLogic) lines.push(skipNote(m, q['Item.ID']));
+  const cond = o.skipLogic ? skipNote(m, q['Item.ID']) : '';
   // Delivery and data type sit in the question header as one quiet line ("Multiple Choice • Integer").
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-  const meta = [o.deliveryType ? q['Question.Type.Display.Name'] : '', o.typeOfData && q['Data.Type'] ? cap(q['Data.Type']) : ''].filter(Boolean);
+  const meta = [o.deliveryType ? q['Question.Type.Display.Name'] : '', o.typeOfData && q['Data.Type'] ? cap(q['Data.Type']) : '', cond ? 'Conditional' : ''].filter(Boolean);
   // Everything else opens by clicking the question header.
   const body: string[] = [];
+  if (cond) body.push(cond);
   if (q['Question.Description']) body.push(`<p><strong>Description:</strong> ${esc(q['Question.Description'])}</p>`);
   const opts = responseOptions(q);
   if (o.responseOptions && opts.length && !stats?.frequencies) {
@@ -490,9 +496,9 @@ function missingnessHtml(q: Question, s: ItemDescriptives, m: SurveyModel, plots
     ? `<table class="cb-table cb-compact"><thead><tr><th>Missing per participant</th><th>Min</th><th>Max</th><th>Mean</th><th>SD</th></tr></thead><tbody><tr><td>Count of missed deliveries</td><td>${r2(mm.min)}</td><td>${r2(mm.max)}</td><td>${r2(mm.mean)}</td><td>${r2(mm.sd)}</td></tr></tbody></table>`
     : '';
   const charts = plots
-    ? `${s.byParticipant.length > 1 ? `<h4 class="cb-chart-h">Response rate by participant</h4>${participantRateSvg(s.byParticipant)}` : ''}`
+    ? `${s.byParticipant.length > 1 ? `<div class="cb-screen-only"><h4 class="cb-chart-h">Response rate by participant</h4>${participantRateSvg(s.byParticipant)}</div>` : ''}`
     : '';
-  return `<p><strong>Missingness Descriptives</strong></p><div class="cb-stats">${tiles}</div>${perPerson}${charts}<p class="cb-small">ICC(1) of answered vs. missed across participants: near 0 means missed prompts are spread evenly; near 1 means a few participants account for most of them.</p>`;
+  return `<p class="cb-miss-title"><strong>Missingness Descriptives</strong></p><div class="cb-stats">${tiles}</div>${perPerson}${charts}<p class="cb-small">ICC(1) of answered vs. missed across participants: near 0 means missed prompts are spread evenly; near 1 means a few participants account for most of them.</p>`;
 }
 
 function outliersHtml(s: ItemDescriptives): string {
@@ -543,7 +549,7 @@ function boxPlotSvg(o: NonNullable<ItemDescriptives['outliers']>): string {
   const pts = o.points.slice(0, 1500);
   // Keep edge labels inside the chart.
   const anchor = (px: number) => (px < L + 70 ? 'start' : px > W - R - 70 ? 'end' : 'middle');
-  return `<svg class="cb-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Box plot with outliers">
+  return `<svg class="cb-chart cb-boxplot" viewBox="0 0 ${W} ${H}" role="img" aria-label="Box plot with outliers">
 <line class="cb-whisker" x1="${x(whiskLo)}" x2="${x(o.q1)}" y1="${mid}" y2="${mid}"/><line class="cb-whisker" x1="${x(o.q3)}" x2="${x(whiskHi)}" y1="${mid}" y2="${mid}"/>
 <line class="cb-whisker" x1="${x(whiskLo)}" x2="${x(whiskLo)}" y1="${mid - 10}" y2="${mid + 10}"/><line class="cb-whisker" x1="${x(whiskHi)}" x2="${x(whiskHi)}" y1="${mid - 10}" y2="${mid + 10}"/>
 <rect class="cb-box" x="${x(o.q1)}" y="${mid - 20}" width="${Math.max(1, x(o.q3) - x(o.q1))}" height="40"/>
@@ -564,7 +570,8 @@ ${pts
 function histogramHtml(s: ItemDescriptives): string {
   const n = s.numeric!;
   const f = (x: number) => Number(x.toFixed(2));
-  return `<p>N = ${n.n}, Mean = ${f(n.mean)}, SD = ${f(n.sd)}, Median = ${f(n.median)}, Min = ${f(n.min)}, Max = ${f(n.max)}</p>${histogramSvg(n.bins)}`;
+  const cells: Array<[string, number]> = [['N', n.n], ['Mean', f(n.mean)], ['SD', f(n.sd)], ['Median', f(n.median)], ['Min', f(n.min)], ['Max', f(n.max)]];
+  return `<dl class="cb-numstats">${cells.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>${histogramSvg(n.bins)}`;
 }
 
 // Charts take their colours from CSS (ggplot2 grey, or the theme accent).
@@ -857,6 +864,12 @@ function renderInline(v: unknown): string {
   return esc(s);
 }
 
+/** @page rules: margins, running study title and page numbers. */
+function printPageCss(title: string): string {
+  const cssString = JSON.stringify(title.length > 80 ? `${title.slice(0, 79)}…` : title).replace(/</g, '\\3c ');
+  return `@page{size:letter;margin:.75in .7in .8in;@top-left{content:${cssString};font:8.5pt Helvetica,Arial,sans-serif;color:#777}@bottom-right{content:"Page " counter(page) " of " counter(pages);font:8.5pt Helvetica,Arial,sans-serif;color:#777}}@page:first{@top-left{content:none}}`;
+}
+
 /** Theme -> CSS custom properties (hex colours only, so nothing else can reach the stylesheet). */
 function themeCss(t: CodebookTheme): string {
   const accent = color(t.accent, '#2a5caa');
@@ -894,7 +907,7 @@ const CODEBOOK_JS = `
   }
   function setSection(sec, open) {
     sec.classList.toggle('is-collapsed', !open);
-    var b = sec.querySelector(':scope > h1 .cb-sec-toggle, :scope > h2 .cb-sec-toggle, :scope > h3 .cb-sec-toggle');
+    var b = sec.querySelector(':scope > h1 .cb-sec-toggle, :scope > h2 .cb-sec-toggle, :scope > h3 .cb-sec-toggle, :scope > .cb-block-head .cb-sec-toggle');
     if (b) { b.setAttribute('aria-expanded', open); b.textContent = open ? '\\u25B2' : '\\u25BC'; }
   }
   function setTocNode(li, open) {
@@ -1021,6 +1034,7 @@ hr{border:0;border-top:1px solid var(--cb-border);margin:18px 0}
 .cb-sec-toggle{font:inherit;font-size:calc(var(--cb-size) * .8);font-weight:normal;vertical-align:.2em;margin-left:.5em;padding:0 .2em;border:0;background:none;color:var(--cb-accent);cursor:pointer}
 .cb-sec-toggle:hover{opacity:.7}
 section.is-collapsed > .cb-sec-body{display:none}
+.cb-block-head .cb-sec-toggle{font-size:calc(var(--cb-size) * .7)}
 
 .cb-survey-name{padding-bottom:6px;border-bottom:2px solid var(--cb-accent)}
 .cb-prose{max-width:72ch}
@@ -1033,7 +1047,22 @@ section.is-collapsed > .cb-sec-body{display:none}
 .item-id{display:block;margin-top:3px;font-weight:bold;color:var(--cb-accent)}
 .cb-anchor{margin-left:2em}
 .cb-anchor > p{margin:0 0 .45em}
-.cb-note{font-size:.88em;line-height:1.5;margin:.4em 0 .8em;padding:.5em 1em;border-left:4px solid var(--cb-accent);background:var(--cb-accent-soft);color:var(--cb-text)}
+.cb-cond{font-size:.86em;line-height:1.5;margin:.2em 0 .9em;color:var(--cb-text)}
+.cb-cond-tag{display:inline-block;font-size:.78em;font-weight:bold;letter-spacing:.04em;text-transform:uppercase;color:var(--cb-accent);background:var(--cb-accent-soft);border-radius:3px;padding:.05em .45em;margin-right:.35em;vertical-align:.08em}
+.cb-cond-q{color:var(--cb-muted)}
+.cb-block{margin:26px 0 18px;border:1px solid var(--cb-border);border-left:4px solid var(--cb-accent);border-radius:6px;background:color-mix(in srgb,var(--cb-accent) 3%,var(--cb-surface))}
+.cb-block-head{padding:10px 16px 8px;border-bottom:1px solid var(--cb-border);background:var(--cb-accent-soft);border-radius:0 5px 0 0}
+.cb-block-head h3{margin:0;font-size:1.12em}
+.cb-block-tag{display:block;font-size:.68em;font-weight:bold;letter-spacing:.08em;text-transform:uppercase;color:var(--cb-accent);margin-bottom:1px}
+.cb-block-head .cb-cond{margin:.35em 0 0}
+.cb-block > .cb-sec-body{padding:2px 16px 10px}
+.cb-block .cb-block{margin:18px 0 12px}
+.cb-block.is-collapsed .cb-block-head{border-bottom:0}
+.cb-numstats{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:0;margin:6px 0 14px;max-width:560px;border:1px solid var(--cb-border);border-radius:6px;overflow:hidden}
+.cb-numstats div{padding:6px 10px;border-right:1px solid var(--cb-border)}
+.cb-numstats div:last-child{border-right:0}
+.cb-numstats dt{font-size:.68em;font-weight:bold;letter-spacing:.06em;text-transform:uppercase;color:var(--cb-muted)}
+.cb-numstats dd{margin:0;font-size:1.05em;font-variant-numeric:tabular-nums}
 .cb-toggle{font:inherit;font-weight:bold;font-size:.92em;color:var(--cb-accent);background:none;border:0;padding:0;margin:.3em 0 .6em;cursor:pointer}
 .cb-toggle:hover{text-decoration:underline}
 .cb-arrow{font-size:calc(var(--cb-size) * .8)}
@@ -1112,16 +1141,62 @@ section.is-collapsed > .cb-sec-body{display:none}
   .cb-topbar{padding:8px 12px}
 }
 @media print{
-  body{background:#fff;font-size:11pt}
-  .cb-topbar,#backToTopBtn,.cb-toggle,.cb-q-arrow,.cb-tabs,.cb-sec-toggle,.cb-twisty,.cb-toc-actions{display:none}
-  .content{margin:0;max-width:none;padding:0;box-shadow:none;border-radius:0}
-  .cb-toc{border:0;background:none;padding:0}
+  /* A light, compact document whatever the screen theme. */
+  :root{--cb-bg:#fff;--cb-surface:#fff;--cb-text:#1f1f1f;--cb-muted:#5f5f5f;--cb-border:#cfcfcf;--cb-faint:#f6f6f6;--cb-header:#eeeeee;--cb-size:10.5pt}
+  html,body{background:#fff !important;font-size:10.5pt;line-height:1.4}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .cb-topbar,#backToTopBtn,.cb-toggle,.cb-q-arrow,.cb-tabs,.cb-sec-toggle,.cb-twisty,.cb-twisty-icon,.cb-toc-actions,.cb-screen-only,.cb-visuals-title,.cb-miss-title{display:none !important}
+  .content{margin:0;max-width:none;padding:0;box-shadow:none;border-radius:0;background:#fff}
+  #header{margin-bottom:18pt}
+  #header .title{font-size:20pt}
+  /* Everything that folds on screen is open on paper. */
   #cb-toc-body[hidden],.cb-visuals[hidden]{display:block}
   .cb-toc li.is-collapsed > ul,section.is-collapsed > .cb-sec-body{display:block}
   .cb-pane{display:block}
-  .cb-print-only{display:block;font-size:1em;margin:10px 0 6px}
-  .cb-page{page-break-before:always}
-  .header-shading{break-after:avoid}
-  .cb-table tr,.cb-chart,.cb-flowchart{break-inside:avoid}
-  a{color:inherit}
+  /* Contents in two columns. */
+  .cb-toc{border:0;background:none;padding:0;font-size:9.5pt}
+  .cb-toc-head{border-bottom:1px solid var(--cb-border)}
+  #cb-toc-body > ul{columns:2;column-gap:28pt}
+  .cb-toc-row{break-inside:avoid}
+  .cb-toc-row a{color:var(--cb-text)}
+  /* Pages and surveys start on a new sheet. */
+  .cb-page{break-before:page}
+  .cb-page > h1{font-size:16pt}
+  .cb-page h2{font-size:13pt;margin:14pt 0 6pt}
+  .cb-survey{break-before:page}
+  .cb-page > .cb-sec-body > .cb-survey:first-child{break-before:auto}
+  .cb-survey-name{font-size:14pt}
+  /* Blocks: a thin rule on the left instead of a framed panel. */
+  .cb-block{border:0;border-left:3pt solid var(--cb-accent);border-radius:0;background:none;margin:14pt 0 10pt}
+  .cb-block-head{background:none;border-bottom:1px solid var(--cb-border);padding:2pt 0 4pt 10pt;break-after:avoid}
+  .cb-block > .cb-sec-body{padding:0 0 0 10pt}
+  .cb-block-head h3{font-size:12pt}
+  /* Variables: compact header that stays with its content. */
+  .cb-var{margin:0 0 8pt}
+  .header-shading{padding:5pt 8pt;margin:10pt 0 5pt;border-radius:3pt;break-after:avoid;break-inside:avoid}
+  .header-shading h4{font-size:11pt}
+  .cb-anchor{margin-left:10pt}
+  .cb-q-body{margin-top:2pt}
+  .cb-print-only{display:block;font-size:9.5pt;text-transform:uppercase;letter-spacing:.05em;color:var(--cb-muted);margin:8pt 0 3pt;break-after:avoid}
+  .cb-cond{margin:0 0 4pt}
+  /* Charts and tables at a readable size, never split across pages. */
+  .cb-chart{max-width:4.6in;max-height:2.6in;break-inside:avoid}
+  /* Charts are drawn 760 units wide and shrink to about 4.6in on paper: enlarge their text to match. */
+  .cb-chart .cb-axis{font-size:16px}
+  .cb-chart .cb-axis-title{font-size:17px}
+  .cb-chart .cb-chart-title{font-size:18px}
+  /* Box plots: the box, whiskers and flagged points carry the information; thousands of in-range dots only add file size. */
+  .cb-boxplot .cb-dot-in{display:none}
+  .cb-chart[aria-label="Surveys by day since first survey"]{max-width:6.6in;max-height:5in}
+  .cb-flowchart svg{max-width:100% !important;max-height:8.5in}
+  .cb-table{font-size:9.5pt;width:auto;min-width:60%}
+  .cb-table th,.cb-table td{padding:3pt 10pt 3pt 6pt}
+  .cb-table tr,.cb-stats,.cb-numstats,.cb-flowchart{break-inside:avoid}
+  .cb-stats{grid-template-columns:repeat(4,1fr);gap:5pt;margin:4pt 0 6pt}
+  .cb-stat{padding:4pt 6pt}
+  .cb-stat-n{font-size:12pt}
+  .cb-numstats{margin:3pt 0 6pt;max-width:4.6in}
+  .cb-numstats div{padding:3pt 6pt}
+  .cb-small{font-size:8.5pt}
+  a{color:inherit;text-decoration:none}
 }`;

@@ -105,7 +105,7 @@ describe('codebook', () => {
     expect(html.startsWith('<!doctype html>')).toBe(true);
     for (const s of ['Title Page', 'Name of study', 'Abstract Page', 'Executive Summary', 'Study Schedule', 'Variable List', 'Codebook Generated 2026-01-01',
       'header-shading', '[item_stress]', 'cb-q-head', 'cb-q-meta', 'Frequency Table', 'Barplot', 'Missingness Descriptives',
-      'Answered / Delivered', 'This question is only delivered if participant answered', 'Data Collection Period:', 'id="backToTopBtn"']) {
+      'Answered / Delivered', 'Shown only if', 'cb-numstats', 'cb-block-head', 'Data Collection Period:', 'id="backToTopBtn"']) {
       expect(html, s).toContain(s);
     }
   });
