@@ -1,0 +1,1292 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:data-manual:schema:study:0.1.0",
+  "title": "Study Specification",
+  "version": "0.1.0",
+  "description": "This specification contains all the information needed to describe a study, including what is needed to make reproducible and replicable codebooks for complex designs.",
+  "type": "object",
+  "examples": [
+    {
+      "Study.Metadata": {
+        "Study.Name": "Recovery Community Center Project",
+        "authors": "Jane Smith, John Doe, Emily R. Johnson",
+        "funding": "NIH Grant R01DA012345; NSF Award 9876543",
+        "abstract": "This study examined daily stress and recovery patterns among adults attending a recovery community center. Participants completed ecological momentary assessments four times daily over 14 days across two bursts."
+      }
+    }
+  ],
+  "properties": {
+    "AI.Information": {
+      "description": "Container for all AI-provenance metadata associated with this study: which model(s) generated which characteristics, and the exact prompts used to generate and subsequently modify the study via the AI Study Assistant.",
+      "type": "object",
+      "properties": {
+        "AI.Disclosure": {
+          "description": "List of AI-generated characteristics and the model used to generate each one. Supports multi-agent/multi-model provenance, or a single entry with Characteristic='All' if one model generated everything.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "Characteristic": {
+                "description": "The specific data element, section, or design aspect that was AI generated (e.g. 'study design', 'survey text', 'data analysis code', 'summary narrative', 'figure captions'). Use 'All' if a single model was responsible for the entire output.",
+                "type": "string"
+              },
+              "Model": {
+                "description": "String indicating what generative AI model was used to produce this characteristic",
+                "type": "string"
+              }
+            },
+            "required": [
+              "Characteristic",
+              "Model"
+            ]
+          }
+        },
+        "AI.Generation.Prompt": {
+          "description": "The exact user-provided prompt used to initially generate this study via the AI Study Generator. Null or omitted if the study was not AI-generated.",
+          "type": ["string", "null"]
+        },
+        "AI.Modification.Prompts": {
+          "description": "Chronological list of user-provided prompts used to modify this study via the AI Study Modifier, one entry per modification request, in the order they were applied. Empty or omitted if the study has never been modified via the AI assistant.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "Study.Metadata": {
+      "description": "Study- and dataset-level metadata: identification, credits, provenance, sampling, recruitment flow, access, regulatory restrictions, reuse, and linkage to other datasets.",
+      "type": "object",
+      "$comment": "Question.ID references in Identifier.Groups and Data.Provenance are strings pointing to Question.ID values elsewhere in this document. JSON Schema cannot verify these resolve; consuming tools must check independently.",
+      "properties": {
+        "Study.Name": {
+          "description": "Human readable long name for a study",
+          "type": "string"
+        },
+        "authors": {
+          "description": "String of all people to be credited for this study. This will appear in the authors section of a generated codebook.",
+          "type": "string"
+        },
+        "funding": {
+          "description": "String containing relevant funding info for the study",
+          "type": "string"
+        },
+        "abstract": {
+          "description": "String containing qualitative description of the study. This could include main study objectives, relevant findings, study population etc.",
+          "type": "string"
+        },
+        "Data.Version": {
+          "description": "Version of the dataset (distinct from the schema 'version' field, which versions this specification format).",
+          "type": "object",
+          "properties": {
+            "Version": { "type": "string", "description": "Dataset version identifier, e.g. '2.1.0' or 'Wave 3 release'." },
+            "Release.Date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+            "Changelog": { "type": "string", "description": "What changed relative to the previous version." }
+          },
+          "required": ["Version"]
+        },
+        "Protocol.Links": {
+          "description": "Links to IRB documents, GitHub repositories, preregistrations, or other protocol descriptions.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "Type": { "type": "string", "enum": ["IRB", "GitHub", "Preregistration", "OSF", "Protocol Paper", "Other"] },
+              "Label": { "type": "string" },
+              "URL": { "type": "string", "format": "uri" },
+              "IRB.Number": { "type": "string", "description": "IRB protocol number, if Type is IRB." }
+            },
+            "required": ["Type", "URL"]
+          }
+        },
+        "Sampling": {
+          "description": "How participants were sampled.",
+          "type": "object",
+          "properties": {
+            "Method": {
+              "type": "string",
+              "description": "e.g. convenience, probability, stratified, snowball, respondent-driven, census."
+            },
+            "Target.Population": { "type": "string" },
+            "Sampling.Frame": { "type": "string", "description": "The list or source from which participants were drawn." },
+            "Description": { "type": "string" }
+          },
+          "required": ["Method"]
+        },
+        "CONSORT": {
+          "description": "Recruitment, eligibility, selection, and participant flow. Flow stages are free-form so the structure works for both trials and observational designs.",
+          "type": "object",
+          "properties": {
+            "Recruitment": {
+              "type": "object",
+              "properties": {
+                "Setting": { "type": "string" },
+                "Methods": { "type": "string", "description": "e.g. flyers, clinic referral, social media, panel." },
+                "Start.Date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+                "End.Date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" }
+              }
+            },
+            "Eligibility": {
+              "type": "object",
+              "properties": {
+                "Inclusion.Criteria": { "type": "array", "items": { "type": "string" } },
+                "Exclusion.Criteria": { "type": "array", "items": { "type": "string" } }
+              }
+            },
+            "Selection": {
+              "type": "string",
+              "description": "How eligible individuals were selected or allocated into the study (and into arms/groups, if applicable)."
+            },
+            "Flow": {
+              "description": "Ordered participant-flow stages, e.g. Assessed for eligibility, Excluded, Enrolled, Allocated, Lost to follow-up, Analyzed.",
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "Stage": { "type": "string" },
+                  "N": { "type": "integer", "minimum": 0 },
+                  "Reasons": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "Reason": { "type": "string" },
+                        "N": { "type": "integer", "minimum": 0 }
+                      },
+                      "required": ["Reason"]
+                    }
+                  }
+                },
+                "required": ["Stage", "N"]
+              }
+            }
+          }
+        },
+        "Data.Provenance": {
+          "description": "Ordered record of how the released data were derived from raw collection, including cleaning, recoding, merging, scoring, and de-identification steps.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "Step": { "type": "integer", "minimum": 1, "description": "Position of this activity in the processing sequence." },
+              "Activity": {
+                "type": "string",
+                "description": "Short name for the activity, e.g. 'Remove test accounts', 'Reverse code PSS items', 'Merge sensor data', 'Top-code age'."
+              },
+              "Description": { "type": "string" },
+              "Inputs": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Question.IDs, files, or dataset versions this activity used."
+              },
+              "Outputs": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Question.IDs, files, or dataset versions this activity produced or modified."
+              },
+              "Agent": { "type": "string", "description": "Person, team, or software responsible for this activity." },
+              "Date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+              "Script.URL": { "type": "string", "format": "uri" }
+            },
+            "required": ["Step", "Activity"]
+          }
+        },
+        "Data.Access": {
+          "description": "How to obtain the data.",
+          "type": "object",
+          "properties": {
+            "Access.Level": { "type": "string", "enum": ["Open", "Registered", "Controlled", "Restricted", "Not Available"] },
+            "Repository": { "type": "string", "description": "e.g. ICPSR, NDA, OSF, Dataverse." },
+            "URL": { "type": "string", "format": "uri" },
+            "DUA.Required": { "type": "boolean", "description": "Whether a data use agreement is required." },
+            "Contact": { "type": "string" },
+            "Instructions": { "type": "string" }
+          },
+          "required": ["Access.Level"]
+        },
+        "Publications": {
+          "description": "Published papers that use this dataset.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "Citation": { "type": "string", "description": "APA-formatted citation." },
+              "DOI": { "type": "string" },
+              "Year": { "type": "integer" }
+            },
+            "required": ["Citation"]
+          }
+        },
+        "Regulatory.Restrictions": {
+          "description": "Legal and regulatory frameworks governing this data.",
+          "type": "object",
+          "properties": {
+            "Frameworks": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": ["HIPAA", "FERPA", "42 CFR Part 2", "Common Rule", "GDPR", "COPPA", "State Law", "Other"]
+              },
+              "uniqueItems": true
+            },
+            "Certificate.Of.Confidentiality": { "type": "boolean" },
+            "Notes": { "type": "string" }
+          }
+        },
+        "Identifier.Groups": {
+          "description": "Sets of variables that are identifying or high-risk in combination (quasi-identifiers, differential identifiability). Single-item identifiers are flagged in itemMap.Identifying.Info.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "Label": { "type": "string" },
+              "Question.IDs": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+              "Risk.Type": {
+                "type": "string",
+                "enum": ["Direct Identifier", "Quasi-Identifier", "Differentially Identifiable", "High Risk to Participant", "Other"]
+              },
+              "Description": { "type": "string" }
+            },
+            "required": ["Question.IDs", "Risk.Type"]
+          }
+        },
+        "Data.Usage": {
+          "description": "How heavily the data have been used, for privacy and generalizability purposes.",
+          "type": "object",
+          "properties": {
+            "Access.Grant.Count": { "type": "integer", "minimum": 0, "description": "Number of approved data access requests." },
+            "Publication.Count": { "type": "integer", "minimum": 0 },
+            "Privacy.Budget": {
+              "type": "object",
+              "description": "For differentially private releases.",
+              "properties": {
+                "Epsilon.Total": { "type": "number", "minimum": 0 },
+                "Epsilon.Spent": { "type": "number", "minimum": 0 }
+              }
+            },
+            "Generalizability.Notes": {
+              "type": "string",
+              "description": "Qualitative notes on overuse, e.g. hypotheses already tested, risk of garden-of-forking-paths."
+            },
+            "Last.Updated": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" }
+          }
+        },
+        "Linkages": {
+          "description": "Relationships to other datasets.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "Dataset.Name": { "type": "string" },
+              "Relationship": {
+                "type": "string",
+                "enum": ["Subset Of", "Superset Of", "Linked By ID", "Overlapping Sample", "Derived From", "Other"]
+              },
+              "Linkage.Key": { "type": "string", "description": "Variable used to link records, if any (e.g. External.ID)." },
+              "URL": { "type": "string", "format": "uri" },
+              "Notes": { "type": "string" }
+            },
+            "required": ["Dataset.Name", "Relationship"]
+          }
+        }
+      },
+      "required": ["Study.Name"]
+    },
+    "schedules": {
+      "description": "Array containing schedules for a study",
+      "type": "array",
+      "items": {
+        "$anchor": "schedule",
+        "$comment": "Adapted from JSON Calendar v0.1 — https://jsoncalendar.org/schema/2025-06-21.json",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "events"
+        ],
+        "properties": {
+          "id": {
+            "description": "Unique identifier for the calendar.",
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "description": "Human-readable name of the calendar.",
+            "type": "string",
+            "minLength": 1
+          },
+          "events": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#event"
+            }
+          },
+          "children": {
+            "description": "Nested child schedules (e.g. bursts) that belong to this schedule as a whole, as opposed to a single event within it — see the 'children' property under an individual event's extensions for that case.",
+            "type": "array",
+            "items": {
+              "$ref": "#schedule"
+            }
+          },
+          "extensions": {
+            "description": "Vendor-specific extensions.",
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "$defs": {
+          "dateTime": {
+            "$anchor": "dateTime",
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO-8601 date-time string (e.g. 2026-07-24T08:00:00-04:00)."
+          },
+          "date": {
+            "$anchor": "date",
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "description": "ISO-8601 date string, YYYY-MM-DD."
+          },
+          "alarm": {
+            "$anchor": "alarm",
+            "description": "ISO-8601 timestamp at which the alarm should fire.",
+            "type": "string",
+            "format": "date-time"
+          },
+          "rrule": {
+            "$anchor": "rrule",
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "frequency"
+            ],
+            "properties": {
+              "frequency": {
+                "type": "string",
+                "enum": [
+                  "DAILY",
+                  "WEEKLY",
+                  "MONTHLY",
+                  "YEARLY"
+                ]
+              },
+              "interval": {
+                "type": "integer",
+                "minimum": 1,
+                "default": 1
+              },
+              "byDay": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "MO",
+                    "TU",
+                    "WE",
+                    "TH",
+                    "FR",
+                    "SA",
+                    "SU"
+                  ]
+                },
+                "uniqueItems": true
+              },
+              "byMonthDay": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": -31,
+                  "maximum": 31,
+                  "not": {
+                    "const": 0
+                  }
+                },
+                "uniqueItems": true
+              },
+              "byMonth": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 12
+                },
+                "uniqueItems": true
+              },
+              "count": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "until": {
+                "oneOf": [
+                  {
+                    "$ref": "#dateTime"
+                  },
+                  {
+                    "$ref": "#date"
+                  }
+                ],
+                "description": "End of the recurrence. ISO-8601 date-time or date string (see dateTime/date definitions)."
+              }
+            }
+          },
+          "overrideEvent": {
+            "$anchor": "overrideEvent",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "cancelled": {
+                "type": "boolean"
+              },
+              "title": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "start": {
+                "oneOf": [
+                  {
+                    "$ref": "#dateTime"
+                  },
+                  {
+                    "$ref": "#date"
+                  }
+                ],
+                "description": "ISO-8601 date-time or date (see dateTime/date definitions)."
+              },
+              "end": {
+                "oneOf": [
+                  {
+                    "$ref": "#dateTime"
+                  },
+                  {
+                    "$ref": "#date"
+                  }
+                ],
+                "description": "ISO-8601 date-time or date (see dateTime/date definitions)."
+              },
+              "private": {
+                "type": "boolean"
+              },
+              "alarms": {
+                "type": "array",
+                "items": {
+                  "$ref": "#alarm"
+                }
+              },
+              "extensions": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          },
+          "event": {
+            "$anchor": "event",
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "title",
+              "start",
+              "end"
+            ],
+            "properties": {
+              "id": {
+                "description": "Unique identifier for the event.",
+                "type": "string",
+                "format": "uuid"
+              },
+              "title": {
+                "description": "Short summary of the event.",
+                "type": "string",
+                "minLength": 1
+              },
+              "description": {
+                "description": "Detailed description of the event.",
+                "type": "string"
+              },
+              "start": {
+                "description": "Start date/time of the event. ISO-8601 date-time or date (see dateTime/date definitions).",
+                "oneOf": [
+                  {
+                    "$ref": "#dateTime"
+                  },
+                  {
+                    "$ref": "#date"
+                  }
+                ]
+              },
+              "end": {
+                "description": "End date/time of the event (exclusive). ISO-8601 date-time or date (see dateTime/date definitions).",
+                "oneOf": [
+                  {
+                    "$ref": "#dateTime"
+                  },
+                  {
+                    "$ref": "#date"
+                  }
+                ]
+              },
+              "private": {
+                "description": "Whether the event details should be hidden from public feeds.",
+                "type": "boolean",
+                "default": false
+              },
+              "recurrence": {
+                "$ref": "#rrule"
+              },
+              "overrides": {
+                "type": "object",
+                "description": "Per-instance modifications or cancellations (keyed by ISO date / date-time string).",
+                "patternProperties": {
+                  "^.*$": {
+                    "$ref": "#overrideEvent"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "alarms": {
+                "type": "array",
+                "items": {
+                  "$ref": "#alarm"
+                }
+              },
+              "extensions": {
+                "description": "Vendor-specific extensions applicable to this event.",
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "User.Specified": {
+                    "description": "Boolean indicating whether the timing window is user specified",
+                    "type": "boolean"
+                  },
+                  "Timing.Type": {
+                    "description": "Type of timing. Fixed means, no variation in timing window. Random is drawing a random sample from a time period, triggered is based on set rules more in depth than just random in a time period.",
+                    "type": "string",
+                    "enum": [
+                      "Fixed",
+                      "Random",
+                      "Triggered"
+                    ]
+                  },
+                  "Trigger.Info": {
+                    "description": "Contains the trigger logic if it exists for a given window.",
+                    "type": "object",
+                    "properties": {
+                      "Conditional.Source": {
+                        "description": "Source of measurement to trigger conditional",
+                        "type": "string"
+                      },
+                      "Conditional.Threshold": {
+                        "description": "Threshold is the preset value being compared to the user response.",
+                        "type": "string"
+                      },
+                      "Conditional.Type": {
+                        "description": "Conditional type is the comparator (in order: =, <=, >=, <, >, !=)",
+                        "type": "string",
+                        "enum": [
+                          "1",
+                          "2",
+                          "3",
+                          "4",
+                          "5",
+                          "6"
+                        ]
+                      }
+                    }
+                  },
+                  "children": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#schedule"
+                    },
+                    "description": "Nested child schedules (e.g. bursts) that belong to this specific event, as opposed to the schedule as a whole — see the schedule-level 'children' property for that case."
+                  },
+                  "Survey.Name": {
+                    "description": "Name of the survey delivered by this schedule, referencing a Survey.Name value elsewhere in this document. Optional — some schedules (e.g. passive/sensor sync, administrative reminders) deliver no survey. JSON Schema cannot verify the referenced survey actually exists; any agent or tool generating or consuming this data must independently confirm it resolves to a real Survey.Name in the same study spec.",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "surveys": {
+      "title": "Survey Specifications",
+      "description": "Array of survey specifications within this burst. Each survey represents a distinct instrument delivered to participants. May be empty if no surveys have been defined yet.",
+      "type": "array",
+      "minItems": 0,
+      "items": {
+        "$anchor": "survey",
+        "type": "object",
+        "properties": {
+          "Survey.LongName": {
+            "description": "Human readable survey long name",
+            "type": "string"
+          },
+          "Survey.Name": {
+            "description": "Human readable survey short name",
+            "type": "string"
+          },
+          "questions": {
+            "title": "Question Specification",
+            "description": "Contains all the information needed to specify a question or variable in a survey, observation, or passive data collection context.",
+            "type": "array",
+            "minItems": 0,
+            "items": {
+              "$anchor": "question",
+              "$comment": "Parent, Conditional.Master.Item.ID, Conditional.Child.Item.ID, Conditional.Fail.Item.ID, and Trigger.Info.Conditional.Source are string references to other items' Item.ID values elsewhere in this document. JSON Schema cannot verify that a referenced ID actually exists — passing validation does NOT guarantee these references are valid. Any agent or tool generating or consuming this data must independently confirm that every referenced Item.ID resolves to a real item in the same study spec.",
+              "type": "object",
+              "examples": [
+                {
+                  "Item.ID": "item_stress_01",
+                  "Question.ID": "stress_q1",
+                  "Question.Long.Name": "Perceived Stress Item 1",
+                  "Question.Text": "How stressed have you felt in the past hour?",
+                  "Question.Description": "A self-report measure of perceived stress on a scale from 0 (not at all) to 100 (extremely).",
+                  "Question.Type.Display.Name": "Slider",
+                  "Item.Type": "Question",
+                  "Data.Type": "numeric",
+                  "Parent": "block_001",
+                  "responseKey": [
+                    {
+                      "value": "0",
+                      "definition": "Not at all"
+                    },
+                    {
+                      "value": "100",
+                      "definition": "Extremely"
+                    }
+                  ],
+                  "Conditional.Info": {
+                    "Conditional.Master.Item.ID": null,
+                    "Conditional.Child.Mappings": null,
+                    "Conditional.Fail.Item.ID": null,
+                    "Conditional.Threshold": null,
+                    "Conditional.Type": null
+                  }
+                }
+              ],
+              "properties": {
+                "Question.ID": {
+                  "description": "Name of the variable as it appears in the dataset. Identifies a question within a single survey — unique per survey (e.g. a morning survey and an evening survey use different Question.IDs even for the 'same' item), but shared across repeated deliveries of that same survey (e.g. the same morning survey repeated over 10 days keeps the same Question.ID each day).",
+                  "type": "string"
+                },
+                "Question.Long.Name": {
+                  "description": "Human readable name for the variable",
+                  "type": "string"
+                },
+                "Question.Text": {
+                  "description": "Exact text of the question as presented to the participant. Only applicable for survey questions.",
+                  "type": "string"
+                },
+                "Question.Description": {
+                  "description": "Description of the variable in layman's terms. If layman's terms are not possible, provide a citation to a longer explanation.",
+                  "type": "string"
+                },
+                "Question.Type.Display.Name": {
+                  "description": "How the data was obtained. Must match one of the supported question display types.",
+                  "oneOf": [
+                    {
+                      "const": "Free Response",
+                      "description": "User can write in any text they want."
+                    },
+                    {
+                      "const": "Informational Fullscreen",
+                      "description": "Displays information to the user only. Does not collect a response."
+                    },
+                    {
+                      "const": "Multiple Choice",
+                      "description": "User selects exactly one option from a list."
+                    },
+                    {
+                      "const": "Multiple Select",
+                      "description": "User selects any number of options from a list."
+                    },
+                    {
+                      "const": "Multiple Slider",
+                      "description": "Displays multiple VAS sliders simultaneously, one response per slider."
+                    },
+                    {
+                      "const": "Slider",
+                      "description": "Displays a single VAS slider for one response."
+                    },
+                    {
+                      "const": "Time Picker",
+                      "description": "User selects a time value."
+                    },
+                    {
+                      "const": "Time Scale Slider",
+                      "description": "User selects a time scale value using a VAS slider."
+                    },
+                    {
+                      "const": "Block",
+                      "description": "Marks the start of a block grouping questions together."
+                    },
+                    {
+                      "const": "End Block",
+                      "description": "Marks the end of a block."
+                    }
+                  ]
+                },
+                "responseKey": {
+                  "type": "array",
+                  "description": "List of response value-definition pairs.",
+                  "minItems": 0,
+                  "examples": [
+                    [
+                      {
+                        "value": "1",
+                        "definition": "Less than five minutes (just stopped in)"
+                      },
+                      {
+                        "value": "2",
+                        "definition": "5 - 30 minutes"
+                      },
+                      {
+                        "value": "3",
+                        "definition": "30 - 60 minutes"
+                      },
+                      {
+                        "value": "4",
+                        "definition": "1 - 2 hours"
+                      },
+                      {
+                        "value": "5",
+                        "definition": "2 - 4 hours"
+                      },
+                      {
+                        "value": "6",
+                        "definition": "More than 4 hours"
+                      }
+                    ],
+                    [
+                      {
+                        "value": "0",
+                        "definition": "Not at all"
+                      },
+                      {
+                        "value": "50",
+                        "definition": "Moderate"
+                      },
+                      {
+                        "value": "100",
+                        "definition": "Very"
+                      }
+                    ]
+                  ],
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "value": {
+                        "type": "string",
+                        "description": "Coded response value."
+                      },
+                      "definition": {
+                        "type": "string",
+                        "description": "Human-readable label for the response value."
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "definition"
+                    ]
+                  }
+                },
+                "Item.Type": {
+                  "description": "Block or question.",
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "Block",
+                    "Question",
+                    null
+                  ]
+                },
+                "Parent": {
+                  "description": "Item ID of the parent item. NOTE: This is different than the conditional master which points to the item which if successful, delivers the current. Parent may point to a block many questions up.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "Conditional.Info": {
+                  "description": "Contains all the conditional info for a question",
+                  "type": "object",
+                  "properties": {
+                    "Conditional.Child.Mappings": {
+                      "description": "One entry per possible response option, pairing it with the child Item ID it triggers. If multiple response options trigger the same child, that Item ID appears in multiple entries.",
+                      "type": ["array", "null"],
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "Conditional.Child.Item.ID": {
+                            "description": "Item ID triggered by this response option.",
+                            "type": "string"
+                          },
+                          "Definition": {
+                            "description": "The single response option that triggers this child.",
+                            "type": "string"
+                          }
+                        },
+                        "required": ["Conditional.Child.Item.ID", "Definition"]
+                      }
+                    },
+                    "Conditional.Fail.Item.ID": {
+                      "description": "Item ID for the fail child of the current question.",
+                      "type": ["string", "null"]
+                    },
+                    "Conditional.Master.Item.ID": {
+                      "description": "Item ID for the parent of the current question.",
+                      "type": ["string", "null"]
+                    },
+                    "Conditional.Threshold": {
+                      "description": "Threshold is the preset value being compared to the user response.",
+                      "type": ["string", "null"]
+                    },
+                    "Conditional.Type": {
+                      "description": "Conditional type is the comparator (in order: =, <=, >=, <, >, !=)",
+                      "type": ["string", "null"],
+                      "enum": ["1", "2", "3", "4", "5", "6", null]
+                    },
+                    "Multi.Conditional": {
+                      "description": "If the current question is a multi conditional (aka, branches off into mutually exclusive branches",
+                      "type": "boolean"
+                    },
+                    "Conditional.Limit": {
+                      "description": "Number of mutually exclusive conditional branches that can be triggered by this question. For example, if RCC and home trigger two separate branches, the user selects both, and the conditional limit is 1, the first of the two options in the internal ordering of the possible responses will be the only conditional triggered.",
+                      "type": "integer"
+                    }
+                  }
+                },
+                "Data.Type": {
+                  "description": "The type of data captured by this variable. Oldname: Result.Type",
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "integer",
+                    "character",
+                    "numeric",
+                    null
+                  ]
+                },
+                "Item.ID": {
+                  "description": "Item ID for this question. Identifies a single question definition, reused across repeated deliveries of the same survey (e.g. the same Item.ID appears across all 10 days a morning survey is repeated).",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "Item.ID",
+                "Question.ID",
+                "Question.Type.Display.Name",
+                "Item.Type",
+                "Parent"
+              ],
+              "allOf": [
+                {
+                  "if": {
+                    "properties": {
+                      "Item.Type": {
+                        "const": "Question"
+                      }
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "Question.Text",
+                      "Data.Type",
+                      "responseKey"
+                    ]
+                  }
+                },
+                {
+                  "if": {
+                    "properties": {
+                      "Item.Type": {
+                        "const": "Block"
+                      }
+                    }
+                  },
+                  "then": {
+                    "not": {
+                      "anyOf": [
+                        {
+                          "required": [
+                            "Question.Text"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "Data.Type"
+                          ]
+                        },
+                        {
+                          "required": [
+                            "responseKey"
+                          ]
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "Survey.Name"
+        ]
+      }
+    },
+    "data": {
+      "$anchor": "data",
+      "title": "Data Specification (Column Vector Format)",
+      "description": "All fields are stored as column vectors (arrays), where each position corresponds to a participant/record in the dataset.",
+      "type": "object",
+      "properties": {
+        "Participant.ID": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "Session.ID": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "Alert.Times": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "description": "Each entry is a participant-level array of alert times, as ISO-8601 date-time strings."
+        },
+        "Survey.Start": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "description": "Timestamp the survey was started, as an ISO-8601 date-time string."
+        },
+        "Survey.Date.Completed": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "description": "Timestamp the survey was completed, as an ISO-8601 date-time string."
+        },
+        "Survey.Date.Submitted": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "description": "Timestamp the survey was submitted, as an ISO-8601 date-time string."
+        },
+        "Timezone": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "Offset": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "Network.Type": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "Cellular",
+              "Wifi"
+            ]
+          }
+        },
+        "App.Version": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "OS": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "Model": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "User.Response": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "Question.ID": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "External.ID": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "Participant.ID",
+        "Session.ID",
+        "Survey.Date.Completed",
+        "User.Response",
+        "Question.ID"
+      ]
+    },
+    "itemMap": {
+      "title": "Item Map Repo",
+      "description": "This specification contains all the needed information to describe a single item or scale used within a study, including its conceptual, psychometric, and delivery properties.",
+      "type": "object",
+      "examples": [
+        {
+          "Item.Text": "How stressed did you feel today?",
+          "Conceptualization": "Perceived psychological stress",
+          "Modeling.Characteristics": "Typically used as an outcome variable; no transformation required",
+          "Validated": true,
+          "Scale.Name": "Perceived Stress Scale",
+          "Parent.Scale": "Perceived Stress Scale",
+          "Sub.Scale": "Perceived Helplessness",
+          "scaleOrItem": "item",
+          "Scale.Type": "Likert",
+          "Scoring": "sum score",
+          "Reverse.Coded": false,
+          "Transformation": "None",
+          "Sensitive.Data": false,
+          "Identifying.Info": null,
+          "Data.Type": "ordinal",
+          "Time.Stem": "in the last month",
+          "Top.Level.Question": "Indicate to what extent you...",
+          "Values": "0-4",
+          "Definition": "Never, Almost Never, Sometimes, Fairly Often, Very Often",
+          "Delivery.Mechanism": "mobile app",
+          "Delivery.Frequency": "once daily",
+          "Article.Title": "A global measure of perceived stress",
+          "Citation": "Cohen, S., Kamarck, T., & Mermelstein, R. (1983). https://doi.org/10.2307/2136404",
+          "notes": "Standard PSS-10 item; time stem adapted from original"
+        }
+      ],
+      "properties": {
+        "Item.Text": {
+          "description": "Exact text of the item as presented.",
+          "type": "string"
+        },
+        "Conceptualization": {
+          "description": "What construct or concept does this item measure or represent?",
+          "type": "string"
+        },
+        "Modeling.Characteristics": {
+          "description": "Usual modeling characteristics or how this item is typically used in analysis (e.g. predictor, outcome, mediator, covariate). For example, reaction time is often log transformed.",
+          "type": "string"
+        },
+        "Validated": {
+          "description": "Whether this item is part of a statistically validated measure.",
+          "type": "boolean"
+        },
+        "Scale.Name": {
+          "description": "Name of the scale this item belongs to.",
+          "type": "string"
+        },
+        "Parent.Scale": {
+          "description": "Name of the parent scale if this item belongs to a subscale.",
+          "type": "string"
+        },
+        "Sub.Scale": {
+          "description": "Name of the subscale this item belongs to, if applicable.",
+          "type": "string"
+        },
+        "scaleOrItem": {
+          "description": "Whether this entry represents a full scale or a single item.",
+          "type": "string",
+          "enum": [
+            "scale",
+            "item"
+          ]
+        },
+        "Scale.Type": {
+          "description": "The type of scale this item uses (e.g. Likert, VAS, semantic differential, binary, forced choice).",
+          "type": "string"
+        },
+        "Scoring": {
+          "description": "How this item or scale is scored, including any summing, averaging, or weighting rules (e.g. sum score, factor scores, weighted sum scores).",
+          "type": "string"
+        },
+        "Reverse.Coded": {
+          "description": "Whether this item is reverse coded or otherwise transformed before use.",
+          "type": "boolean"
+        },
+        "Transformation": {
+          "description": "Description of any transformation applied to this item beyond simple reverse coding.",
+          "type": "string"
+        },
+        "Sensitive.Data": {
+          "description": "Whether this item captures data considered sensitive (e.g. substance use, mental health, sexual behavior, criminal justice involvement, immigration status, HIV status).",
+          "type": "boolean"
+        },
+        "Identifying.Info": {
+          "description": "Category of identifying information this item captures (e.g. 'SSN', 'Government ID', 'HIPAA identifier - medical record number', 'Financial account number', 'Biometric', 'Full legal name', 'Address', 'Other'). Null if the item captures no identifying information.",
+          "type": ["string", "null"]
+        },
+        "Data.Type": {
+          "description": "Type of data this item produces.",
+          "type": "string",
+          "enum": [
+            "numeric",
+            "categorical",
+            "continuous",
+            "ordinal",
+            "binary",
+            "text",
+            "other"
+          ]
+        },
+        "Time.Stem": {
+          "description": "The time reference embedded in the item (e.g. 'in the past week', 'right now', 'today').",
+          "type": "string"
+        },
+        "Top.Level.Question": {
+          "description": "The top-level or parent question this item falls under, if it is a sub-item.",
+          "type": "string"
+        },
+        "Values": {
+          "description": "Numeric mapping of response anchors (e.g. 1-5).",
+          "type": "string"
+        },
+        "Definition": {
+          "description": "Nominal or text-based response options or categories.",
+          "type": "string"
+        },
+        "Delivery.Mechanism": {
+          "description": "How the item is delivered to the participant (e.g. mobile app, paper, wearable, passive sensor, interviewer).",
+          "type": "string"
+        },
+        "Delivery.Frequency": {
+          "description": "How frequently this item is delivered (e.g. once daily, every 4 hours, event-contingent).",
+          "type": "string"
+        },
+        "Article.Title": {
+          "description": "Title of article",
+          "type": "string"
+        },
+        "Citation": {
+          "description": "DOI citation for the item or scale source, or APA formatted citation.",
+          "type": "string"
+        },
+        "notes": {
+          "description": "Any additional notes about this item.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "Item.Text",
+        "Data.Type",
+        "Values",
+        "Definition"
+      ]
+    },
+    "screenshotsURL": {
+      "description": "URL of the study's bulk screenshot retrieval endpoint.",
+      "type": "string",
+      "format": "uri"
+    },
+    "blockMap": {
+      "description": "Flattened delivery order of all items across surveys. Used to reconstruct intended question flow independent of data arrival order.",
+      "type": "array",
+      "examples": [
+        {
+          "Survey.Name": "Morning EMA",
+          "Item.ID": "block_001",
+          "Item.Type": "Block",
+          "Parent": null
+        },
+        {
+          "Survey.Name": "Morning EMA",
+          "Item.ID": "item_stress_01",
+          "Item.Type": "Question",
+          "Parent": "block_001"
+        },
+        {
+          "Survey.Name": "Morning EMA",
+          "Item.ID": "block_001_end",
+          "Item.Type": "Block",
+          "Parent": "block_001"
+        }
+      ],
+      "items": {
+        "type": "object",
+        "properties": {
+          "Survey.Name": {
+            "type": "string",
+            "description": "Survey this item belongs to"
+          },
+          "Block": {
+            "type": "string",
+            "description": "Block grouping"
+          },
+          "Sub.block": {
+            "type": "string",
+            "description": "Sub-block grouping within block"
+          },
+          "Item.ID": {
+            "type": "string",
+            "description": "Reference to question Item.ID"
+          },
+          "Item.Type": {
+            "type": "string",
+            "enum": [
+              "Block",
+              "Question"
+            ]
+          },
+          "Parent": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "Survey.Name",
+          "Item.ID",
+          "Item.Type"
+        ]
+      }
+    }
+  },
+  "required": [
+    "Study.Metadata",
+    "schedules",
+    "surveys",
+    "blockMap"
+  ]
+}

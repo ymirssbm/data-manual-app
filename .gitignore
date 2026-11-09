@@ -1,0 +1,22 @@
+node_modules/
+dist/
+coverage/
+.vite/
+*.log
+.env
+.env.*
+!.env.example
+
+# R
+.Rproj.user/
+.Rhistory
+.RData
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Scratch notes for agents
+Noise files/

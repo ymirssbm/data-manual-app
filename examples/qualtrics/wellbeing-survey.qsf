@@ -1,0 +1,195 @@
+{
+  "SurveyEntry": {
+    "SurveyID": "SV_example0000001",
+    "SurveyName": "Student Wellbeing Survey",
+    "SurveyLanguage": "EN",
+    "SurveyStatus": "Inactive"
+  },
+  "SurveyElements": [
+    {
+      "SurveyID": "SV_example0000001",
+      "Element": "BL",
+      "PrimaryAttribute": "Survey Blocks",
+      "Payload": {
+        "0": {
+          "Type": "Default",
+          "Description": "About you",
+          "ID": "BL_about",
+          "BlockElements": [
+            { "Type": "Question", "QuestionID": "QID1" },
+            { "Type": "Question", "QuestionID": "QID2" },
+            { "Type": "Page Break" },
+            { "Type": "Question", "QuestionID": "QID3" }
+          ]
+        },
+        "1": {
+          "Type": "Standard",
+          "Description": "Wellbeing",
+          "ID": "BL_wellbeing",
+          "BlockElements": [
+            { "Type": "Question", "QuestionID": "QID4" },
+            { "Type": "Question", "QuestionID": "QID5" },
+            { "Type": "Question", "QuestionID": "QID6" },
+            { "Type": "Question", "QuestionID": "QID7" }
+          ]
+        },
+        "2": {
+          "Type": "Trash",
+          "Description": "Trash / Unused Questions",
+          "ID": "BL_trash",
+          "BlockElements": []
+        }
+      }
+    },
+    {
+      "SurveyID": "SV_example0000001",
+      "Element": "FL",
+      "PrimaryAttribute": "Survey Flow",
+      "Payload": {
+        "Type": "Root",
+        "FlowID": "FL_1",
+        "Flow": [
+          { "Type": "Block", "ID": "BL_about", "FlowID": "FL_2" },
+          { "Type": "Standard", "ID": "BL_wellbeing", "FlowID": "FL_3" }
+        ]
+      }
+    },
+    {
+      "SurveyID": "SV_example0000001",
+      "Element": "SQ",
+      "PrimaryAttribute": "QID1",
+      "Payload": {
+        "QuestionText": "Welcome! This short survey asks about your week.",
+        "DataExportTag": "intro",
+        "QuestionType": "DB",
+        "Selector": "TB",
+        "QuestionID": "QID1"
+      }
+    },
+    {
+      "SurveyID": "SV_example0000001",
+      "Element": "SQ",
+      "PrimaryAttribute": "QID2",
+      "Payload": {
+        "QuestionText": "What year are you in?",
+        "DataExportTag": "year",
+        "QuestionType": "MC",
+        "Selector": "SAVR",
+        "Choices": {
+          "1": { "Display": "First year" },
+          "2": { "Display": "Second year" },
+          "3": { "Display": "Third year" },
+          "4": { "Display": "Fourth year or above" }
+        },
+        "ChoiceOrder": ["1", "2", "3", "4"],
+        "QuestionID": "QID2"
+      }
+    },
+    {
+      "SurveyID": "SV_example0000001",
+      "Element": "SQ",
+      "PrimaryAttribute": "QID3",
+      "Payload": {
+        "QuestionText": "Do you currently work a paid job?",
+        "DataExportTag": "job",
+        "QuestionType": "MC",
+        "Selector": "SAVR",
+        "Choices": {
+          "1": { "Display": "Yes" },
+          "2": { "Display": "No" }
+        },
+        "ChoiceOrder": ["1", "2"],
+        "RecodeValues": { "1": "1", "2": "0" },
+        "QuestionID": "QID3"
+      }
+    },
+    {
+      "SurveyID": "SV_example0000001",
+      "Element": "SQ",
+      "PrimaryAttribute": "QID4",
+      "Payload": {
+        "QuestionText": "About how many hours per week do you work?",
+        "DataExportTag": "job_hours",
+        "QuestionType": "TE",
+        "Selector": "SL",
+        "QuestionID": "QID4",
+        "DisplayLogic": {
+          "0": {
+            "0": {
+              "LogicType": "Question",
+              "QuestionID": "QID3",
+              "QuestionIsInLoop": "no",
+              "ChoiceLocator": "q://QID3/SelectableChoice/1",
+              "Operator": "Selected",
+              "QuestionIDFromLocator": "QID3",
+              "LeftOperand": "q://QID3/SelectableChoice/1",
+              "Type": "Expression",
+              "Description": "If Do you currently work a paid job? Yes Is Selected"
+            },
+            "Type": "If"
+          },
+          "Type": "BooleanExpression",
+          "inPage": false
+        }
+      }
+    },
+    {
+      "SurveyID": "SV_example0000001",
+      "Element": "SQ",
+      "PrimaryAttribute": "QID5",
+      "Payload": {
+        "QuestionText": "Overall, how stressed have you felt this week?",
+        "DataExportTag": "stress_week",
+        "QuestionType": "Slider",
+        "Selector": "HSLIDER",
+        "Choices": { "1": { "Display": "Stress" } },
+        "QuestionID": "QID5"
+      }
+    },
+    {
+      "SurveyID": "SV_example0000001",
+      "Element": "SQ",
+      "PrimaryAttribute": "QID6",
+      "Payload": {
+        "QuestionText": "Which of these helped you this week? (Select all that apply)",
+        "DataExportTag": "supports",
+        "QuestionType": "MC",
+        "Selector": "MAVR",
+        "Choices": {
+          "1": { "Display": "Friends" },
+          "2": { "Display": "Family" },
+          "3": { "Display": "Exercise" },
+          "4": { "Display": "Campus counseling" },
+          "5": { "Display": "Other" }
+        },
+        "ChoiceOrder": ["1", "2", "3", "4", "5"],
+        "QuestionID": "QID6"
+      }
+    },
+    {
+      "SurveyID": "SV_example0000001",
+      "Element": "SQ",
+      "PrimaryAttribute": "QID7",
+      "Payload": {
+        "QuestionText": "What else helped you?",
+        "DataExportTag": "supports_other",
+        "QuestionType": "TE",
+        "Selector": "SL",
+        "QuestionID": "QID7",
+        "DisplayLogic": {
+          "0": {
+            "0": {
+              "LogicType": "Question",
+              "QuestionID": "QID6",
+              "ChoiceLocator": "q://QID6/SelectableChoice/5",
+              "Operator": "Selected",
+              "Type": "Expression"
+            },
+            "Type": "If"
+          },
+          "Type": "BooleanExpression"
+        }
+      }
+    }
+  ]
+}

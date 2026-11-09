@@ -1,0 +1,6 @@
+dependencies:
+  - name: dataManual-app
+    version: 0.1.0
+    src: htmlwidgets/lib/app
+    script: widget.js
+    stylesheet: widget.css

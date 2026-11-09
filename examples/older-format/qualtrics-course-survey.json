@@ -1,0 +1,492 @@
+{
+  "Study.Name": "My Study",
+  "authors": "Jane Smith, John Doe",
+  "funding": "NIH Grant R01DA012345",
+  "abstract": "Study abstract here",
+  "schedules": [],
+  "surveys": [
+    {
+      "Survey.LongName": "Ethan's Awesome Survey",
+      "Survey.Name": "Ethan's Awesome Survey",
+      "questions": [
+        {
+          "Item.ID": "Item QID1721085514",
+          "Item.Type": "Question",
+          "Parent": "Item BL_9N33IENRbRDbXVA",
+          "Question.ID": "QID1721085514",
+          "Question.Text": "Overall, how satisfied or dissatisfied were you with this course?",
+          "Question.Type.Display.Name": "Multiple Choice",
+          "Data.Type": "integer",
+          "responseKey": [
+            {
+              "value": "1",
+              "definition": "Extremely satisfied"
+            },
+            {
+              "value": "2",
+              "definition": "Moderately satisfied"
+            },
+            {
+              "value": "3",
+              "definition": "Slightly satisfied"
+            },
+            {
+              "value": "4",
+              "definition": "Neither satisfied nor dissatisfied"
+            },
+            {
+              "value": "5",
+              "definition": "Slightly dissatisfied"
+            },
+            {
+              "value": "6",
+              "definition": "Moderately dissatisfied"
+            },
+            {
+              "value": "7",
+              "definition": "Extremely dissatisfied"
+            }
+          ],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Child.Mappings": null
+          }
+        },
+        {
+          "Item.ID": "Item QID1721085515",
+          "Item.Type": "Question",
+          "Parent": "Item BL_9N33IENRbRDbXVA",
+          "Question.ID": "QID1721085515",
+          "Question.Text": "How likely are you to recommend this course to a friend or classmate?",
+          "Question.Type.Display.Name": "Multiple Choice",
+          "Data.Type": "integer",
+          "responseKey": [
+            {
+              "value": "0",
+              "definition": "0"
+            },
+            {
+              "value": "1",
+              "definition": "1"
+            },
+            {
+              "value": "2",
+              "definition": "2"
+            },
+            {
+              "value": "3",
+              "definition": "3"
+            },
+            {
+              "value": "4",
+              "definition": "4"
+            },
+            {
+              "value": "5",
+              "definition": "5"
+            },
+            {
+              "value": "6",
+              "definition": "6"
+            },
+            {
+              "value": "7",
+              "definition": "7"
+            },
+            {
+              "value": "8",
+              "definition": "8"
+            },
+            {
+              "value": "9",
+              "definition": "9"
+            },
+            {
+              "value": "10",
+              "definition": "10"
+            }
+          ],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Child.Mappings": null
+          }
+        },
+        {
+          "Item.ID": "Item QID1721085506",
+          "Item.Type": "Question",
+          "Parent": "Item BL_9N33IENRbRDbXVA",
+          "Question.ID": "QID1721085506",
+          "Question.Text": "How challenging was this course?",
+          "Question.Type.Display.Name": "Multiple Choice",
+          "Data.Type": "integer",
+          "responseKey": [
+            {
+              "value": "1",
+              "definition": "Extremely challenging"
+            },
+            {
+              "value": "2",
+              "definition": "Very challenging"
+            },
+            {
+              "value": "3",
+              "definition": "Moderately challenging"
+            },
+            {
+              "value": "4",
+              "definition": "Slightly challenging"
+            },
+            {
+              "value": "5",
+              "definition": "Not challenging at all"
+            }
+          ],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Child.Mappings": null
+          }
+        },
+        {
+          "Item.ID": "Item QID1721085508",
+          "Item.Type": "Question",
+          "Parent": "Item BL_9N33IENRbRDbXVA",
+          "Question.ID": "QID1721085508",
+          "Question.Text": "How much did you learn from this course?",
+          "Question.Type.Display.Name": "Multiple Choice",
+          "Data.Type": "integer",
+          "responseKey": [
+            {
+              "value": "1",
+              "definition": "A great deal"
+            },
+            {
+              "value": "2",
+              "definition": "A lot"
+            },
+            {
+              "value": "3",
+              "definition": "A moderate amount"
+            },
+            {
+              "value": "4",
+              "definition": "A little"
+            },
+            {
+              "value": "5",
+              "definition": "Nothing at all"
+            }
+          ],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Child.Mappings": null
+          }
+        },
+        {
+          "Item.ID": "Item QID1721085509",
+          "Item.Type": "Question",
+          "Parent": "Item BL_9N33IENRbRDbXVA",
+          "Question.ID": "QID1721085509",
+          "Question.Text": "How reasonable or unreasonable was the workload for this course?",
+          "Question.Type.Display.Name": "Multiple Choice",
+          "Data.Type": "integer",
+          "responseKey": [
+            {
+              "value": "1",
+              "definition": "Extremely reasonable"
+            },
+            {
+              "value": "2",
+              "definition": "Moderately reasonable"
+            },
+            {
+              "value": "3",
+              "definition": "Slightly reasonable"
+            },
+            {
+              "value": "4",
+              "definition": "Neither reasonable nor unreasonable"
+            },
+            {
+              "value": "5",
+              "definition": "Slightly unreasonable"
+            },
+            {
+              "value": "6",
+              "definition": "Moderately unreasonable"
+            },
+            {
+              "value": "7",
+              "definition": "Extremely unreasonable"
+            }
+          ],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Child.Mappings": null
+          }
+        },
+        {
+          "Item.ID": "Item QID1721085507",
+          "Item.Type": "Question",
+          "Parent": "Item BL_9N33IENRbRDbXVA",
+          "Question.ID": "QID1721085507",
+          "Question.Text": "How reasonable or unreasonable were the instructors’ expectations of you for this course?",
+          "Question.Type.Display.Name": "Multiple Choice",
+          "Data.Type": "integer",
+          "responseKey": [
+            {
+              "value": "1",
+              "definition": "Extremely reasonable"
+            },
+            {
+              "value": "2",
+              "definition": "Moderately reasonable"
+            },
+            {
+              "value": "3",
+              "definition": "Slightly reasonable"
+            },
+            {
+              "value": "4",
+              "definition": "Neither reasonable nor unreasonable"
+            },
+            {
+              "value": "5",
+              "definition": "Slightly unreasonable"
+            },
+            {
+              "value": "6",
+              "definition": "Moderately unreasonable"
+            },
+            {
+              "value": "7",
+              "definition": "Extremely unreasonable"
+            }
+          ],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Child.Mappings": null
+          }
+        },
+        {
+          "Item.ID": "Item QID1721085510",
+          "Item.Type": "Question",
+          "Parent": "Item BL_9N33IENRbRDbXVA",
+          "Question.ID": "QID1721085510",
+          "Question.Text": "How knowledgeable was the instructor of the material presented in this course?",
+          "Question.Type.Display.Name": "Multiple Choice",
+          "Data.Type": "integer",
+          "responseKey": [
+            {
+              "value": "1",
+              "definition": "Extremely knowledgeable"
+            },
+            {
+              "value": "2",
+              "definition": "Very knowledgeable"
+            },
+            {
+              "value": "3",
+              "definition": "Moderately knowledgeable"
+            },
+            {
+              "value": "4",
+              "definition": "Slightly knowledgeable"
+            },
+            {
+              "value": "5",
+              "definition": "Not knowledgeable at all"
+            }
+          ],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Child.Mappings": null
+          }
+        },
+        {
+          "Item.ID": "Item QID1721085516",
+          "Item.Type": "Question",
+          "Parent": "Item BL_9N33IENRbRDbXVA",
+          "Question.ID": "QID1721085516",
+          "Question.Text": "How well did this course meet your expectations?",
+          "Question.Type.Display.Name": "Multiple Choice",
+          "Data.Type": "integer",
+          "responseKey": [
+            {
+              "value": "1",
+              "definition": "Extremely well"
+            },
+            {
+              "value": "2",
+              "definition": "Very well"
+            },
+            {
+              "value": "3",
+              "definition": "Moderately well"
+            },
+            {
+              "value": "4",
+              "definition": "Slightly well"
+            },
+            {
+              "value": "5",
+              "definition": "Not well at all"
+            }
+          ],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Child.Mappings": null
+          }
+        },
+        {
+          "Item.ID": "Item QID1721085511",
+          "Item.Type": "Question",
+          "Parent": "Item BL_9N33IENRbRDbXVA",
+          "Question.ID": "QID1721085511",
+          "Question.Text": "What did you like most about this course?",
+          "Question.Type.Display.Name": "Free Response",
+          "Data.Type": "character",
+          "responseKey": [],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Child.Mappings": null
+          }
+        },
+        {
+          "Item.ID": "Item QID1721085512",
+          "Item.Type": "Question",
+          "Parent": "Item BL_9N33IENRbRDbXVA",
+          "Question.ID": "QID1721085512",
+          "Question.Text": "What did you like least about this course?",
+          "Question.Type.Display.Name": "Free Response",
+          "Data.Type": "character",
+          "responseKey": [],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Child.Mappings": null
+          }
+        },
+        {
+          "Item.ID": "Item QID1721085513",
+          "Item.Type": "Question",
+          "Parent": "Item BL_9N33IENRbRDbXVA",
+          "Question.ID": "QID1721085513",
+          "Question.Text": "How could this course be improved?",
+          "Question.Type.Display.Name": "Free Response",
+          "Data.Type": "character",
+          "responseKey": [],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Child.Mappings": null
+          }
+        }
+      ]
+    }
+  ],
+  "blockMap": [
+    {
+      "Survey.Name": "Ethan's Awesome Survey",
+      "Item.ID": "Item BL_9N33IENRbRDbXVA",
+      "Item.Type": "Block",
+      "Parent": null
+    },
+    {
+      "Survey.Name": "Ethan's Awesome Survey",
+      "Item.ID": "Item QID1721085514",
+      "Item.Type": "Question",
+      "Parent": "Item BL_9N33IENRbRDbXVA"
+    },
+    {
+      "Survey.Name": "Ethan's Awesome Survey",
+      "Item.ID": "Item QID1721085515",
+      "Item.Type": "Question",
+      "Parent": "Item BL_9N33IENRbRDbXVA"
+    },
+    {
+      "Survey.Name": "Ethan's Awesome Survey",
+      "Item.ID": "Item QID1721085506",
+      "Item.Type": "Question",
+      "Parent": "Item BL_9N33IENRbRDbXVA"
+    },
+    {
+      "Survey.Name": "Ethan's Awesome Survey",
+      "Item.ID": "Item QID1721085508",
+      "Item.Type": "Question",
+      "Parent": "Item BL_9N33IENRbRDbXVA"
+    },
+    {
+      "Survey.Name": "Ethan's Awesome Survey",
+      "Item.ID": "Item QID1721085509",
+      "Item.Type": "Question",
+      "Parent": "Item BL_9N33IENRbRDbXVA"
+    },
+    {
+      "Survey.Name": "Ethan's Awesome Survey",
+      "Item.ID": "Item QID1721085507",
+      "Item.Type": "Question",
+      "Parent": "Item BL_9N33IENRbRDbXVA"
+    },
+    {
+      "Survey.Name": "Ethan's Awesome Survey",
+      "Item.ID": "Item QID1721085510",
+      "Item.Type": "Question",
+      "Parent": "Item BL_9N33IENRbRDbXVA"
+    },
+    {
+      "Survey.Name": "Ethan's Awesome Survey",
+      "Item.ID": "Item QID1721085516",
+      "Item.Type": "Question",
+      "Parent": "Item BL_9N33IENRbRDbXVA"
+    },
+    {
+      "Survey.Name": "Ethan's Awesome Survey",
+      "Item.ID": "Item QID1721085511",
+      "Item.Type": "Question",
+      "Parent": "Item BL_9N33IENRbRDbXVA"
+    },
+    {
+      "Survey.Name": "Ethan's Awesome Survey",
+      "Item.ID": "Item QID1721085512",
+      "Item.Type": "Question",
+      "Parent": "Item BL_9N33IENRbRDbXVA"
+    },
+    {
+      "Survey.Name": "Ethan's Awesome Survey",
+      "Item.ID": "Item QID1721085513",
+      "Item.Type": "Question",
+      "Parent": "Item BL_9N33IENRbRDbXVA"
+    }
+  ]
+}

@@ -1,0 +1,868 @@
+{
+  "Study.Name": "Longitudinal Recovery Processes: 30-Day EMA Study",
+  "authors": "Recovery Research Team",
+  "funding": "National Institute on Drug Abuse (NIDA) Grant R01DA000000",
+  "abstract": "This study investigates the dynamic processes of substance use recovery through 30 days of ecological momentary assessment (EMA). Participants complete a baseline demographic assessment followed by twice-daily surveys (morning and evening) assessing positive affect, negative affect, substance cravings, and perceived social support. The design aims to capture within-person fluctuations and between-person differences in recovery trajectories over a one-month period.",
+  "schedules": [
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "name": "Baseline Assessment",
+      "events": [
+        {
+          "id": "22222222-2222-2222-2222-222222222222",
+          "title": "Baseline Demographics",
+          "start": "2024-01-01T09:00:00-05:00",
+          "end": "2024-01-01T23:59:00-05:00",
+          "extensions": {
+            "Timing.Type": "Fixed",
+            "Survey.Name": "Baseline Demographics",
+            "User.Specified": false
+          }
+        }
+      ]
+    },
+    {
+      "id": "33333333-3333-3333-3333-333333333333",
+      "name": "30-Day EMA Protocol",
+      "events": [
+        {
+          "id": "44444444-4444-4444-4444-444444444444",
+          "title": "Morning EMA",
+          "start": "2024-01-02T09:00:00-05:00",
+          "end": "2024-01-02T11:00:00-05:00",
+          "recurrence": {
+            "frequency": "DAILY",
+            "interval": 1,
+            "count": 30
+          },
+          "extensions": {
+            "Timing.Type": "Fixed",
+            "Survey.Name": "Morning EMA",
+            "User.Specified": false
+          }
+        },
+        {
+          "id": "55555555-5555-5555-5555-555555555555",
+          "title": "Evening EMA",
+          "start": "2024-01-02T18:00:00-05:00",
+          "end": "2024-01-02T22:00:00-05:00",
+          "recurrence": {
+            "frequency": "DAILY",
+            "interval": 1,
+            "count": 30
+          },
+          "extensions": {
+            "Timing.Type": "Fixed",
+            "Survey.Name": "Evening EMA",
+            "User.Specified": false
+          }
+        }
+      ]
+    }
+  ],
+  "surveys": [
+    {
+      "Survey.Name": "Baseline Demographics",
+      "Survey.LongName": "Baseline Demographic and Background Assessment",
+      "questions": [
+        {
+          "Item.ID": "block_base",
+          "Question.ID": "block_base",
+          "Question.LongName": "Demographics Block",
+          "Question.Description": "Start of demographic questions",
+          "Question.Type.Display.Name": "Block",
+          "Item.Type": "Block",
+          "Parent": null,
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Child.Item.ID": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Multi.Conditional": false
+          }
+        },
+        {
+          "Item.ID": "item_age",
+          "Question.ID": "age",
+          "Question.LongName": "Age",
+          "Question.Text": "What is your age (in years)?",
+          "Question.Description": "Participant age in years",
+          "Question.Type.Display.Name": "Free Response",
+          "Item.Type": "Question",
+          "Parent": "block_base",
+          "Data.Type": "integer",
+          "responseKey": [],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Child.Item.ID": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Multi.Conditional": false
+          }
+        },
+        {
+          "Item.ID": "item_gender",
+          "Question.ID": "gender",
+          "Question.LongName": "Gender Identity",
+          "Question.Text": "What is your gender identity?",
+          "Question.Description": "Self-identified gender",
+          "Question.Type.Display.Name": "Multiple Choice",
+          "Item.Type": "Question",
+          "Parent": "block_base",
+          "Data.Type": "character",
+          "responseKey": [
+            {
+              "value": "1",
+              "definition": "Male"
+            },
+            {
+              "value": "2",
+              "definition": "Female"
+            },
+            {
+              "value": "3",
+              "definition": "Non-binary"
+            },
+            {
+              "value": "4",
+              "definition": "Transgender"
+            },
+            {
+              "value": "5",
+              "definition": "Other"
+            },
+            {
+              "value": "6",
+              "definition": "Prefer not to say"
+            }
+          ],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Child.Item.ID": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Multi.Conditional": false
+          }
+        },
+        {
+          "Item.ID": "item_race",
+          "Question.ID": "race",
+          "Question.LongName": "Race/Ethnicity",
+          "Question.Text": "What is your race/ethnicity? (Select all that apply)",
+          "Question.Description": "Self-identified race and ethnicity",
+          "Question.Type.Display.Name": "Multiple Select",
+          "Item.Type": "Question",
+          "Parent": "block_base",
+          "Data.Type": "character",
+          "responseKey": [
+            {
+              "value": "1",
+              "definition": "White"
+            },
+            {
+              "value": "2",
+              "definition": "Black or African American"
+            },
+            {
+              "value": "3",
+              "definition": "Hispanic or Latino"
+            },
+            {
+              "value": "4",
+              "definition": "Asian"
+            },
+            {
+              "value": "5",
+              "definition": "Native American or Alaska Native"
+            },
+            {
+              "value": "6",
+              "definition": "Native Hawaiian or Pacific Islander"
+            },
+            {
+              "value": "7",
+              "definition": "Other"
+            },
+            {
+              "value": "8",
+              "definition": "Prefer not to say"
+            }
+          ],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Child.Item.ID": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Multi.Conditional": false
+          }
+        },
+        {
+          "Item.ID": "item_education",
+          "Question.ID": "education",
+          "Question.LongName": "Education Level",
+          "Question.Text": "What is the highest level of education you have completed?",
+          "Question.Description": "Educational attainment",
+          "Question.Type.Display.Name": "Multiple Choice",
+          "Item.Type": "Question",
+          "Parent": "block_base",
+          "Data.Type": "character",
+          "responseKey": [
+            {
+              "value": "1",
+              "definition": "Less than high school"
+            },
+            {
+              "value": "2",
+              "definition": "High school diploma or GED"
+            },
+            {
+              "value": "3",
+              "definition": "Some college"
+            },
+            {
+              "value": "4",
+              "definition": "Associate degree"
+            },
+            {
+              "value": "5",
+              "definition": "Bachelor's degree"
+            },
+            {
+              "value": "6",
+              "definition": "Graduate degree"
+            }
+          ],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Child.Item.ID": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Multi.Conditional": false
+          }
+        },
+        {
+          "Item.ID": "item_employment",
+          "Question.ID": "employment",
+          "Question.LongName": "Employment Status",
+          "Question.Text": "What is your current employment status?",
+          "Question.Description": "Current employment situation",
+          "Question.Type.Display.Name": "Multiple Choice",
+          "Item.Type": "Question",
+          "Parent": "block_base",
+          "Data.Type": "character",
+          "responseKey": [
+            {
+              "value": "1",
+              "definition": "Employed full-time"
+            },
+            {
+              "value": "2",
+              "definition": "Employed part-time"
+            },
+            {
+              "value": "3",
+              "definition": "Unemployed"
+            },
+            {
+              "value": "4",
+              "definition": "Student"
+            },
+            {
+              "value": "5",
+              "definition": "Retired"
+            },
+            {
+              "value": "6",
+              "definition": "Unable to work"
+            },
+            {
+              "value": "7",
+              "definition": "Other"
+            }
+          ],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Child.Item.ID": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Multi.Conditional": false
+          }
+        },
+        {
+          "Item.ID": "block_base_end",
+          "Question.ID": "block_base_end",
+          "Question.LongName": "End Demographics Block",
+          "Question.Description": "End of demographic questions",
+          "Question.Type.Display.Name": "End Block",
+          "Item.Type": "Block",
+          "Parent": "block_base",
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Child.Item.ID": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Multi.Conditional": false
+          }
+        }
+      ]
+    },
+    {
+      "Survey.Name": "Morning EMA",
+      "Survey.LongName": "Morning Ecological Momentary Assessment",
+      "questions": [
+        {
+          "Item.ID": "block_morning",
+          "Question.ID": "block_morning",
+          "Question.LongName": "Morning Assessment Block",
+          "Question.Description": "Start of morning survey",
+          "Question.Type.Display.Name": "Block",
+          "Item.Type": "Block",
+          "Parent": null,
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Child.Item.ID": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Multi.Conditional": false
+          }
+        },
+        {
+          "Item.ID": "item_pa_interested",
+          "Question.ID": "pa_interested",
+          "Question.LongName": "Positive Affect - Interested",
+          "Question.Text": "How interested have you felt since waking up this morning?",
+          "Question.Description": "PANAS positive affect item measuring interest",
+          "Question.Type.Display.Name": "Slider",
+          "Item.Type": "Question",
+          "Parent": "block_morning",
+          "Data.Type": "numeric",
+          "responseKey": [
+            {
+              "value": "0",
+              "definition": "Not at all"
+            },
+            {
+              "value": "100",
+              "definition": "Extremely"
+            }
+          ],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Child.Item.ID": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Multi.Conditional": false
+          }
+        },
+        {
+          "Item.ID": "item_pa_excited",
+          "Question.ID": "pa_excited",
+          "Question.LongName": "Positive Affect - Excited",
+          "Question.Text": "How excited have you felt since waking up this morning?",
+          "Question.Description": "PANAS positive affect item measuring excitement",
+          "Question.Type.Display.Name": "Slider",
+          "Item.Type": "Question",
+          "Parent": "block_morning",
+          "Data.Type": "numeric",
+          "responseKey": [
+            {
+              "value": "0",
+              "definition": "Not at all"
+            },
+            {
+              "value": "100",
+              "definition": "Extremely"
+            }
+          ],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Child.Item.ID": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Multi.Conditional": false
+          }
+        },
+        {
+          "Item.ID": "item_pa_strong",
+          "Question.ID": "pa_strong",
+          "Question.LongName": "Positive Affect - Strong",
+          "Question.Text": "How strong have you felt since waking up this morning?",
+          "Question.Description": "PANAS positive affect item measuring strength",
+          "Question.Type.Display.Name": "Slider",
+          "Item.Type": "Question",
+          "Parent": "block_morning",
+          "Data.Type": "numeric",
+          "responseKey": [
+            {
+              "value": "0",
+              "definition": "Not at all"
+            },
+            {
+              "value": "100",
+              "definition": "Extremely"
+            }
+          ],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Child.Item.ID": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Multi.Conditional": false
+          }
+        },
+        {
+          "Item.ID": "item_craving_morn",
+          "Question.ID": "craving_morning",
+          "Question.LongName": "Morning Substance Craving",
+          "Question.Text": "How strong is your desire or craving to use substances right now?",
+          "Question.Description": "Intensity of substance craving in the morning",
+          "Question.Type.Display.Name": "Slider",
+          "Item.Type": "Question",
+          "Parent": "block_morning",
+          "Data.Type": "numeric",
+          "responseKey": [
+            {
+              "value": "0",
+              "definition": "No craving at all"
+            },
+            {
+              "value": "100",
+              "definition": "Extremely strong craving"
+            }
+          ],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Child.Item.ID": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Multi.Conditional": false
+          }
+        },
+        {
+          "Item.ID": "block_morning_end",
+          "Question.ID": "block_morning_end",
+          "Question.LongName": "End Morning Block",
+          "Question.Description": "End of morning survey",
+          "Question.Type.Display.Name": "End Block",
+          "Item.Type": "Block",
+          "Parent": "block_morning",
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Child.Item.ID": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Multi.Conditional": false
+          }
+        }
+      ]
+    },
+    {
+      "Survey.Name": "Evening EMA",
+      "Survey.LongName": "Evening Ecological Momentary Assessment",
+      "questions": [
+        {
+          "Item.ID": "block_evening",
+          "Question.ID": "block_evening",
+          "Question.LongName": "Evening Assessment Block",
+          "Question.Description": "Start of evening survey",
+          "Question.Type.Display.Name": "Block",
+          "Item.Type": "Block",
+          "Parent": null,
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Child.Item.ID": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Multi.Conditional": false
+          }
+        },
+        {
+          "Item.ID": "item_na_distressed",
+          "Question.ID": "na_distressed",
+          "Question.LongName": "Negative Affect - Distressed",
+          "Question.Text": "How distressed have you felt today?",
+          "Question.Description": "PANAS negative affect item measuring distress",
+          "Question.Type.Display.Name": "Slider",
+          "Item.Type": "Question",
+          "Parent": "block_evening",
+          "Data.Type": "numeric",
+          "responseKey": [
+            {
+              "value": "0",
+              "definition": "Not at all"
+            },
+            {
+              "value": "100",
+              "definition": "Extremely"
+            }
+          ],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Child.Item.ID": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Multi.Conditional": false
+          }
+        },
+        {
+          "Item.ID": "item_na_upset",
+          "Question.ID": "na_upset",
+          "Question.LongName": "Negative Affect - Upset",
+          "Question.Text": "How upset have you felt today?",
+          "Question.Description": "PANAS negative affect item measuring being upset",
+          "Question.Type.Display.Name": "Slider",
+          "Item.Type": "Question",
+          "Parent": "block_evening",
+          "Data.Type": "numeric",
+          "responseKey": [
+            {
+              "value": "0",
+              "definition": "Not at all"
+            },
+            {
+              "value": "100",
+              "definition": "Extremely"
+            }
+          ],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Child.Item.ID": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Multi.Conditional": false
+          }
+        },
+        {
+          "Item.ID": "item_na_nervous",
+          "Question.ID": "na_nervous",
+          "Question.LongName": "Negative Affect - Nervous",
+          "Question.Text": "How nervous have you felt today?",
+          "Question.Description": "PANAS negative affect item measuring nervousness",
+          "Question.Type.Display.Name": "Slider",
+          "Item.Type": "Question",
+          "Parent": "block_evening",
+          "Data.Type": "numeric",
+          "responseKey": [
+            {
+              "value": "0",
+              "definition": "Not at all"
+            },
+            {
+              "value": "100",
+              "definition": "Extremely"
+            }
+          ],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Child.Item.ID": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Multi.Conditional": false
+          }
+        },
+        {
+          "Item.ID": "item_craving_eve",
+          "Question.ID": "craving_evening",
+          "Question.LongName": "Evening Substance Craving",
+          "Question.Text": "How strong was your desire or craving to use substances today?",
+          "Question.Description": "Intensity of substance craving over the day",
+          "Question.Type.Display.Name": "Slider",
+          "Item.Type": "Question",
+          "Parent": "block_evening",
+          "Data.Type": "numeric",
+          "responseKey": [
+            {
+              "value": "0",
+              "definition": "No craving at all"
+            },
+            {
+              "value": "100",
+              "definition": "Extremely strong craving"
+            }
+          ],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Child.Item.ID": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Multi.Conditional": false
+          }
+        },
+        {
+          "Item.ID": "item_ss_supported",
+          "Question.ID": "ss_supported",
+          "Question.LongName": "Social Support - Feeling Supported",
+          "Question.Text": "I felt supported by others today",
+          "Question.Description": "Perceived social support availability",
+          "Question.Type.Display.Name": "Slider",
+          "Item.Type": "Question",
+          "Parent": "block_evening",
+          "Data.Type": "numeric",
+          "responseKey": [
+            {
+              "value": "0",
+              "definition": "Strongly disagree"
+            },
+            {
+              "value": "100",
+              "definition": "Strongly agree"
+            }
+          ],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Child.Item.ID": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Multi.Conditional": false
+          }
+        },
+        {
+          "Item.ID": "item_ss_talk",
+          "Question.ID": "ss_talk",
+          "Question.LongName": "Social Support - Someone to Talk To",
+          "Question.Text": "Did you have someone to talk to today if you needed help?",
+          "Question.Description": "Availability of someone to talk to for support",
+          "Question.Type.Display.Name": "Multiple Choice",
+          "Item.Type": "Question",
+          "Parent": "block_evening",
+          "Data.Type": "character",
+          "responseKey": [
+            {
+              "value": "1",
+              "definition": "Yes"
+            },
+            {
+              "value": "0",
+              "definition": "No"
+            }
+          ],
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Child.Item.ID": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Multi.Conditional": false
+          }
+        },
+        {
+          "Item.ID": "block_evening_end",
+          "Question.ID": "block_evening_end",
+          "Question.LongName": "End Evening Block",
+          "Question.Description": "End of evening survey",
+          "Question.Type.Display.Name": "End Block",
+          "Item.Type": "Block",
+          "Parent": "block_evening",
+          "Conditional.Info": {
+            "Conditional.Master.Item.ID": null,
+            "Conditional.Child.Item.ID": null,
+            "Conditional.Fail.Item.ID": null,
+            "Conditional.Threshold": null,
+            "Conditional.Type": null,
+            "Multi.Conditional": false
+          }
+        }
+      ]
+    }
+  ],
+  "blockMap": [
+    {
+      "Survey.Name": "Baseline Demographics",
+      "Item.ID": "block_base",
+      "Item.Type": "Block",
+      "Parent": null
+    },
+    {
+      "Survey.Name": "Baseline Demographics",
+      "Item.ID": "item_age",
+      "Item.Type": "Question",
+      "Parent": "block_base"
+    },
+    {
+      "Survey.Name": "Baseline Demographics",
+      "Item.ID": "item_gender",
+      "Item.Type": "Question",
+      "Parent": "block_base"
+    },
+    {
+      "Survey.Name": "Baseline Demographics",
+      "Item.ID": "item_race",
+      "Item.Type": "Question",
+      "Parent": "block_base"
+    },
+    {
+      "Survey.Name": "Baseline Demographics",
+      "Item.ID": "item_education",
+      "Item.Type": "Question",
+      "Parent": "block_base"
+    },
+    {
+      "Survey.Name": "Baseline Demographics",
+      "Item.ID": "item_employment",
+      "Item.Type": "Question",
+      "Parent": "block_base"
+    },
+    {
+      "Survey.Name": "Baseline Demographics",
+      "Item.ID": "block_base_end",
+      "Item.Type": "Block",
+      "Parent": "block_base"
+    },
+    {
+      "Survey.Name": "Morning EMA",
+      "Item.ID": "block_morning",
+      "Item.Type": "Block",
+      "Parent": null
+    },
+    {
+      "Survey.Name": "Morning EMA",
+      "Item.ID": "item_pa_interested",
+      "Item.Type": "Question",
+      "Parent": "block_morning"
+    },
+    {
+      "Survey.Name": "Morning EMA",
+      "Item.ID": "item_pa_excited",
+      "Item.Type": "Question",
+      "Parent": "block_morning"
+    },
+    {
+      "Survey.Name": "Morning EMA",
+      "Item.ID": "item_pa_strong",
+      "Item.Type": "Question",
+      "Parent": "block_morning"
+    },
+    {
+      "Survey.Name": "Morning EMA",
+      "Item.ID": "item_craving_morn",
+      "Item.Type": "Question",
+      "Parent": "block_morning"
+    },
+    {
+      "Survey.Name": "Morning EMA",
+      "Item.ID": "block_morning_end",
+      "Item.Type": "Block",
+      "Parent": "block_morning"
+    },
+    {
+      "Survey.Name": "Evening EMA",
+      "Item.ID": "block_evening",
+      "Item.Type": "Block",
+      "Parent": null
+    },
+    {
+      "Survey.Name": "Evening EMA",
+      "Item.ID": "item_na_distressed",
+      "Item.Type": "Question",
+      "Parent": "block_evening"
+    },
+    {
+      "Survey.Name": "Evening EMA",
+      "Item.ID": "item_na_upset",
+      "Item.Type": "Question",
+      "Parent": "block_evening"
+    },
+    {
+      "Survey.Name": "Evening EMA",
+      "Item.ID": "item_na_nervous",
+      "Item.Type": "Question",
+      "Parent": "block_evening"
+    },
+    {
+      "Survey.Name": "Evening EMA",
+      "Item.ID": "item_craving_eve",
+      "Item.Type": "Question",
+      "Parent": "block_evening"
+    },
+    {
+      "Survey.Name": "Evening EMA",
+      "Item.ID": "item_ss_supported",
+      "Item.Type": "Question",
+      "Parent": "block_evening"
+    },
+    {
+      "Survey.Name": "Evening EMA",
+      "Item.ID": "item_ss_talk",
+      "Item.Type": "Question",
+      "Parent": "block_evening"
+    },
+    {
+      "Survey.Name": "Evening EMA",
+      "Item.ID": "block_evening_end",
+      "Item.Type": "Block",
+      "Parent": "block_evening"
+    }
+  ],
+  "data": {
+    "Participant.ID": [],
+    "Session.ID": [],
+    "Alert.Times": [],
+    "Survey.Start": [],
+    "Survey.Date.Completed": [],
+    "Survey.Date.Submitted": [],
+    "Timezone": [],
+    "Offset": [],
+    "Network.Type": [],
+    "App.Version": [],
+    "OS": [],
+    "Model": [],
+    "User.Response": [],
+    "Question.ID": [],
+    "External.ID": []
+  },
+  "itemMap": {
+    "Item.Text": "How interested have you felt since waking up this morning?",
+    "Conceptualization": "Positive affect, specifically interest and engagement",
+    "Modeling.Characteristics": "Typically used as predictor or outcome in within-person analyses; may be averaged across days for between-person trait-level positive affect",
+    "Validated": true,
+    "Scale.Name": "Positive and Negative Affect Schedule (PANAS)",
+    "Parent.Scale": "PANAS Positive Affect",
+    "Sub.Scale": "",
+    "scaleOrItem": "item",
+    "Scale.Type": "Visual Analog Scale (VAS) adaptation",
+    "Scoring": "Single item 0-100 scale, or aggregated with other positive affect items for composite score",
+    "Reverse.Coded": false,
+    "Transformation": "None",
+    "Sensitive.Data": false,
+    "Identifying.Info": "",
+    "Data.Type": "numeric",
+    "Time.Stem": "since waking up this morning",
+    "Top.Level.Question": "",
+    "Values": "0-100",
+    "Definition": "0=Not at all, 100=Extremely",
+    "Delivery.Mechanism": "mobile app",
+    "Delivery.Frequency": "once daily (morning)",
+    "Article.Title": "Positive and Negative Affect Schedule",
+    "Citation": "Watson, D., Clark, L. A., & Tellegen, A. (1988). Development and validation of brief measures of positive and negative affect: The PANAS scales. Journal of Personality and Social Psychology, 54(6), 1063\u20131070. https://doi.org/10.1037/0022-3514.54.6.1063",
+    "notes": "Adapted from PANAS 'Interested' item for morning EMA delivery using VAS slider instead of Likert scale"
+  },
+  "AI.Information": {
+    "AI.Disclosure": [
+      {
+        "Characteristic": "All",
+        "Model": "Kimi-K2.5"
+      }
+    ],
+    "AI.Generation.Prompt": "Generate me a study looking to understand the longitudinal process of people in recovery using 30 days of EMA and a morning and evening survey. Include also a baseline assessment asking basic demographic questions. For the EMA assessments, ask about social support, cravings and negative and positive affect.",
+    "AI.Modification.Prompts": []
+  }
+}
