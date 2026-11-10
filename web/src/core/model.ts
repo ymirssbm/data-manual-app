@@ -10,6 +10,9 @@ export const isBlock = (q: Question) => q['Item.Type'] === 'Block';
 export const isEndBlock = (q: Question) => q['Question.Type.Display.Name'] === 'End Block';
 export const isQuestion = (q: Question) => q['Item.Type'] === 'Question' && !isEndBlock(q);
 
+/** False when the survey's question order and skip logic aren't known (e.g. built from a dataset's columns): no flowchart then. */
+export const flowKnown = (s: Survey) => s['Survey.Flow.Known'] !== false;
+
 /** Human label for an item: its text, or for blocks a long name / ID. */
 export function itemLabel(q: Question): string {
   if (isBlock(q)) return q['Question.Long.Name'] || q['Question.ID'] || q['Item.ID'];

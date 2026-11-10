@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { attachData, datasetToData, guessMapping, inferSpecFromData, parseDataset, type StudySpec } from '../src/core';
 
 describe('dataset header rows: question IDs and text', () => {
@@ -35,6 +35,8 @@ describe('dataset header rows: question IDs and text', () => {
     expect(r.questionText.get('stress')).toBe('How stressed do you feel today?');
     const spec = inferSpecFromData(r, 'test');
     expect(spec.surveys[0]!.questions![0]!['Question.Text']).toBe('How happy are you right now?');
+    // Column order isn't question order: no flowchart is drawn for a survey built from data.
+    expect(spec.surveys[0]!['Survey.Flow.Known']).toBe(false);
   });
 
   it('keeps plain ID column names as one header row', () => {

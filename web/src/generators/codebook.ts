@@ -8,6 +8,7 @@
 // inline CSS + a little inline JS; prints to PDF with everything expanded.
 import {
   blockPath,
+  flowKnown,
   isBlock,
   isEndBlock,
   isQuestion,
@@ -305,8 +306,8 @@ export function generateCodebookHtml(
   for (const m of models) {
     const sid = entry(m.label, 2, m.label);
     const parts: string[] = [];
-    const svg = extras.flowchartSvgs?.[m.name];
-    const lazy = !svg && extras.flowchartsInBrowser ? `<pre class="cb-mermaid">${esc(generateFlowchart(m.survey))}</pre>` : '';
+    const svg = flowKnown(m.survey) ? extras.flowchartSvgs?.[m.name] : undefined;
+    const lazy = !svg && extras.flowchartsInBrowser && flowKnown(m.survey) ? `<pre class="cb-mermaid">${esc(generateFlowchart(m.survey))}</pre>` : '';
     if (o.flowcharts && (svg || lazy)) {
       const pid = `flow-${slug(m.name)}`;
       parts.push(`<div class="cb-anchor cb-flow">${toggleButton(pid, 'Click to view survey flowchart', t.expandVisuals)}<div id="${pid}" class="cb-visuals" ${t.expandVisuals ? '' : 'hidden'}><div class="cb-flowchart">${svg ?? lazy}</div></div></div>`);

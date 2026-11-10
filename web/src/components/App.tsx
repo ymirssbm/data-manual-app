@@ -211,7 +211,18 @@ export function App({ adapter }: { adapter: HostAdapter }) {
             spec={spec}
             go={go}
             notify={notify}
-            onApply={(_s, r) => onLoaded({ fileName: 'Edited in the Survey Editor', translatorLabel: 'Study spec (JSON)', notes: [] }, r)}
+            onApply={(_s, r) => {
+              // Editing a survey defines its flow: it no longer needs "order unknown".
+              const before = new Map((spec?.surveys ?? []).map((x) => [x['Survey.Name'], JSON.stringify(x.questions)]));
+              if (r.spec) {
+                r.spec.surveys = r.spec.surveys.map((x) => {
+                  if (x['Survey.Flow.Known'] !== false || before.get(x['Survey.Name']) === JSON.stringify(x.questions)) return x;
+                  const { 'Survey.Flow.Known': _drop, ...rest } = x;
+                  return rest;
+                });
+              }
+              onLoaded({ fileName: 'Edited in the Survey Editor', translatorLabel: 'Study spec (JSON)', notes: [] }, r);
+            }}
           />
         )}
         {page === 'codebook_gen' && (
@@ -219,7 +230,9 @@ export function App({ adapter }: { adapter: HostAdapter }) {
         )}
         {page === 'codebook_view' && <CodebookViewerPage spec={spec} settings={cbSettings} codebook={codebook} onBuilt={setCodebook} go={go} notify={notify} />}
         {page === 'datadict' && <DictionaryPage spec={spec} go={go} />}
-        {page === 'flowchart' && <FlowchartPage spec={spec} go={go} notify={notify} />}
+        {page === 'flowchart' && (
+          <FlowchartPage spec={spec} go={go} notify={notify} onChange={(s) => session && setSession({ source: session.source, result: validateSpec(s) })} />
+        )}
         {page === 'schedule' && <SchedulePage spec={spec} go={go} />}
         {page === 'standard' && <StandardPage />}
         {page === 'ai' && <AiPage spec={spec} onLoaded={(s, r) => { onLoaded(s, r); go('home'); }} notify={notify} />}

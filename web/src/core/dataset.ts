@@ -1,4 +1,4 @@
-﻿// "Bring your own dataset": a table of responses + a description of its layout
+// "Bring your own dataset": a table of responses + a description of its layout
 // -> the spec's long-format `data` block, which every tool reads.
 //
 // Layouts:
@@ -315,6 +315,8 @@ export function inferSpecFromData(result: DatasetResult, studyName: string): Stu
   const surveys: Survey[] = [...bySurvey.entries()].map(([survey, vars]) => ({
     'Survey.Name': survey,
     'Survey.LongName': survey === 'dataset' ? 'Dataset variables' : survey,
+    // A dataset's columns say nothing about the order questions were asked in, or skip logic.
+    'Survey.Flow.Known': false,
     questions: vars.map((name) => {
       let q = inferQuestion(name, values.get(name) ?? []);
       // Value labels make it a choice question, with the labels as its options.

@@ -1,6 +1,6 @@
 // Builds codebook HTML for the app (generator preview and viewer share this),
 // caching rendered flowcharts and remembering the user's look and options.
-import type { StudySpec, Survey } from '../core';
+import { flowKnown, type StudySpec, type Survey } from '../core';
 import {
   DEFAULT_CODEBOOK_OPTIONS,
   DEFAULT_CODEBOOK_THEME,
@@ -76,7 +76,7 @@ function surveySvg(survey: Survey): Promise<string | null> {
 export async function buildCodebook(spec: StudySpec, s: CodebookSettings): Promise<string> {
   const flowchartSvgs: Record<string, string> = {};
   if (s.options.flowcharts) {
-    for (const survey of spec.surveys) {
+    for (const survey of spec.surveys.filter(flowKnown)) {
       const svg = await surveySvg(survey);
       if (svg) flowchartSvgs[survey['Survey.Name']] = svg;
     }

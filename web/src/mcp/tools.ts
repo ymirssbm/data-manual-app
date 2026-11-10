@@ -9,7 +9,7 @@ import { basename, join, resolve } from 'node:path';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import schema from '../../../schema/study.schema.json';
-import { buildBlockMap, isBlock, surveyModels, validateSpec, type StudySpec, type ValidationResult } from '../core';
+import { buildBlockMap, flowKnown, isBlock, surveyModels, validateSpec, type StudySpec, type ValidationResult } from '../core';
 import { applyAiProvenance, extractSpecJson } from '../ai/studyAi';
 import { detectTranslator } from '../translators';
 import {
@@ -369,6 +369,7 @@ export function registerTools(server: McpServer, ctx: ToolContext): void {
       if (!survey) return text(spec.surveys.map((s) => `${s['Survey.Name']}${s['Survey.LongName'] ? ` (${s['Survey.LongName']})` : ''}`).join('\n'));
       const s = spec.surveys.find((x) => x['Survey.Name'] === survey || x['Survey.LongName'] === survey);
       if (!s) return fail(`No survey named "${survey}". Surveys: ${spec.surveys.map((x) => x['Survey.Name']).join(', ')}`);
+      if (!flowKnown(s)) return text(`"${s['Survey.Name']}" has no flowchart: the order its questions are asked in and its skip logic aren't known (it was built from a dataset's columns). Its variables are still listed in the data dictionary and codebook.`);
       return text(format === 'mermaid' ? generateFlowchart(s) : flowchartText(s));
     }),
   );

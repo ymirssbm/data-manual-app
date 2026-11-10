@@ -1,4 +1,4 @@
-﻿# Data Manual App
+# Data Manual App
 
 An open-source, browser-based tool for documenting research studies, especially complex ones like EMA and other intensive longitudinal designs. Bring a study in from Wear-IT, REDCap, Qualtrics, a study file or your own CSV. Then generate a codebook (HTML, PDF or Word), a data dictionary, survey flowcharts and a study schedule. You can also edit the surveys and skip logic, and export the study to REDCap, Qualtrics or SurveyJS.
 

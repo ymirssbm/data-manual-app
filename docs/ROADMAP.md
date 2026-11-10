@@ -1,4 +1,4 @@
-﻿# Roadmap
+# Roadmap
 
 Rough order. Check items off as they land.
 

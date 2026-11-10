@@ -837,3 +837,8 @@ label.dm-link-btn { display: inline-block; }
 .dm-cal-card.is-short.is-compact { padding: 0 6px; }
 .dm-cal-card.is-short.is-compact .dm-cal-time { display: none; }
 .dm-cal-card.is-short.is-compact strong { overflow: hidden; text-overflow: ellipsis; }
+
+/* Flowchart page: a survey with no known question order or skip logic */
+.dm-flow-none { padding: 18px 20px; }
+.dm-flow-none h3 { margin: 0 0 10px; font-size: calc(18px * var(--ts, 1)); }
+.dm-flow-none p { margin: 0 0 10px; max-width: 75ch; line-height: 1.55; }

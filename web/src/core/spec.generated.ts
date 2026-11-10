@@ -124,6 +124,10 @@ export type SurveySpecifications = {
    */
   "Survey.LongName"?: string;
   /**
+   * False when the order the questions are asked in, and any skip logic, are not known, e.g. a survey built from a dataset's columns. Tools then show no flowchart for it instead of guessing a straight line. Omitted or true means the questions are listed in the order they are asked.
+   */
+  "Survey.Flow.Known"?: boolean;
+  /**
    * Human readable survey short name
    */
   "Survey.Name": string;

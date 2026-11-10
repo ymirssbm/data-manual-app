@@ -1,4 +1,4 @@
-﻿# Importing and exporting
+# Importing and exporting
 
 Studies come in through **Data → Data Import** and go out through **Data → Data Export**. In between, they're always the same study spec, so anything imported can be documented, edited, and exported to another platform.
 

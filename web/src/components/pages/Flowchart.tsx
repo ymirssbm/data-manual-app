@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { buildSurveyModel, isQuestion, type StudySpec } from '../../core';
+import { buildSurveyModel, flowKnown, isQuestion, type StudySpec } from '../../core';
 import { flowchartBlocks, flowchartText, generateFlowchart } from '../../generators';
 import type { PageId } from '../App';
 import { Icon, PageTitle } from '../ui';
@@ -10,6 +10,8 @@ interface Props {
   spec: StudySpec | null;
   go(id: PageId): void;
   notify(text: string, kind?: 'message' | 'error' | 'warning', ms?: number): number;
+  /** Save a changed study (here: marking a survey's column order as its real order). */
+  onChange(spec: StudySpec): void;
 }
 
 interface View {
@@ -18,7 +20,7 @@ interface View {
   k: number;
 }
 
-export function FlowchartPage({ spec, go, notify }: Props) {
+export function FlowchartPage({ spec, go, notify, onChange }: Props) {
   const surveys = spec?.surveys ?? [];
   const [surveyName, setSurveyName] = useState(surveys[0]?.['Survey.Name'] ?? '');
   const [showIds, setShowIds] = useState(false);
@@ -33,7 +35,8 @@ export function FlowchartPage({ spec, go, notify }: Props) {
   const survey = surveys.find((s) => s['Survey.Name'] === surveyName) ?? surveys[0];
   const blocks = useMemo(() => (survey ? flowchartBlocks(survey) : []), [survey]);
   const collapsed = survey ? (folded[survey['Survey.Name']] ?? []) : [];
-  const code = useMemo(() => (survey ? generateFlowchart(survey, { showIds, direction, collapsed }) : ''), [survey, showIds, direction, collapsed.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
+  const known = survey ? flowKnown(survey) : true;
+  const code = useMemo(() => (survey && known ? generateFlowchart(survey, { showIds, direction, collapsed }) : ''), [survey, known, showIds, direction, collapsed.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fitKey = survey ? `${survey['Survey.Name']}|${direction}|${showIds}` : '';
   useEffect(() => {
@@ -65,12 +68,12 @@ export function FlowchartPage({ spec, go, notify }: Props) {
       <PageTitle
         actions={
           <>
-            <button className="dm-btn dm-btn-secondary" onClick={() => svg && download(`${base}.svg`, svg, 'image/svg+xml')} disabled={!svg}>
+            <button className="dm-btn dm-btn-secondary" onClick={() => svg && download(`${base}.svg`, svg, 'image/svg+xml')} disabled={!svg || !known}>
               Export SVG
             </button>
             <button
               className="dm-btn dm-btn-primary"
-              disabled={!svg}
+              disabled={!svg || !known}
               onClick={() => svg && void svgToPng(svg, 2).then((b) => download(`${base}.png`, b)).catch((e: Error) => notify(e.message, 'error'))}
             >
               <Icon name="download" /> Export PNG
@@ -90,13 +93,42 @@ export function FlowchartPage({ spec, go, notify }: Props) {
               <button key={s['Survey.Name']} className={`dm-flow-survey ${active ? 'is-active' : ''}`} onClick={() => setSurveyName(s['Survey.Name'])} aria-current={active}>
                 <strong>{s['Survey.LongName'] || s['Survey.Name']}</strong>
                 <span>
-                  {m.items.filter(isQuestion).length} questions · {m.branches.length} branches
+                  {m.items.filter(isQuestion).length} questions · {flowKnown(s) ? `${m.branches.length} branches` : 'no flow information'}
                 </span>
               </button>
             );
           })}
         </nav>
 
+        {!known ? (
+          <section className="dm-flow-main">
+            <div className="dm-flow-none">
+              <h3>No flowchart for this survey</h3>
+              <div>
+                <p>
+                  <strong>{survey['Survey.LongName'] || survey['Survey.Name']}</strong> was built from a dataset's columns, which don't say what order its questions were asked in or
+                  whether any were skipped, so there is no flow to draw. Its {buildSurveyModel(survey).items.filter(isQuestion).length} variables are still in the data dictionary and
+                  codebook.
+                </p>
+                <p className="dm-hint">To get a flowchart, set the question order and skip logic in the Survey Editor, or import the survey design (a Qualtrics .qsf, a REDCap data dictionary or a study spec) and attach this data to it.</p>
+                <div className="dm-inline">
+                  <button className="dm-btn dm-btn-primary" onClick={() => go('editor')}>
+                    <Icon name="edit" /> Open the Survey Editor
+                  </button>
+                  <button
+                    className="dm-btn dm-btn-secondary"
+                    onClick={() => {
+                      onChange({ ...spec, surveys: spec.surveys.map((x) => (x === survey ? { ...x, 'Survey.Flow.Known': true } : x)) });
+                      notify(`Showing "${survey['Survey.LongName'] || survey['Survey.Name']}" in its column order, with no skip logic.`);
+                    }}
+                  >
+                    The columns are in the order asked
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+        ) : (
         <section className="dm-flow-main">
           <div className="dm-flow-toolbar">
             <label className="dm-check">
@@ -130,6 +162,7 @@ export function FlowchartPage({ spec, go, notify }: Props) {
           {showText && <TextOutline text={flowchartText(survey)} fileName={`${base}.txt`} notify={notify} />}
           {showCode && <pre className="dm-code">{code}</pre>}
         </section>
+        )}
       </div>
     </>
   );
