@@ -234,7 +234,7 @@ export function App({ adapter }: { adapter: HostAdapter }) {
         )}
         {page === 'schedule' && <SchedulePage spec={spec} go={go} />}
         {page === 'standard' && <StandardPage />}
-        {page === 'ai' && <AiPage spec={spec} onLoaded={(s, r) => { onLoaded(s, r); go('home'); }} notify={notify} />}
+        {page === 'ai' && <AiPage spec={spec} onLoaded={onLoaded} notify={notify} />}
       </main>
 
       <Toasts toasts={toasts} dismiss={dismiss} />
