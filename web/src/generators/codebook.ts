@@ -37,6 +37,8 @@ export const QUESTION_TYPES = [
 ] as const;
 
 export interface CodebookOptions {
+  /** The table of contents after the title. */
+  toc: boolean;
   nameOfStudy: boolean;
   authors: boolean;
   studyMetadata: boolean;
@@ -79,6 +81,7 @@ export interface CodebookOptions {
 }
 
 export const DEFAULT_CODEBOOK_OPTIONS: CodebookOptions = {
+  toc: true,
   // Title page off by default; switch it on in the generator's Content tab.
   nameOfStudy: false,
   authors: false,
@@ -157,7 +160,7 @@ export const CODEBOOK_FONTS: Record<string, CodebookFontDef> = {
 
 /** <link> tags for any web fonts the theme uses (nothing for system fonts). */
 function fontLinks(t: CodebookTheme): string {
-  const fams = [...new Set([t.bodyFont, t.headingFont].map((f) => CODEBOOK_FONTS[f]?.google).filter((g): g is string => !!g))];
+  const fams = [...new Set([t.bodyFont].map((f) => CODEBOOK_FONTS[f]?.google).filter((g): g is string => !!g))];
   if (!fams.length) return '';
   return `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?${fams.map((f) => `family=${f}`).join('&amp;')}&amp;display=swap">`;
 }
@@ -173,6 +176,7 @@ export interface CodebookTheme {
   headerBg: string;
   text: string;
   bodyFont: CodebookFont;
+  /** Unused: one font (bodyFont) covers the whole codebook. Kept so older saved settings still read. */
   headingFont: CodebookFont;
   /** Base font size in px. */
   fontSize: number;
@@ -197,7 +201,7 @@ export const CODEBOOK_PRESETS: Record<string, { label: string; theme: CodebookTh
   },
   forest: {
     label: 'Forest',
-    theme: { accent: '#2f7d5b', background: '#1f3d31', surface: '#ffffff', headerBg: '#eef5f0', text: '#1d2a23', bodyFont: 'serif', headingFont: 'sans', fontSize: 17, charts: 'accent', expandVisuals: false },
+    theme: { accent: '#2f7d5b', background: '#1f3d31', surface: '#ffffff', headerBg: '#eef5f0', text: '#1d2a23', bodyFont: 'serif', headingFont: 'serif', fontSize: 17, charts: 'accent', expandVisuals: false },
   },
   slate: {
     label: 'Slate (dark)',
@@ -225,7 +229,12 @@ export interface CodebookExtras {
   flowchartsInBrowser?: boolean;
   generatedAt?: Date;
   theme?: Partial<CodebookTheme>;
+  /** Variables to leave out, as codebookItemKey(survey, item) keys. */
+  excludeItems?: string[];
 }
+
+/** Identifies one variable of one survey, for choosing which variables go in a codebook. */
+export const codebookItemKey = (surveyName: string, itemId: string) => `${surveyName}/${itemId}`;
 
 const esc = (s: unknown) =>
   String(s ?? '')
@@ -329,12 +338,16 @@ export function generateCodebookHtml(
 
   // ---- Variable list: survey > block > variable, each level collapsible
   const included = new Set(o.dataTypes);
+  const excluded = new Set(extras.excludeItems ?? []);
   const responses = hasResponseData(spec) ? indexResponses(spec) : null;
   const varTocMark = toc.length;
   const varId = entry('Variable List', 1);
   const surveysHtml: string[] = [];
   for (const m of models) {
+    const surveyMark = toc.length;
     const sid = entry(m.label, 2, m.label);
+    let kept = 0;
+    let dropped = 0;
     const parts: string[] = [];
     const svg = flowKnown(m.survey) ? extras.flowchartSvgs?.[m.name] : undefined;
     const lazy = !svg && extras.flowchartsInBrowser && flowKnown(m.survey) ? `<pre class="cb-mermaid">${esc(generateFlowchart(m.survey))}</pre>` : '';
@@ -356,6 +369,12 @@ export function generateCodebookHtml(
     for (const q of m.survey.questions ?? []) {
       if (isEndBlock(q) || isBlock(q)) continue;
       if (!isQuestion(q) || !included.has(q['Question.Type.Display.Name'])) continue;
+      const itemKey = codebookItemKey(m.name, q['Item.ID']);
+      if (excluded.has(itemKey)) {
+        dropped++;
+        continue;
+      }
+      kept++;
       const path = included.has('Block') ? blockPath(m, q).join(' › ') : '';
       if (path !== (current()?.path ?? '')) {
         closeBlock();
@@ -365,15 +384,20 @@ export function generateCodebookHtml(
         }
       }
       const stats = responses ? describeItem(q, responses.get(q['Question.ID']), overview?.participants ?? 0) : null;
-      const html = variablePage(m, q, o, t, stats, entry(stripHtml(q['Question.Text'] ?? '') || itemLabel(q), path ? 4 : 3, `${m.name} ${q['Item.ID']}`), spec.screenshotsURL);
+      const html = variablePage(m, q, o, t, stats, itemKey, entry(stripHtml(q['Question.Text'] ?? '') || itemLabel(q), path ? 4 : 3, `${m.name} ${q['Item.ID']}`), spec.screenshotsURL);
       const ob = current();
       if (ob) ob.items.push(html);
       else parts.push(html);
     }
     closeBlock();
+    // A survey whose variables were all left out is left out too.
+    if (dropped && !kept) {
+      toc.splice(surveyMark);
+      continue;
+    }
     surveysHtml.push(`<section class="cb-survey"><h2 id="${sid}" class="cb-survey-name">${esc(m.label)}${caret(m.label)}</h2><div class="cb-sec-body">${parts.join('\n')}</div></section>`);
   }
-  if (models.length) out.push(`<section class="cb-page"><hr><h1 id="${varId}">Variable List${caret('Variable List')}</h1><hr><div class="cb-sec-body">${surveysHtml.join('\n')}</div></section>`);
+  if (surveysHtml.length) out.push(`<section class="cb-page"><hr><h1 id="${varId}">Variable List${caret('Variable List')}</h1><hr><div class="cb-sec-body">${surveysHtml.join('\n')}</div></section>`);
   else toc.splice(varTocMark, 1);
 
   const menu = toc
@@ -402,14 +426,18 @@ ${fontLinks(t)}<style>${themeCss(t)}${CODEBOOK_CSS}${printPageCss(title)}</style
 <h1 class="title">${esc(title)}</h1>
 <h4 class="date">Codebook Generated ${esc(generated)}</h4>
 </div>
-<nav id="TOC" class="cb-toc" aria-label="Table of contents">
+${
+  o.toc
+    ? `<nav id="TOC" class="cb-toc" aria-label="Table of contents"${optAttr('toc')}>
 <div class="cb-toc-head">
 <button class="cb-toc-toggle" type="button" aria-expanded="true" aria-controls="cb-toc-body">Table of Contents <span class="cb-twisty-icon">▲</span></button>
 <span class="cb-toc-actions"><button type="button" data-toc="expand">Expand all</button><button type="button" data-toc="collapse">Collapse all</button></span>
 </div>
 <div id="cb-toc-body">${renderToc(toc)}</div>
 </nav>
-${out.join('\n')}
+`
+    : ''
+}${out.join('\n')}
 </div>
 <a href="#top" id="backToTopBtn" title="Back to top" aria-label="Back to top">↑</a>
 ${
@@ -451,7 +479,7 @@ function skipNote(m: SurveyModel, itemId: string): string {
   return `<p class="cb-cond"${optAttr('skipLogic')}><span class="cb-cond-tag">Skip logic</span> Shown only if ${parts.join('; or ')}</p>`;
 }
 
-function variablePage(m: SurveyModel, q: Question, o: CodebookOptions, t: CodebookTheme, stats: ItemDescriptives | null, id: string, screenshotsURL: string | undefined): string {
+function variablePage(m: SurveyModel, q: Question, o: CodebookOptions, t: CodebookTheme, stats: ItemDescriptives | null, itemKey: string, id: string, screenshotsURL: string | undefined): string {
   const text = stripHtml(q['Question.Text'] ?? '') || itemLabel(q);
   const lines: string[] = [];
   const cond = o.skipLogic ? skipNote(m, q['Item.ID']) : '';
@@ -504,7 +532,7 @@ ${tabs.map((tab, i) => `<div class="cb-pane${i === 0 ? ' is-active' : ''}" id="$
   const head = `<h4 id="${id}">${esc(text)}<span class="cb-q-sub"><span class="item-id">[${esc(q['Item.ID'])}]</span>${
     meta.length ? `<span class="cb-q-meta">${meta.join(' • ')}</span>` : ''
   }</span></h4>${foldable ? `<span class="cb-arrow cb-q-arrow" aria-hidden="true">${open ? '▲' : '▼'}</span>` : ''}`;
-  return `<div class="cb-var"${optAttr(codebookTypeKey(q['Question.Type.Display.Name']))}>
+  return `<div class="cb-var"${optAttr(codebookTypeKey(q['Question.Type.Display.Name']), `item:${encodeURIComponent(itemKey)}`)}>
 ${
   foldable
     ? `<div class="header-shading cb-q-head" role="button" tabindex="0" data-target="${vid}" aria-expanded="${open}" title="Click to show or hide descriptives">${head}</div>`
@@ -908,7 +936,7 @@ function themeCss(t: CodebookTheme): string {
   return `:root{
 --cb-accent:${accent};--cb-bg:${color(t.background, '#003d7a')};--cb-surface:${surface};--cb-header:${color(t.headerBg, '#f0f0f0')};--cb-text:${text};
 --cb-muted:${mix(62, text, surface)};--cb-border:${mix(16, text, surface)};--cb-faint:${mix(6, text, surface)};--cb-accent-soft:${mix(10, accent, surface)};
---cb-font:${(CODEBOOK_FONTS[t.bodyFont] ?? CODEBOOK_FONTS.times!).stack};--cb-heading-font:${(CODEBOOK_FONTS[t.headingFont] ?? CODEBOOK_FONTS.times!).stack};--cb-size:${size}px;
+--cb-font:${(CODEBOOK_FONTS[t.bodyFont] ?? CODEBOOK_FONTS.times!).stack};--cb-heading-font:${(CODEBOOK_FONTS[t.bodyFont] ?? CODEBOOK_FONTS.times!).stack};--cb-size:${size}px;
 --cb-bar:${ggplot ? '#595959' : accent};--cb-panel:${ggplot ? '#EBEBEB' : 'transparent'};--cb-grid:${ggplot ? '#FFFFFF' : mix(12, text, surface)};--cb-axis:${ggplot ? '#4D4D4D' : mix(62, text, surface)};
 --cb-count:${ggplot ? '#1e7b34' : accent};
 }

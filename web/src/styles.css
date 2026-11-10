@@ -171,6 +171,15 @@ textarea.dm-input { resize: vertical; min-height: 70px; }
 .dm-tree-item { display: flex; align-items: center; gap: 8px; padding: 3px 0; font-size: calc(15px * var(--ts, 1)); cursor: pointer; }
 .dm-tree-item input { width: 17px; height: 17px; }
 .dm-tree-item.is-disabled { color: var(--text-2); cursor: default; }
+.dm-var-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 10px; }
+.dm-var-actions .dm-btn { width: auto; flex: none; white-space: nowrap; }
+.dm-var-list summary { cursor: pointer; list-style-position: outside; margin-left: 14px; }
+.dm-var-list summary .dm-tree-item { display: inline-flex; }
+.dm-var-list { max-height: 60vh; overflow: auto; }
+.dm-var-item { align-items: flex-start; }
+.dm-var-item input { flex: none; margin-top: 2px; }
+.dm-var-item code { flex: none; font-size: .85em; }
+.dm-var-text { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .dm-viewer-frame { width: 100%; height: 800px; border: 2px solid var(--border); border-radius: 12px; background: var(--surface); display: block; margin-bottom: 8px; }
 
 /* ---- Tables (dark header like the prior app) */

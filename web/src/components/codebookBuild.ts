@@ -16,6 +16,8 @@ export interface CodebookSettings {
   options: CodebookOptions;
   theme: CodebookTheme;
   text: CodebookText;
+  /** Variables left out of this study's codebook (codebookItemKey keys). Not saved between studies. */
+  exclude: string[];
 }
 
 const SETTINGS_KEY = 'data-manual:codebook-settings:v4';
@@ -46,6 +48,7 @@ export function loadSettings(spec: StudySpec | null): CodebookSettings {
     options: { ...DEFAULT_CODEBOOK_OPTIONS, ...saved.options },
     theme: { ...DEFAULT_CODEBOOK_THEME, ...saved.theme },
     text: textFromSpec(spec),
+    exclude: [],
   };
 }
 
@@ -55,6 +58,17 @@ export function saveSettings(s: CodebookSettings): void {
   } catch {
     // Not persisted; fine.
   }
+}
+
+/**
+ * Study details after the study was edited (not replaced): fields the user typed over are kept;
+ * fields still showing the old study's value follow the edit.
+ */
+export function textAfterEdit(current: CodebookText, before: StudySpec | null, after: StudySpec | null): CodebookText {
+  const was = textFromSpec(before);
+  const now = textFromSpec(after);
+  const pick = (k: keyof CodebookText) => ((current[k] ?? '') === (was[k] ?? '') ? now[k] : current[k]);
+  return { title: pick('title'), authors: pick('authors'), funding: pick('funding'), abstract: pick('abstract'), summary: current.summary };
 }
 
 export function textFromSpec(spec: StudySpec | null): CodebookText {
@@ -81,5 +95,5 @@ export async function buildCodebook(spec: StudySpec, s: CodebookSettings): Promi
       if (svg) flowchartSvgs[survey['Survey.Name']] = svg;
     }
   }
-  return generateCodebookHtml(spec, s.options, { flowchartSvgs, theme: s.theme }, s.text);
+  return generateCodebookHtml(spec, s.options, { flowchartSvgs, theme: s.theme, excludeItems: s.exclude }, s.text);
 }

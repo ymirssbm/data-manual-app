@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { StudySpec } from '../../core';
+import { isQuestion, itemLabel, stripHtml, surveyModels, type StudySpec } from '../../core';
 import {
   CODEBOOK_FONTS,
   CODEBOOK_PRESETS,
+  codebookItemKey,
   codebookTypeKey,
   hasResponseData,
   QUESTION_TYPES,
@@ -37,6 +38,7 @@ interface TreeNode {
 
 // The prior tool's option tree, plus the two new pages.
 const TREE: TreeNode[] = [
+  { label: 'Table of Contents', key: 'toc' },
   {
     label: 'Title Page',
     children: [
@@ -139,7 +141,7 @@ interface GenProps {
 }
 
 export function CodebookGeneratorPage({ spec, settings, setSettings, codebook, onBuilt, go, notify }: GenProps) {
-  const [panel, setPanel] = useState<'look' | 'content' | 'details'>('look');
+  const [panel, setPanel] = useState<'look' | 'content' | 'variables' | 'details'>('look');
   const [controlsOpen, setControlsOpen] = useState(true);
   const [previewOpen, setPreviewOpen] = useState(true);
   const hasData = useMemo(() => (spec ? hasResponseData(spec) : false), [spec]);
@@ -157,7 +159,7 @@ export function CodebookGeneratorPage({ spec, settings, setSettings, codebook, o
   const setOpts = (o: CodebookOptions) => setSettings({ ...settings, options: o });
   const setTheme = (t: Partial<CodebookTheme>) => setSettings({ ...settings, theme: { ...theme, ...t } });
   const setText = (k: keyof CodebookText) => (e: { target: { value: string } }) => setSettings({ ...settings, text: { ...text, [k]: e.target.value } });
-  const preset = Object.entries(CODEBOOK_PRESETS).find(([, p]) => (Object.keys(p.theme) as Array<keyof CodebookTheme>).every((k) => p.theme[k] === theme[k]))?.[0];
+  const preset = Object.entries(CODEBOOK_PRESETS).find(([, p]) => (Object.keys(p.theme) as Array<keyof CodebookTheme>).every((k) => k === 'headingFont' || p.theme[k] === theme[k]))?.[0];
 
   // A section with parts (e.g. Missingness Page) has its own switch; it's on when the switch is on and any part is.
   const isOn = (n: TreeNode): boolean =>
@@ -256,6 +258,7 @@ export function CodebookGeneratorPage({ spec, settings, setSettings, codebook, o
               [
                 ['look', 'Appearance'],
                 ['content', 'Content'],
+                ['variables', 'Variables'],
                 ['details', 'Study details'],
               ] as const
             ).map(([id, label]) => (
@@ -292,23 +295,8 @@ export function CodebookGeneratorPage({ spec, settings, setSettings, codebook, o
               </div>
 
               <div className="dm-grid-2 dm-gap-sm">
-                <Field label="Body font">
-                  <select className="dm-input" value={theme.bodyFont} onChange={(e) => setTheme({ bodyFont: e.target.value as CodebookFont })}>
-                    {(['System', 'Web'] as const).map((g) => (
-                      <optgroup key={g} label={g === 'System' ? 'System fonts (work offline)' : 'Web fonts (load online)'}>
-                        {Object.entries(CODEBOOK_FONTS)
-                          .filter(([, f]) => f.group === g)
-                          .map(([k, f]) => (
-                            <option key={k} value={k}>
-                              {f.label}
-                            </option>
-                          ))}
-                      </optgroup>
-                    ))}
-                  </select>
-                </Field>
-                <Field label="Heading font">
-                  <select className="dm-input" value={theme.headingFont} onChange={(e) => setTheme({ headingFont: e.target.value as CodebookFont })}>
+                <Field label="Font">
+                  <select className="dm-input" value={theme.bodyFont} onChange={(e) => setTheme({ bodyFont: e.target.value as CodebookFont, headingFont: e.target.value as CodebookFont })}>
                     {(['System', 'Web'] as const).map((g) => (
                       <optgroup key={g} label={g === 'System' ? 'System fonts (work offline)' : 'Web fonts (load online)'}>
                         {Object.entries(CODEBOOK_FONTS)
@@ -342,6 +330,18 @@ export function CodebookGeneratorPage({ spec, settings, setSettings, codebook, o
             <Box title="Codebook Options">
               <ul className="dm-tree">{TREE.map((n) => renderNode(n))}</ul>
             </Box>
+          )}
+
+          {panel === 'variables' && (
+            <VariablePicker
+              spec={spec}
+              exclude={settings.exclude}
+              setExclude={(exclude) => setSettings({ ...settings, exclude })}
+              onHover={(keys) => {
+                const doc = previewRef.current?.contentDocument;
+                if (doc?.body) highlightOptions(doc, keys);
+              }}
+            />
           )}
 
           {panel === 'details' && (
@@ -441,5 +441,94 @@ export function CodebookViewerPage({ spec, settings, codebook, onBuilt, go, noti
       </section>
       <p className="dm-hint dm-viewer-hint">Save as PDF opens the print dialog: choose "Save as PDF" as the printer. All visuals print expanded.</p>
     </>
+  );
+}
+
+/** Choose which variables go in the codebook: every survey's questions, with search and select all/none. */
+function VariablePicker({ spec, exclude, setExclude, onHover }: { spec: StudySpec; exclude: string[]; setExclude(x: string[]): void; onHover(keys: string[]): void }) {
+  const [query, setQuery] = useState('');
+  const surveys = useMemo(
+    () =>
+      surveyModels(spec).map((m) => ({
+        name: m.name,
+        label: m.label,
+        items: m.items.filter(isQuestion).map((q) => ({
+          key: codebookItemKey(m.name, q['Item.ID']),
+          id: q['Question.ID'] || q['Item.ID'],
+          text: stripHtml(q['Question.Text'] ?? '') || itemLabel(q),
+        })),
+      })),
+    [spec],
+  );
+  const out = useMemo(() => new Set(exclude), [exclude]);
+  const q = query.trim().toLowerCase();
+  const shown = surveys
+    .map((s) => ({ ...s, items: q ? s.items.filter((i) => i.id.toLowerCase().includes(q) || i.text.toLowerCase().includes(q) || s.label.toLowerCase().includes(q)) : s.items }))
+    .filter((s) => s.items.length);
+  const all = surveys.flatMap((s) => s.items);
+  const keptCount = all.filter((i) => !out.has(i.key)).length;
+  const setMany = (keys: string[], on: boolean) => {
+    const next = new Set(out);
+    keys.forEach((k) => (on ? next.delete(k) : next.add(k)));
+    setExclude([...next]);
+  };
+  const hl = (keys: string[]) => onHover(keys.map((k) => `item:${encodeURIComponent(k)}`));
+  const shownKeys = shown.flatMap((s) => s.items.map((i) => i.key));
+
+  return (
+    <Box title="Variables">
+      <p className="dm-hint">
+        {keptCount.toLocaleString()} of {all.length.toLocaleString()} variables included. Unticked variables are left out of the codebook; a survey with none left is left out too.
+      </p>
+      <input className="dm-input dm-search" type="search" placeholder="Search variable names or question text…" value={query} onChange={(e) => setQuery(e.target.value)} />
+      <div className="dm-var-actions">
+        <button className="dm-btn dm-btn-secondary dm-btn-sm" onClick={() => setMany(shownKeys, true)}>
+          {q ? 'Include matches' : 'Include all'}
+        </button>
+        <button className="dm-btn dm-btn-secondary dm-btn-sm" onClick={() => setMany(shownKeys, false)}>
+          {q ? 'Leave out matches' : 'Leave out all'}
+        </button>
+      </div>
+      {!shown.length && <p className="dm-empty">No variables match.</p>}
+      <ul className="dm-tree dm-var-list">
+        {shown.map((s) => {
+          const keys = s.items.map((i) => i.key);
+          const on = keys.filter((k) => !out.has(k)).length;
+          return (
+            <li key={s.name}>
+              <details open={!!q || surveys.length === 1}>
+                <summary>
+                  <label className="dm-tree-item" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={on === keys.length}
+                      ref={(el) => {
+                        if (el) el.indeterminate = on > 0 && on < keys.length;
+                      }}
+                      onChange={(e) => setMany(keys, e.target.checked)}
+                    />
+                    <span>{s.label}</span>
+                    <span className="dm-hint">
+                      ({on}/{keys.length})
+                    </span>
+                  </label>
+                </summary>
+                <ul>
+                  {s.items.map((i) => (
+                    <li key={i.key}>
+                      <label className="dm-tree-item dm-var-item" title={i.text} onMouseEnter={() => hl([i.key])} onMouseLeave={() => hl([])}>
+                        <input type="checkbox" checked={!out.has(i.key)} onChange={(e) => setMany([i.key], e.target.checked)} />
+                        <code>{i.id}</code>
+                        <span className="dm-var-text">{i.text}</span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            </li>
+          );
+        })}
+      </ul>
+    </Box>
   );
 }

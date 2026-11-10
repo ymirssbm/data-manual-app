@@ -247,31 +247,6 @@ export function DatasetImport({ initial, spec, onLoaded, notify, onReset }: Prop
         </Field>
       )}
 
-      {m.layout === 'wide' && (
-        <Field label="Variable columns">
-          <div className="dm-chip-select">
-            {cols
-              .filter((c) => !mappedCols.has(c))
-              .map((c) => {
-                const on = !m.variables?.length || m.variables.includes(c);
-                return (
-                  <button
-                    key={c}
-                    className={on ? 'is-on' : ''}
-                    onClick={() => {
-                      const all = cols.filter((x) => !mappedCols.has(x));
-                      const cur = m.variables?.length ? m.variables : all;
-                      set({ variables: on ? cur.filter((x) => x !== c) : [...cur, c] });
-                    }}
-                  >
-                    {c}
-                  </button>
-                );
-              })}
-          </div>
-        </Field>
-      )}
-
       <div className="dm-dd-wrap dm-preview-table">
         <table className="dm-dd">
           <thead>
@@ -331,6 +306,31 @@ export function DatasetImport({ initial, spec, onLoaded, notify, onReset }: Prop
           </button>
         </div>
       </div>
+
+      {m.layout === 'wide' && (
+        <Field label="Variable columns">
+          <div className="dm-chip-select">
+            {cols
+              .filter((c) => !mappedCols.has(c))
+              .map((c) => {
+                const on = !m.variables?.length || m.variables.includes(c);
+                return (
+                  <button
+                    key={c}
+                    className={on ? 'is-on' : ''}
+                    onClick={() => {
+                      const all = cols.filter((x) => !mappedCols.has(x));
+                      const cur = m.variables?.length ? m.variables : all;
+                      set({ variables: on ? cur.filter((x) => x !== c) : [...cur, c] });
+                    }}
+                  >
+                    {c}
+                  </button>
+                );
+              })}
+          </div>
+        </Field>
+      )}
     </div>
   );
 }

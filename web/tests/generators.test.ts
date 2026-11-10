@@ -5,6 +5,7 @@ import {
   dataDictionaryCsv,
   describeItem,
   expandDates,
+  codebookItemKey,
   generateCodebookHtml,
   generateDataDictionary,
   generateFlowchart,
@@ -121,7 +122,23 @@ describe('codebook', () => {
     const html = generateCodebookHtml(spec());
     expect(html).toContain('data-cb-opt="missParticipants"');
     expect(html).toMatch(/class="cb-tab[^"]*" data-tab="[^"]+-missingness"[^>]*data-cb-opt="missingness /);
-    expect(html).toContain('data-cb-opt="type-multiple-choice"');
+    expect(html).toContain('data-cb-opt="type-multiple-choice item:');
+  });
+
+  it('can leave out the table of contents and chosen variables', () => {
+    const sp = spec();
+    expect(generateCodebookHtml(sp)).toContain('id="TOC"');
+    expect(generateCodebookHtml(sp, { toc: false })).not.toContain('id="TOC"');
+    const survey = sp.surveys[0]!;
+    const items = (survey.questions ?? []).filter((q) => q['Item.Type'] === 'Question');
+    const first = items[0]!;
+    const key = codebookItemKey(survey['Survey.Name'], first['Item.ID']);
+    const html = generateCodebookHtml(sp, {}, { excludeItems: [key] });
+    expect(html).not.toContain(`item:${encodeURIComponent(key)}"`);
+    expect(html).toContain(`item:${encodeURIComponent(codebookItemKey(survey['Survey.Name'], items[1]!['Item.ID']))}"`);
+    // Leaving out every variable of a survey leaves out the survey.
+    const none = generateCodebookHtml(sp, {}, { excludeItems: items.map((q) => codebookItemKey(survey['Survey.Name'], q['Item.ID'])) });
+    expect(none).not.toContain('class="cb-survey-name"');
   });
 
   it('keeps the prior codebook structure', () => {

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
-import { loadSettings, saveSettings, textFromSpec, type CodebookSettings } from './codebookBuild';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { loadSettings, saveSettings, textAfterEdit, textFromSpec, type CodebookSettings } from './codebookBuild';
 import { validateSpec, type DatasetTable, type StudySpec, type ValidationResult } from '../core';
 import type { HostAdapter } from '../adapters/types';
 import { Icon, Toasts, useToasts } from './ui';
@@ -97,11 +97,15 @@ export function App({ adapter }: { adapter: HostAdapter }) {
     }
   }, [adapter, session, spec]);
 
+  const specRef = useRef(spec);
+  specRef.current = spec;
+  /** A new study resets the codebook's study details and variable choices; an edit of the same study keeps them. */
   const onLoaded = useCallback(
-    (source: LoadedSource, result: ValidationResult) => {
+    (source: LoadedSource, result: ValidationResult, how: { edit?: boolean } = {}) => {
+      const before = specRef.current;
       setSession({ source, result });
       setCodebook(null);
-      setCbSettingsState((s) => ({ ...s, text: textFromSpec(result.spec) }));
+      setCbSettingsState((s) => (how.edit ? { ...s, text: textAfterEdit(s.text, before, result.spec) } : { ...s, text: textFromSpec(result.spec), exclude: [] }));
       if (result.spec) notify(`Loaded "${result.spec['Study.Metadata']['Study.Name']}".`);
       else notify('The study was read, but it has problems. See the details below.', 'warning', 8000);
     },
@@ -220,7 +224,7 @@ export function App({ adapter }: { adapter: HostAdapter }) {
                   return rest;
                 });
               }
-              onLoaded({ fileName: 'Edited in the Survey Editor', translatorLabel: 'Study spec (JSON)', notes: [] }, r);
+              onLoaded({ fileName: 'Edited in the Survey Editor', translatorLabel: 'Study spec (JSON)', notes: [] }, r, { edit: true });
             }}
           />
         )}

@@ -34,7 +34,7 @@ export async function codebookDocx(html: string, theme: CodebookTheme, title: st
     const w = new Walker(d, frame.contentWindow!, accent);
     const children = await w.blocks(body.querySelector('.content') ?? body, { indent: 0 });
     const font = wordFont(theme.bodyFont);
-    const headFont = wordFont(theme.headingFont);
+    const headFont = wordFont(theme.bodyFont);
     const heading = (size: number, extra: Record<string, unknown> = {}) => ({
       run: { font: headFont, size, bold: true, color: LIGHT.text },
       paragraph: { spacing: { before: 240, after: 120 }, keepNext: true, keepLines: true },
