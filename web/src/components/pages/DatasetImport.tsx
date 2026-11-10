@@ -202,11 +202,29 @@ export function DatasetImport({ initial, spec, onLoaded, notify, onReset }: Prop
         <p className="dm-callout dm-callout-plain">
           <Icon name="file" />
           <span>
-            Read as <strong>{file.table.source}</strong>. Question text comes from its variable labels ({Object.keys(file.table.labels ?? {}).length} of {cols.length} columns have one)
-            {Object.keys(file.table.valueLabels ?? {}).length > 0 && <>, and response options from its value labels ({Object.keys(file.table.valueLabels ?? {}).length} variable{Object.keys(file.table.valueLabels ?? {}).length === 1 ? '' : 's'})</>}. Dates and missing values were read from
+            Read as <strong>{file.table.source}</strong>. {Object.keys(file.table.labels ?? {}).length} of {cols.length} columns {Object.keys(file.table.labels ?? {}).length === 1 ? 'has' : 'have'} a variable label
+            {Object.keys(file.table.valueLabels ?? {}).length > 0 && <>, and {Object.keys(file.table.valueLabels ?? {}).length} {Object.keys(file.table.valueLabels ?? {}).length === 1 ? 'has' : 'have'} value labels, used as response options</>}. Dates and missing values were read from
             the file's own formats. {file.table.notes?.join(' ')}
           </span>
         </p>
+      )}
+
+      {m.layout === 'wide' && Object.keys(file.table.labels ?? {}).length > 0 && (
+        <Field label="Use the variable labels as" hint="Labels usually hold the question wording. Some files keep the question IDs in the labels instead, with short codes as the column names.">
+          <div className="dm-segmented dm-segmented-inline" role="radiogroup" aria-label="Use the variable labels as">
+            {(
+              [
+                ['text', 'Question text'],
+                ['id', 'Question IDs'],
+                ['ignore', 'Don’t use them'],
+              ] as const
+            ).map(([v, label]) => (
+              <button key={v} type="button" role="radio" aria-checked={(m.labelsAs ?? 'text') === v} className={(m.labelsAs ?? 'text') === v ? 'is-active' : ''} onClick={() => set({ labelsAs: v })}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </Field>
       )}
 
       {m.layout === 'wide' && !file.table.source && (

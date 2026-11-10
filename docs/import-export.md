@@ -24,15 +24,16 @@ Drop a file on "Upload a File". The format is detected automatically:
 | REDCap data dictionary `.csv` | Project Setup → Data Dictionary → Download the current Data Dictionary |
 | Wear-IT getData `.json` | A saved API response |
 | Study spec `.json` | This app's own format (also the older pre-`Study.Metadata` layout) |
-| SPSS `.sav` / `.zsav`, SAS `.sas7bdat` / `.xpt`, Stata `.dta` | Response data saved from the statistics package (opens the column mapper, below) |
+| SPSS `.sav` / `.zsav`, SAS `.sas7bdat` / `.xpt`, Stata `.dta`, R `.rds` / `.RData` | Response data saved from the statistics package (opens the column mapper, below) |
 
 Anything that can't be carried over exactly (complex REDCap branching, unsupported question types) is listed in the notes after import.
 
-### Your dataset (response CSV, SPSS, SAS or Stata)
+### Your dataset (response CSV, SPSS, SAS, Stata or R)
 
-SPSS (`.sav`, `.zsav`), SAS (`.sas7bdat`, including compressed files, and `.xpt` transport files) and Stata (`.dta`, Stata 8 to 18) files are read in the browser and go to the same column mapper as a CSV, with more filled in:
+SPSS (`.sav`, `.zsav`), SAS (`.sas7bdat`, including compressed files, and `.xpt` transport files) Stata (`.dta`, Stata 8 to 18) and R (`.rds` from `saveRDS()`, `.RData`/`.rda` from `save()`; the largest data frame in an `.RData` file is read) files are read in the browser and go to the same column mapper as a CSV, with more filled in:
 
-- **Question text** from each variable's label, and **response options** from its value labels (SPSS and Stata), so an imported study has the real wording and the labelled choices.
+- **Question text** from each variable's label, and **response options** from its value labels (SPSS, Stata, and R files labelled with haven or labelled) or from R factor levels, so an imported study has the real wording and the labelled choices.
+- **Use the variable labels as**: question text (the default), question IDs (for files that keep IDs in the labels and short codes as column names), or not at all.
 - **Dates and date-times** from the variables' formats, so a timestamp column needs no conversion.
 - **Missing values** as the file defines them (SPSS user-missing values, SAS and Stata missing codes).
 

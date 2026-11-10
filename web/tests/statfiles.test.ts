@@ -13,8 +13,8 @@ const read = (name: string) => {
   return readStatFile(name, b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength));
 };
 
-const FILES = ['study.sav', 'study-plain.sav', 'study.zsav', 'study-v5.xpt', 'study-v8.xpt', 'study.sas7bdat', 'study-14.dta', 'study-13.dta', 'study-12.dta'];
-const WITH_VALUE_LABELS = new Set(['study.sav', 'study-plain.sav', 'study.zsav', 'study-14.dta', 'study-13.dta', 'study-12.dta']);
+const FILES = ['study.sav', 'study-plain.sav', 'study.zsav', 'study.rds', 'study-v2.rds', 'study-plain.rds', 'study-v5.xpt', 'study-v8.xpt', 'study.sas7bdat', 'study-14.dta', 'study-13.dta', 'study-12.dta'];
+const WITH_VALUE_LABELS = new Set(['study.sav', 'study-plain.sav', 'study.zsav', 'study.rds', 'study-v2.rds', 'study-plain.rds', 'study-14.dta', 'study-13.dta', 'study-12.dta']);
 
 describe('statistical package files', () => {
   for (const name of FILES) {
@@ -64,6 +64,34 @@ describe('statistical package files', () => {
         { value: '2', definition: '2' },
       ]),
     );
+  });
+
+  it('reads an .RData file: the largest data frame, factors as labelled codes', async () => {
+    const f = await read('study.RData');
+    expect(f.columns).toEqual(['id', 'mood', 'ok']);
+    expect(f.rows).toEqual([
+      ['P1', '3', 'TRUE'],
+      ['P2', '1', 'FALSE'],
+      ['P3', '', ''],
+    ]);
+    expect(f.valueLabels.mood).toEqual([
+      { value: '1', label: 'Low' },
+      { value: '2', label: 'Neutral' },
+      { value: '3', label: 'High' },
+    ]);
+    expect(f.notes.join(' ')).toMatch(/2 data frames/);
+  });
+
+  it('can use variable labels as question IDs, or ignore them', async () => {
+    const table = statFileToTable(await read('study.sav'));
+    const m = guessMapping(table);
+    const asIds = datasetToData(table, { ...m, labelsAs: 'id' });
+    expect(asIds.variables).toContain('How is your mood right now?');
+    expect(asIds.questionText.size).toBe(0);
+    expect(asIds.valueLabels.get('How is your mood right now?')?.length).toBe(3);
+    const ignored = datasetToData(table, { ...m, labelsAs: 'ignore' });
+    expect(ignored.variables).toContain('mood');
+    expect(ignored.questionText.size).toBe(0);
   });
 
   it('decodes IBM floating point and SAS run-length compression', () => {

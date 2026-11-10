@@ -44,8 +44,8 @@ const FILE_KINDS = [
   { label: 'REDCap data dictionary (.csv)', text: 'In REDCap: Project Setup → Data Dictionary → Download the current Data Dictionary.' },
   { label: 'Response data (.csv / .tsv)', text: 'Raw responses from anywhere (an EMA app export, a spreadsheet, R saved as CSV). You map its columns next.' },
   {
-    label: 'SPSS, SAS or Stata data (.sav, .zsav, .sas7bdat, .xpt, .dta)',
-    text: 'Responses straight from a statistics package, with their variable labels as question text and value labels as response options. You map its columns next.',
+    label: 'SPSS, SAS, Stata or R data (.sav, .sas7bdat, .xpt, .dta, .rds, .RData)',
+    text: 'Responses straight from a statistics package, with their variable labels and value labels (or R factors) as question text and response options. You map its columns next.',
   },
 ];
 

@@ -23,3 +23,16 @@ write_sas(df, "study.sas7bdat")
 write_dta(df, "study-14.dta", version = 14)
 write_dta(df, "study-13.dta", version = 13)
 write_dta(df, "study-12.dta", version = 12)
+
+# R's own formats: haven-labelled columns, factors, dates.
+saveRDS(df, "study.rds")
+saveRDS(df, "study-v2.rds", version = 2)
+saveRDS(df, "study-plain.rds", compress = FALSE)
+base <- data.frame(
+  id = c("P1", "P2", "P3"),
+  mood = factor(c("High", "Low", NA), levels = c("Low", "Neutral", "High")),
+  ok = c(TRUE, FALSE, NA),
+  stringsAsFactors = FALSE
+)
+other <- data.frame(x = 1:2)
+save(base, other, file = "study.RData")

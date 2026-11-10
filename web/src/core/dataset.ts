@@ -60,6 +60,12 @@ export interface DatasetMapping {
    * the column names are question text and the first row holds the IDs, with data from row 2.
    */
   headerRows?: HeaderRole[];
+  /**
+   * wide only, for files with variable labels (SPSS, SAS, Stata, R): what the labels are.
+   * 'text' (the default) uses them as question text; 'id' uses them as question IDs (in place of
+   * the column names); 'ignore' drops them.
+   */
+  labelsAs?: 'text' | 'id' | 'ignore';
   /** IANA timezone for times written without an offset (default UTC). */
   timeZone?: string;
   /** Values that mean "missing" (in addition to blank and NA). */
@@ -224,7 +230,9 @@ export function datasetToData(table: DatasetTable, m: DatasetMapping, now = new 
     const headerAt = (k: number) => (k === 0 ? table.columns : (table.rows[k - 1] ?? []));
     const idRow = roles.indexOf('id');
     const textRow = roles.indexOf('text');
-    const ids = vIdx.map((ci, k) => (idRow >= 0 ? (headerAt(idRow)[ci] ?? '').trim() : '') || vars[k]!);
+    const labelsAs = m.labelsAs ?? 'text';
+    const labelOf = (ci: number) => table.labels?.[table.columns[ci]!]?.trim() ?? '';
+    const ids = vIdx.map((ci, k) => (labelsAs === 'id' && labelOf(ci)) || (idRow >= 0 ? (headerAt(idRow)[ci] ?? '').trim() : '') || vars[k]!);
     if (new Set(ids).size < ids.length) notes.push('Some question IDs repeat; their responses are combined under one variable.');
     if (textRow >= 0)
       vIdx.forEach((ci, k) => {
@@ -233,7 +241,7 @@ export function datasetToData(table: DatasetTable, m: DatasetMapping, now = new 
       });
     vIdx.forEach((ci, k) => {
       const col = table.columns[ci]!;
-      const label = table.labels?.[col];
+      const label = labelsAs === 'text' ? table.labels?.[col] : undefined;
       if (label && !questionText.has(ids[k]!)) questionText.set(ids[k]!, label);
       const vl = table.valueLabels?.[col];
       if (vl?.length) valueLabels.set(ids[k]!, vl);
