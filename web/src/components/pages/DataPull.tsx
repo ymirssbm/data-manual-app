@@ -80,6 +80,11 @@ export function DataPullPage({ session, spec, onLoaded, onDatasetLoaded, notify,
   const [source, setSource] = useState<Source>('wearit');
   const [busy, setBusy] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
+  // Bring the column mapper into view when a response file is picked.
+  const mapperTop = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (datasetFile) mapperTop.current?.closest('.dm-box')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [datasetFile]);
   const [conn, setConnState] = useState<SavedConnections>(loadConnections);
   const setConn = (c: SavedConnections) => {
     setConnState(c);
@@ -451,6 +456,18 @@ export function DataPullPage({ session, spec, onLoaded, onDatasetLoaded, notify,
 
       {tab === 'file' && (
         <>
+          {datasetFile ? (
+            // Once a response file is picked, the file picker folds to one line and mapping takes the page.
+            <div className="dm-file-picked">
+              <Icon name="file" />
+              <span>
+                <strong>{datasetFile.name}</strong>: map its columns below.
+              </span>
+              <button className="dm-link-btn" onClick={() => setDatasetFile(null)}>
+                Choose a different file
+              </button>
+            </div>
+          ) : (
           <Box title="Import a File">
             <div
               className="dm-drop"
@@ -486,22 +503,21 @@ export function DataPullPage({ session, spec, onLoaded, onDatasetLoaded, notify,
               ))}
             </ul>
           </Box>
+          )}
           {datasetFile && (
             <Box title={`Map Your Response Data: ${datasetFile.name}`}>
+              <span ref={mapperTop} />
               <p className="dm-hint">
-                Say how the file is laid out: <strong>long</strong> (one row per response) or <strong>wide</strong> (one row per session, a column per variable).{' '}
+                Say how the file is laid out: <strong>long</strong> (one row per response) or <strong>wide</strong> (one row per survey occasion, a column per question).{' '}
                 {spec ? (
                   <>
-                    The data can be attached to <strong>{spec['Study.Metadata']['Study.Name']}</strong> (matched by variable name), or used to build a new study.
+                    The data can be attached to <strong>{spec['Study.Metadata']['Study.Name']}</strong> (matched by question ID, or by question text), or used to build a new study.
                   </>
                 ) : (
                   <>No study is loaded, so a study will be built from the data. For question text and labels, load the study or survey first, then attach this data to it.</>
                 )}
               </p>
-              <DatasetImport initial={datasetFile} spec={spec} onLoaded={onDatasetLoaded} notify={notify} />
-              <button className="dm-link-btn dm-mt" onClick={() => setDatasetFile(null)}>
-                Cancel
-              </button>
+              <DatasetImport initial={datasetFile} spec={spec} onLoaded={onDatasetLoaded} notify={notify} onReset={() => setDatasetFile(null)} />
             </Box>
           )}
         </>

@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import {
   attachData,
   datasetToData,
+  guessHeaderRows,
   guessMapping,
   inferSpecFromData,
   parseDataset,
   validateSpec,
   type DatasetMapping,
   type DatasetTable,
+  type HeaderRole,
   type StudySpec,
   type ValidationResult,
 } from '../../core';
@@ -23,10 +25,14 @@ interface Props {
   spec: StudySpec | null;
   onLoaded(source: LoadedSource, result: ValidationResult): void;
   notify(text: string, kind?: 'message' | 'error' | 'warning', ms?: number): number;
+  /** "Choose a different file": handled by the page when it owns the file picker. */
+  onReset?(): void;
 }
 
+const ROLE_LABELS: Record<HeaderRole, string> = { id: 'Question IDs', text: 'Question text', ignore: 'Ignore (not data)' };
+
 /** Upload a dataset, describe its layout, map columns, then attach it or build a study from it. */
-export function DatasetImport({ initial, spec, onLoaded, notify }: Props) {
+export function DatasetImport({ initial, spec, onLoaded, notify, onReset }: Props) {
   const [file, setFile] = useState<{ name: string; table: DatasetTable } | null>(null);
   const [m, setM] = useState<DatasetMapping | null>(null);
   const [missing, setMissing] = useState('');
@@ -62,7 +68,7 @@ export function DatasetImport({ initial, spec, onLoaded, notify }: Props) {
     if (!file || !preview?.ok) return;
     const { result } = preview;
     if (target === 'attach' && spec) {
-      const { spec: out, report } = attachData(spec, result.data);
+      const { spec: out, report } = attachData(spec, result.data, result.questionText);
       const notes = [...result.notes, `Matched ${report.matched.length} variable(s) to questions in "${spec['Study.Metadata']['Study.Name']}".`];
       if (report.unmatchedInData.length) notes.push(`Not in the study (kept in the data, but no codebook entry): ${report.unmatchedInData.slice(0, 12).join(', ')}${report.unmatchedInData.length > 12 ? '…' : ''}.`);
       if (report.questionsWithoutData.length) notes.push(`Questions with no data: ${report.questionsWithoutData.slice(0, 12).join(', ')}${report.questionsWithoutData.length > 12 ? '…' : ''}.`);
@@ -78,7 +84,7 @@ export function DatasetImport({ initial, spec, onLoaded, notify }: Props) {
 
   const cols = file?.table.columns ?? [];
   const set = (patch: Partial<DatasetMapping>) => setM((cur) => (cur ? { ...cur, ...patch } : cur));
-  const colSelect = (label: string, key: 'participant' | 'time' | 'session' | 'survey' | 'question' | 'response', optional = true, hint?: string) => (
+  const colSelect = (label: string, key: 'participant' | 'time' | 'session' | 'survey' | 'question' | 'response' | 'questionText', optional = true, hint?: string) => (
     <Field label={label} hint={hint}>
       <select className="dm-input" value={m?.[key] ?? ''} onChange={(e) => set({ [key]: e.target.value || undefined })}>
         {optional && <option value="">(none)</option>}
@@ -112,34 +118,51 @@ export function DatasetImport({ initial, spec, onLoaded, notify }: Props) {
     );
   }
 
-  const mappedCols = new Set([m.participant, m.time, m.session, m.survey, m.question, m.response].filter(Boolean));
+  const mappedCols = new Set([m.participant, m.time, m.session, m.survey, m.question, m.response, m.questionText].filter(Boolean));
+  const roles: HeaderRole[] = m.layout === 'wide' ? (m.headerRows?.length ? m.headerRows : ['id']) : ['id'];
+  const setRole = (k: number, role: HeaderRole | 'data') => {
+    // Rows below a "data starts here" row are data; picking a role for the next row adds it as a header row.
+    const next = roles.slice(0, k);
+    if (role !== 'data') next.push(role);
+    set({ headerRows: next.length ? next : ['id'] });
+  };
+  const sample = preview?.ok ? preview.result.variables.slice(0, 6) : [];
   return (
     <div className="dm-dataset">
       <div className="dm-row-between">
         <p className="dm-dataset-file">
           <strong>{file.name}</strong> · {file.table.rows.length.toLocaleString()} rows · {cols.length} columns
         </p>
-        <button className="dm-link-btn" onClick={() => (setFile(null), setM(null))}>
-          Choose a different file
-        </button>
+        {!onReset && (
+          <button className="dm-link-btn" onClick={() => (setFile(null), setM(null))}>
+            Choose a different file
+          </button>
+        )}
       </div>
 
       <div className="dm-segmented dm-segmented-inline" role="radiogroup" aria-label="Layout">
         <button className={m.layout === 'long' ? 'is-active' : ''} onClick={() => set({ layout: 'long', variables: undefined })}>
           Long: one row per response
         </button>
-        <button className={m.layout === 'wide' ? 'is-active' : ''} onClick={() => set({ layout: 'wide', question: undefined, response: undefined })}>
-          Wide: one row per session, a column per variable
+        <button
+          className={m.layout === 'wide' ? 'is-active' : ''}
+          onClick={() => {
+            const used = new Set([m.participant, m.time, m.session, m.survey].filter(Boolean));
+            set({ layout: 'wide', question: undefined, response: undefined, questionText: undefined, headerRows: guessHeaderRows(file.table, cols.filter((c) => !used.has(c))) });
+          }}
+        >
+          Wide: one row per survey occasion, a column per question
         </button>
       </div>
 
       <div className="dm-map-grid">
         {colSelect('Participant ID', 'participant', false)}
-        {colSelect('Time', 'time', true, 'When the response was given')}
-        {colSelect('Survey / form', 'survey', true, 'Optional: groups variables into surveys')}
-        {colSelect('Session', 'session', true, 'Optional: otherwise participant + time')}
-        {m.layout === 'long' && colSelect('Variable name column', 'question', false)}
-        {m.layout === 'long' && colSelect('Value column', 'response', false)}
+        {colSelect('Response timestamp', 'time', true, 'The date and time each answer was submitted (e.g. 2026-02-17 08:11), not the study day or wave.')}
+        {colSelect('Survey / form', 'survey', true, 'Optional: which survey each answer belongs to.')}
+        {colSelect('Survey occasion', 'session', true, 'Optional: which answers were given together in one sitting. See below.')}
+        {m.layout === 'long' && colSelect('Question ID column', 'question', false, 'The variable name, e.g. mood_1.')}
+        {m.layout === 'long' && colSelect('Question text column', 'questionText', true, 'Optional: the wording, e.g. "How is your mood?"')}
+        {m.layout === 'long' && colSelect('Response value column', 'response', false)}
         <Field label="Times without a timezone are in">
           <select className="dm-input" value={m.timeZone ?? ''} onChange={(e) => set({ timeZone: e.target.value })}>
             {TIMEZONES.map((z) => (
@@ -151,6 +174,38 @@ export function DatasetImport({ initial, spec, onLoaded, notify }: Props) {
           <input className="dm-input" value={missing} onChange={(e) => setMissing(e.target.value)} placeholder="-99" />
         </Field>
       </div>
+
+      <details className="dm-explain">
+        <summary>What is a survey occasion?</summary>
+        <p>
+          One sitting: a single prompt, beep or survey completion. The answers someone gave in it belong together, which is how response rates and
+          missingness are counted (a prompt that was delivered but not answered is one missed occasion).
+        </p>
+        <p>
+          Leave it as <em>(none)</em> if all answers from one sitting share the same timestamp: the app groups them by participant and timestamp. Pick a
+          column if your file has one (a session, beep, prompt or REDCap event column), or if each answer has its own timestamp.
+        </p>
+      </details>
+
+      {m.layout === 'wide' && (
+        <Field label="Where are the question IDs and question text?" hint="Some exports put the question text in the column names and the IDs in the first row (or the other way round). Qualtrics CSVs have IDs, then text, then an import row.">
+          <div className="dm-header-rows">
+            {[0, 1, 2, 3].slice(0, Math.min(roles.length + 1, 4)).map((k) => (
+              <label key={k} className="dm-header-row">
+                <span>{k === 0 ? 'Column names' : `Row ${k}`}</span>
+                <select className="dm-input dm-select-sm" value={k < roles.length ? roles[k] : 'data'} onChange={(e) => setRole(k, e.target.value as HeaderRole | 'data')}>
+                  {k > 0 && <option value="data">Data starts here</option>}
+                  {(Object.keys(ROLE_LABELS) as HeaderRole[]).map((r) => (
+                    <option key={r} value={r}>
+                      {ROLE_LABELS[r]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ))}
+          </div>
+        </Field>
+      )}
 
       {m.layout === 'wide' && (
         <Field label="Variable columns">
@@ -181,6 +236,7 @@ export function DatasetImport({ initial, spec, onLoaded, notify }: Props) {
         <table className="dm-dd">
           <thead>
             <tr>
+              <th className="dm-row-tag">{m.layout === 'wide' ? ROLE_LABELS[roles[0]!] : ''}</th>
               {cols.map((c) => (
                 <th key={c} className={mappedCols.has(c) ? 'is-mapped' : ''}>
                   {c}
@@ -190,7 +246,8 @@ export function DatasetImport({ initial, spec, onLoaded, notify }: Props) {
           </thead>
           <tbody>
             {file.table.rows.slice(0, 5).map((r, i) => (
-              <tr key={i}>
+              <tr key={i} className={i + 1 < roles.length ? 'is-header' : ''}>
+                <td className="dm-row-tag">{i + 1 < roles.length ? ROLE_LABELS[roles[i + 1]!] : ''}</td>
                 {r.map((v, j) => (
                   <td key={j}>{v}</td>
                 ))}
@@ -199,6 +256,20 @@ export function DatasetImport({ initial, spec, onLoaded, notify }: Props) {
           </tbody>
         </table>
       </div>
+
+      {sample.length > 0 && (
+        <div className="dm-var-sample">
+          <span className="dm-hint">Variables as they will be read:</span>
+          <ul>
+            {sample.map((v) => (
+              <li key={v}>
+                <code>{v}</code>
+                {preview?.ok && preview.result.questionText.get(v) ? <span>{preview.result.questionText.get(v)}</span> : <span className="dm-hint">no question text</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="dm-dataset-foot">
         <div className="dm-dataset-result">

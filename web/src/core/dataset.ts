@@ -1,4 +1,4 @@
-// "Bring your own dataset": a table of responses + a description of its layout
+﻿// "Bring your own dataset": a table of responses + a description of its layout
 // -> the spec's long-format `data` block, which every tool reads.
 //
 // Layouts:
@@ -20,6 +20,9 @@ export interface DatasetTable {
 
 export type DatasetLayout = 'long' | 'wide';
 
+/** What a header row holds, in a wide file: the variables' question IDs, their question text, or nothing useful. */
+export type HeaderRole = 'id' | 'text' | 'ignore';
+
 export interface DatasetMapping {
   layout: DatasetLayout;
   /** Column holding the participant ID. */
@@ -30,12 +33,20 @@ export interface DatasetMapping {
   session?: string;
   /** Column naming the survey/form a row belongs to (optional). */
   survey?: string;
-  /** long only: column naming the variable. */
+  /** long only: column naming the variable (its question ID). */
   question?: string;
+  /** long only: column holding the question text (optional). */
+  questionText?: string;
   /** long only: column holding the value. */
   response?: string;
   /** wide only: the variable columns (default: every unmapped column). */
   variables?: string[];
+  /**
+   * wide only: what the column names and any rows under them hold, top down. ['id'] (the default)
+   * means the column names are question IDs and data starts on the first row; ['text', 'id'] means
+   * the column names are question text and the first row holds the IDs, with data from row 2.
+   */
+  headerRows?: HeaderRole[];
   /** IANA timezone for times written without an offset (default UTC). */
   timeZone?: string;
   /** Values that mean "missing" (in addition to blank and NA). */
@@ -47,6 +58,8 @@ export interface DatasetResult {
   /** Variable name -> the survey it belongs to (when a survey column was mapped). */
   variableSurveys: Map<string, string>;
   variables: string[];
+  /** Question ID -> question text, when the file has it. */
+  questionText: Map<string, string>;
   notes: string[];
 }
 
@@ -62,7 +75,14 @@ export function parseDataset(text: string): DatasetTable {
   return { columns, rows: body.map((r) => columns.map((_, i) => (r[i] ?? '').trim())) };
 }
 
-const has = (cols: string[], ...patterns: RegExp[]) => cols.find((c) => patterns.some((p) => p.test(c)));
+/** The first column matching the first pattern that matches any column: earlier patterns are better guesses. */
+const has = (cols: string[], ...patterns: RegExp[]) => {
+  for (const p of patterns) {
+    const c = cols.find((x) => p.test(x));
+    if (c) return c;
+  }
+  return undefined;
+};
 
 /** Best guess at a mapping from column names (the user can change every choice). */
 export function guessMapping(table: DatasetTable): DatasetMapping {
@@ -74,8 +94,12 @@ export function guessMapping(table: DatasetTable): DatasetMapping {
   const survey = has(cols, /^(survey|survey[ _.]?name|form|instrument|questionnaire)$/i);
   const question = has(cols, /^(question[ _.]?id|question|item|variable|var|item[ _.]?id)$/i);
   const response = has(cols, /^(user[ _.]?response|response|value|answer|score)$/i);
+  const questionText = has(cols, /^(question[ _.]?text|item[ _.]?text|text|label|prompt[ _.]?text|wording)$/i);
   const layout: DatasetLayout = question && response ? 'long' : 'wide';
   const used = new Set([participant, time, session, survey].filter(Boolean) as string[]);
+  // Survey platforms' bookkeeping columns aren't questions: leave them out of the variables by default.
+  const bookkeeping = /^(start_?date|end_?date|recorded_?date|status|ip_?address|progress|duration.*|finished|recipient.*|external_?(data_?)?reference|location.*|distribution_?channel|user_?language|q_.*|redcap_.*|.*_complete|.*_timestamp)$/i;
+  const variables = layout === 'wide' ? cols.filter((c) => !used.has(c) && !bookkeeping.test(c)) : undefined;
   return {
     layout,
     participant,
@@ -84,8 +108,32 @@ export function guessMapping(table: DatasetTable): DatasetMapping {
     survey: layout === 'long' ? survey : undefined,
     question: layout === 'long' ? question : undefined,
     response: layout === 'long' ? response : undefined,
-    variables: layout === 'wide' ? cols.filter((c) => !used.has(c)) : undefined,
+    questionText: layout === 'long' ? questionText : undefined,
+    variables,
+    headerRows: variables ? guessHeaderRows(table, variables) : undefined,
   };
+}
+
+const looksLikeText = (v: string) => /\s/.test(v.trim()) && v.trim().length > 12;
+const looksLikeId = (v: string) => /^[A-Za-z_][\w.]*$/.test(v.trim()) && v.trim().length <= 40;
+
+/**
+ * Guess what the header rows of a wide file hold, from the variable columns: column names that read
+ * like sentences are question text; a first row of short identifiers (or of sentences, under ID
+ * column names) is a second header row; Qualtrics' third row ({"ImportId": ...}) is ignored.
+ */
+export function guessHeaderRows(table: DatasetTable, variableColumns: string[]): HeaderRole[] {
+  const vars = variableColumns.map((c) => table.columns.indexOf(c)).filter((i) => i >= 0);
+  if (!vars.length || table.rows.length < 2) return ['id'];
+  const share = (row: string[] | undefined, test: (v: string) => boolean) => (row ? vars.filter((i) => test(row[i] ?? '')).length / vars.length : 0);
+  const names = vars.map((i) => table.columns[i]!);
+  const namesAreText = names.filter(looksLikeText).length / vars.length > 0.5;
+  const roles: HeaderRole[] = [namesAreText ? 'text' : 'id'];
+  const r1 = table.rows[0];
+  if (namesAreText && share(r1, looksLikeId) > 0.8) roles.push('id');
+  else if (!namesAreText && share(r1, looksLikeText) > 0.5) roles.push('text');
+  if (roles.length > 1 && share(table.rows[1], (v) => /^\{\s*"?ImportId/.test(v)) > 0.5) roles.push('ignore');
+  return roles;
 }
 
 const DEFAULT_MISSING = ['', 'na', 'n/a', 'nan', 'null', '.'];
@@ -106,6 +154,7 @@ export function datasetToData(table: DatasetTable, m: DatasetMapping, now = new 
   const cols = { 'Participant.ID': [] as string[], 'Session.ID': [] as number[], 'Survey.Date.Completed': [] as string[], 'Question.ID': [] as string[], 'User.Response': [] as string[] };
   const sessionIds = new Map<string, number>();
   const variableSurveys = new Map<string, string>();
+  const questionText = new Map<string, string>();
   let badTimes = 0;
   let skippedNoId = 0;
 
@@ -135,37 +184,55 @@ export function datasetToData(table: DatasetTable, m: DatasetMapping, now = new 
   if (m.layout === 'long') {
     const qI = idx(m.question);
     const vI = idx(m.response);
-    if (qI < 0 || vI < 0) throw new Error('Choose the question (variable name) and response columns.');
+    const xI = idx(m.questionText);
+    if (qI < 0 || vI < 0) throw new Error('Choose the question ID and response value columns.');
     for (const r of table.rows) {
       if (!r[pI]) {
         skippedNoId++;
         continue;
       }
       const q = (r[qI] ?? '').trim();
-      if (q) push(rowMeta(r), q, r[vI] ?? '');
+      if (!q) continue;
+      push(rowMeta(r), q, r[vI] ?? '');
+      const text = xI >= 0 ? (r[xI] ?? '').trim() : '';
+      if (text && !questionText.has(q)) questionText.set(q, text);
     }
   } else {
     const mapped = new Set([m.participant, m.time, m.session, m.survey].filter(Boolean));
     const vars = (m.variables?.length ? m.variables : table.columns.filter((c) => !mapped.has(c))).filter((c) => table.columns.includes(c));
     if (!vars.length) throw new Error('Choose at least one variable column.');
     const vIdx = vars.map((v) => table.columns.indexOf(v));
-    for (const r of table.rows) {
+    // Header rows: the column names, then any rows under them that hold IDs or text, not data.
+    const roles: HeaderRole[] = m.headerRows?.length ? m.headerRows : ['id'];
+    const headerAt = (k: number) => (k === 0 ? table.columns : (table.rows[k - 1] ?? []));
+    const idRow = roles.indexOf('id');
+    const textRow = roles.indexOf('text');
+    const ids = vIdx.map((ci, k) => (idRow >= 0 ? (headerAt(idRow)[ci] ?? '').trim() : '') || vars[k]!);
+    if (new Set(ids).size < ids.length) notes.push('Some question IDs repeat; their responses are combined under one variable.');
+    if (textRow >= 0)
+      vIdx.forEach((ci, k) => {
+        const text = (headerAt(textRow)[ci] ?? '').trim();
+        if (text && text !== ids[k]) questionText.set(ids[k]!, text);
+      });
+    for (const r of table.rows.slice(roles.length - 1)) {
       if (!r[pI]) {
         skippedNoId++;
         continue;
       }
       const meta = rowMeta(r);
-      vars.forEach((v, k) => push(meta, v, r[vIdx[k]!] ?? ''));
+      vIdx.forEach((ci, k) => push(meta, ids[k]!, r[ci] ?? ''));
     }
   }
 
-  if (sI < 0) notes.push('Sessions were numbered from each participant + time combination.');
-  if (tI < 0) notes.push(`No time column was chosen, so every response is dated ${fallbackTime.slice(0, 10)} (the import date).`);
-  if (badTimes) notes.push(`${badTimes} row(s) had a time that couldn't be read; they use the import date.`);
+  if (sI < 0) notes.push('Answers from the same participant with the same timestamp were grouped as one survey occasion.');
+  if (tI < 0) notes.push(`No timestamp column was chosen, so every response is dated ${fallbackTime.slice(0, 10)} (the import date).`);
+  if (badTimes) notes.push(`${badTimes} row(s) had a timestamp that couldn't be read; they use the import date.`);
   if (skippedNoId) notes.push(`Skipped ${skippedNoId} row(s) with no participant ID.`);
   const variables = [...new Set(cols['Question.ID'])];
-  notes.unshift(`Read ${table.rows.length.toLocaleString()} rows: ${new Set(cols['Participant.ID']).size} participants, ${variables.length} variables, ${cols['Question.ID'].length.toLocaleString()} responses.`);
-  return { data: cols, variableSurveys, variables, notes };
+  const dataRows = m.layout === 'wide' ? Math.max(0, table.rows.length - Math.max(0, (m.headerRows?.length ?? 1) - 1)) : table.rows.length;
+  notes.unshift(`Read ${dataRows.toLocaleString()} rows: ${new Set(cols['Participant.ID']).size} participants, ${variables.length} variables, ${cols['Question.ID'].length.toLocaleString()} responses.`);
+  if (questionText.size) notes.push(`Question text found for ${questionText.size} of ${variables.length} variables.`);
+  return { data: cols, variableSurveys, variables, questionText, notes };
 }
 
 export interface AttachReport {
@@ -180,8 +247,10 @@ export interface AttachReport {
  * Put response data into a study, matching data variables to Question.ID
  * (case-insensitive; Item.ID also accepted and rewritten to the Question.ID).
  */
-export function attachData(spec: StudySpec, data: Record<string, unknown[]>): { spec: StudySpec; report: AttachReport } {
+export function attachData(spec: StudySpec, data: Record<string, unknown[]>, questionText?: Map<string, string>): { spec: StudySpec; report: AttachReport } {
   const lookup = new Map<string, string>();
+  const byText = new Map<string, string>();
+  const norm = (t: string) => t.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
   const questionIds = new Set<string>();
   for (const s of spec.surveys)
     for (const q of s.questions ?? []) {
@@ -189,8 +258,11 @@ export function attachData(spec: StudySpec, data: Record<string, unknown[]>): { 
       questionIds.add(q['Question.ID']);
       lookup.set(q['Question.ID'].toLowerCase(), q['Question.ID']);
       if (!lookup.has(q['Item.ID'].toLowerCase())) lookup.set(q['Item.ID'].toLowerCase(), q['Question.ID']);
+      if (q['Question.Text'] && !byText.has(norm(q['Question.Text']))) byText.set(norm(q['Question.Text']), q['Question.ID']);
     }
-  const qcol = (data['Question.ID'] as string[]).map((q) => lookup.get(String(q).toLowerCase()) ?? q);
+  // By ID first; then, for variables whose ID isn't in the study, by matching question text.
+  const resolve = (q: string) => lookup.get(q.toLowerCase()) ?? (questionText?.has(q) ? byText.get(norm(questionText.get(q)!)) : undefined) ?? byText.get(norm(q)) ?? q;
+  const qcol = (data['Question.ID'] as string[]).map((q) => resolve(String(q)));
   const inData = new Set(qcol);
   const report: AttachReport = {
     matched: [...inData].filter((q) => questionIds.has(q)),
@@ -218,7 +290,11 @@ export function inferSpecFromData(result: DatasetResult, studyName: string): Stu
   const surveys: Survey[] = [...bySurvey.entries()].map(([survey, vars]) => ({
     'Survey.Name': survey,
     'Survey.LongName': survey === 'dataset' ? 'Dataset variables' : survey,
-    questions: vars.map((name) => inferQuestion(name, values.get(name) ?? [])),
+    questions: vars.map((name) => {
+      const q = inferQuestion(name, values.get(name) ?? []);
+      const text = result.questionText.get(name);
+      return text ? { ...q, 'Question.Text': text } : q;
+    }),
   }));
   return {
     'Study.Metadata': { 'Study.Name': studyName },

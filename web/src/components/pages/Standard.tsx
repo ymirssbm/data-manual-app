@@ -27,33 +27,63 @@ export function StandardPage() {
   );
 }
 
+/** Everything a section lists, counting nested items but not the group headings. */
+const countItems = (items: StdItem[]): number => items.reduce((n, it) => n + (it.children ? countItems(it.children) : 1), 0);
+
 function HumanStandard() {
+  const ids = [...STANDARD_SECTIONS.map((s) => s.id), 'glossary'];
+  // Open sections, and open parts of a section (keyed "codebook/Title page"). The first section starts open.
+  const [open, setOpen] = useState<Set<string>>(() => new Set([ids[0]!]));
+  const toggle = (id: string, on: boolean) => setOpen((cur) => (cur.has(id) === on ? cur : on ? new Set([...cur, id]) : new Set([...cur].filter((x) => x !== id))));
+  const allKeys = [...ids, ...STANDARD_SECTIONS.flatMap((s) => s.items.filter((it) => it.children).map((it) => `${s.id}/${it.text}`))];
+  const jump = (id: string) => {
+    toggle(id, true);
+    requestAnimationFrame(() => document.getElementById(`std-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  };
   return (
     <div className="dm-std">
       <section className="dm-home-section">
         <p className="dm-std-lead">{STANDARD_INTRO}</p>
-        <nav className="dm-std-toc" aria-label="Sections">
-          {STANDARD_SECTIONS.map((s) => (
-            <a key={s.id} href={`#std-${s.id}`} onClick={(e) => (e.preventDefault(), document.getElementById(`std-${s.id}`)?.scrollIntoView({ behavior: 'smooth' }))}>
-              {s.title}
+        <div className="dm-std-bar">
+          <nav className="dm-std-toc" aria-label="Sections">
+            {STANDARD_SECTIONS.map((s) => (
+              <a key={s.id} href={`#std-${s.id}`} onClick={(e) => (e.preventDefault(), jump(s.id))}>
+                {s.title}
+              </a>
+            ))}
+            <a href="#std-glossary" onClick={(e) => (e.preventDefault(), jump('glossary'))}>
+              Glossary
             </a>
-          ))}
-          <a href="#std-glossary" onClick={(e) => (e.preventDefault(), document.getElementById('std-glossary')?.scrollIntoView({ behavior: 'smooth' }))}>
-            Glossary
-          </a>
-        </nav>
+          </nav>
+          <span className="dm-std-all">
+            <button className="dm-link-btn" onClick={() => setOpen(new Set(allKeys))}>
+              Expand all
+            </button>
+            <button className="dm-link-btn" onClick={() => setOpen(new Set())}>
+              Collapse all
+            </button>
+          </span>
+        </div>
       </section>
       {STANDARD_SECTIONS.map((s) => (
-        <section key={s.id} id={`std-${s.id}`} className="dm-home-section">
-          <h2>{s.title}</h2>
-          {s.intro && <p>{s.intro}</p>}
-          <StdList items={s.items} depth={0} />
-          {s.id === 'codebook' && <p className="dm-std-note">{STANDARD_NOTE}</p>}
-        </section>
+        <details key={s.id} id={`std-${s.id}`} className="dm-std-sec" open={open.has(s.id)} onToggle={(e) => toggle(s.id, e.currentTarget.open)}>
+          <summary>
+            <span className="dm-std-sec-title">{s.title}</span>
+            <span className="dm-std-count">{countItems(s.items)} items</span>
+          </summary>
+          <div className="dm-std-body">
+            {s.intro && <p className="dm-std-p">{s.intro}</p>}
+            <StdItems items={s.items} section={s.id} open={open} toggle={toggle} />
+            {s.id === 'codebook' && <p className="dm-std-note">{STANDARD_NOTE}</p>}
+          </div>
+        </details>
       ))}
-      <section id="std-glossary" className="dm-home-section">
-        <h2>Glossary of terms used</h2>
-        <dl className="dm-std-glossary">
+      <details id="std-glossary" className="dm-std-sec" open={open.has('glossary')} onToggle={(e) => toggle('glossary', e.currentTarget.open)}>
+        <summary>
+          <span className="dm-std-sec-title">Glossary of terms used</span>
+          <span className="dm-std-count">{GLOSSARY.length} terms</span>
+        </summary>
+        <dl className="dm-std-body dm-std-glossary">
           {GLOSSARY.map((g) => (
             <div key={g.term}>
               <dt>{g.term}</dt>
@@ -71,21 +101,64 @@ function HumanStandard() {
             </div>
           ))}
         </dl>
-      </section>
+      </details>
     </div>
   );
 }
 
-function StdList({ items, depth }: { items: StdItem[]; depth: number }) {
+/** A section's items: plain items as a compact checklist; items with parts as rows that fold open. */
+function StdItems({ items, section, open, toggle }: { items: StdItem[]; section: string; open: Set<string>; toggle(id: string, on: boolean): void }) {
+  const leaves = items.filter((it) => !it.children);
+  const groups = items.filter((it) => it.children);
   return (
-    <ul className={`dm-std-list depth-${Math.min(depth, 3)}`}>
+    <>
+      {leaves.length > 0 && <Checklist items={leaves} />}
+      {groups.length > 0 && (
+        <div className="dm-std-parts">
+          {groups.map((it) => {
+            const key = `${section}/${it.text}`;
+            return (
+              <details key={key} className="dm-std-part" open={open.has(key)} onToggle={(e) => toggle(key, e.currentTarget.open)}>
+                <summary>
+                  <span>{it.text}</span>
+                  <span className="dm-std-count">{countItems(it.children!)}</span>
+                </summary>
+                <div className="dm-std-part-body">
+                  <StdTree items={it.children!} />
+                </div>
+              </details>
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+}
+
+function Checklist({ items }: { items: StdItem[] }) {
+  return (
+    <ul className="dm-std-checks">
       {items.map((it) => (
-        <li key={it.text}>
-          <span className={it.children ? 'dm-std-group' : undefined}>{it.text}</span>
-          {it.children && <StdList items={it.children} depth={depth + 1} />}
-        </li>
+        <li key={it.text}>{it.text}</li>
       ))}
     </ul>
+  );
+}
+
+/** Inside a part: sub-groups as small headings over their items, plain items as a checklist. */
+function StdTree({ items }: { items: StdItem[] }) {
+  const leaves = items.filter((it) => !it.children);
+  const groups = items.filter((it) => it.children);
+  return (
+    <>
+      {leaves.length > 0 && <Checklist items={leaves} />}
+      {groups.map((g) => (
+        <div key={g.text} className="dm-std-sub">
+          <h4>{g.text}</h4>
+          <StdTree items={g.children!} />
+        </div>
+      ))}
+    </>
   );
 }
 

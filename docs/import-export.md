@@ -31,9 +31,15 @@ Anything that can't be carried over exactly (complex REDCap branching, unsupport
 
 Have responses in a spreadsheet? Drop it on the "Your dataset" tab of Data Import (the same place study files go). A CSV or TSV that isn't a REDCap data dictionary opens the column mapper:
 
-1. **Layout**: long (one row per answer, typical for EMA) or wide (one row per survey, one column per question).
-2. **Columns**: map participant, time, question and response columns (guessed automatically, then adjustable). Timestamps in many formats are understood, including US dates and Unix times, with a timezone you choose.
-3. **Use it**: attach the data to the loaded study, or build a new study from the data (question types are inferred from the values).
+1. **Layout**: long (one row per answer, typical for EMA) or wide (one row per survey occasion, one column per question).
+2. **Columns** (guessed automatically, then adjustable):
+   - **Participant ID**.
+   - **Response timestamp**: the date and time each answer was submitted (not the study day or wave). Many formats are understood, including US dates and Unix times, with a timezone you choose for times written without one.
+   - **Survey / form** (optional): which survey each answer belongs to.
+   - **Survey occasion** (optional): which answers were given together in one sitting (one prompt, beep or survey completion). Leave it empty when all answers from one sitting share a timestamp; pick a column when the file has one (session, beep, prompt, REDCap event) or when each answer has its own timestamp.
+   - Long files: the **question ID** column, an optional **question text** column, and the **response value** column.
+3. **Question IDs and text in wide files**: say what the column names and the rows under them hold. For example, column names = question text and row 1 = question IDs, or (Qualtrics CSV) column names = IDs, row 1 = text, row 2 = ignore. This is guessed from the file, and a preview lists each variable's ID and text before you load it. Platform bookkeeping columns (StartDate, Status, Progress, IP address, REDCap's `_complete` columns...) are left out of the questions by default.
+4. **Use it**: attach the data to the loaded study (matched by question ID, or by question text when the IDs differ), or build a new study from the data (question types are inferred from the values, and question text is kept).
 
 ## Export
 
