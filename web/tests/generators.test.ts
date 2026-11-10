@@ -100,6 +100,23 @@ describe('descriptives', () => {
 });
 
 describe('codebook', () => {
+  it('can switch off single parts of the missingness, histogram and participation pages', () => {
+    const full = generateCodebookHtml(spec());
+    expect(full).toContain('Answered / Delivered');
+    expect(full).toContain('Missingness ICC');
+    const trimmed = generateCodebookHtml(spec(), { missParticipants: false, missIcc: false, missNote: false, partTimeline: false });
+    expect(trimmed).toContain('Answered / Delivered');
+    expect(trimmed).not.toContain('<span class="cb-stat-l">Participants</span>');
+    expect(trimmed).not.toContain('Missingness ICC</span>');
+    expect(trimmed).not.toContain('ICC(1) of answered');
+    expect(full).toContain('cb-chart-h">Surveys by day');
+    expect(trimmed).not.toContain('cb-chart-h">Surveys by day');
+    expect(trimmed).toContain('cb-chart-h">Enrollment over time');
+    // No parts left means no tab at all.
+    const none = generateCodebookHtml(spec(), { missAnswered: false, missMissing: false, missParticipants: false, missIcc: false, missPerPerson: false });
+    expect(none).not.toContain('Missingness Descriptives');
+  });
+
   it('keeps the prior codebook structure', () => {
     const html = generateCodebookHtml(spec(), TITLE_PAGE, { generatedAt: new Date('2026-01-01') });
     expect(html.startsWith('<!doctype html>')).toBe(true);

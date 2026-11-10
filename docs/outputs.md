@@ -18,7 +18,7 @@ Structure:
   - *Surveys by day since first survey*: one row per participant, one dot per completed survey, with a shaded curve of surveys per day. In measurement-burst designs the dots are colored by burst (a gap of more than a week starts a new burst).
 - **Variable List**: per survey, an optional flowchart, then every question. Blocks are framed panels with their own skip-logic line.
   - a header with the question text, its variable name, and how it was delivered and stored (for example "Multiple Choice • Integer", plus "Conditional" when skip logic applies);
-  - click the header to open the skip-logic line ("Shown only if …") and **Descriptives**: frequency table, bar plot, histogram (numeric), missingness (answered/delivered, missed per participant, response rate by participant, missingness ICC) and an outlier screen (box plot with Tukey fences).
+  - click the header to open the skip-logic line ("Shown only if …") and **Descriptives**: frequency table, bar plot, histogram (numeric), missingness (answered/delivered, missed per participant, response rate by participant, missingness ICC) and an outlier screen (box plot with Tukey fences). On the generator's **Content** tab, each of these can be switched off, and so can the parts inside the histogram, missingness, outlier and participation sections (for example, "Participants delivered to" when everyone gets every item).
 - A table of contents and a "Sections" menu; every section folds.
 
 Options (**Content** tab) switch sections, question types and descriptives on or off. **Appearance** sets the theme (five presets, or your own colors), body and heading fonts (system fonts that work offline, or web fonts), text size, and chart style. Charts use the accent color by default.

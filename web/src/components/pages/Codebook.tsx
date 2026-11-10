@@ -47,7 +47,15 @@ const TREE: TreeNode[] = [
   { label: 'Abstract', key: 'abstract' },
   { label: 'Executive Summary', key: 'executiveSummary' },
   { label: 'Study Schedule', key: 'studySchedule' },
-  { label: 'Participation Plots', key: 'participationPlots', needsData: true },
+  {
+    label: 'Participation Plots',
+    key: 'participationPlots',
+    needsData: true,
+    children: [
+      { label: 'Enrollment over time', key: 'partEnrollment', needsData: true },
+      { label: 'Surveys by day since first survey', key: 'partTimeline', needsData: true },
+    ],
+  },
   { label: 'Survey Flowcharts', key: 'flowcharts' },
   { label: 'Data Types', children: QUESTION_TYPES.map((t) => ({ label: t, type: t })) },
   {
@@ -59,9 +67,37 @@ const TREE: TreeNode[] = [
       { label: 'Skip Logic', key: 'skipLogic' },
       { label: 'Frequency Table', key: 'frequencyTable', needsData: true },
       { label: 'Bar Plot', key: 'barPlot', needsData: true },
-      { label: 'Histograms', key: 'histograms', needsData: true },
-      { label: 'Missingness Page', key: 'missingness', needsData: true },
-      { label: 'Outlier Plots', key: 'outlierPlots', needsData: true },
+      {
+        label: 'Histograms',
+        key: 'histograms',
+        needsData: true,
+        children: [
+          { label: 'Summary statistics (N, mean, SD…)', key: 'histStats', needsData: true },
+          { label: 'Histogram chart', key: 'histChart', needsData: true },
+        ],
+      },
+      {
+        label: 'Missingness Page',
+        key: 'missingness',
+        needsData: true,
+        children: [
+          { label: 'Answered / delivered', key: 'missAnswered', needsData: true },
+          { label: 'Missing count', key: 'missMissing', needsData: true },
+          { label: 'Participants delivered to', key: 'missParticipants', needsData: true },
+          { label: 'Missingness ICC', key: 'missIcc', needsData: true },
+          { label: 'Missing per participant table', key: 'missPerPerson', needsData: true },
+          { label: 'ICC explanation note', key: 'missNote', needsData: true },
+        ],
+      },
+      {
+        label: 'Outlier Plots',
+        key: 'outlierPlots',
+        needsData: true,
+        children: [
+          { label: 'Outlier summary', key: 'outlierSummary', needsData: true },
+          { label: 'Box plot', key: 'outlierPlot', needsData: true },
+        ],
+      },
       { label: 'Screenshot', key: 'screenshots' },
     ],
   },
@@ -114,16 +150,26 @@ export function CodebookGeneratorPage({ spec, settings, setSettings, codebook, o
   const setText = (k: keyof CodebookText) => (e: { target: { value: string } }) => setSettings({ ...settings, text: { ...text, [k]: e.target.value } });
   const preset = Object.entries(CODEBOOK_PRESETS).find(([, p]) => (Object.keys(p.theme) as Array<keyof CodebookTheme>).every((k) => p.theme[k] === theme[k]))?.[0];
 
-  const isOn = (n: TreeNode): boolean => (n.key ? (opts[n.key] as boolean) : n.type ? opts.dataTypes.includes(n.type) : (n.children ?? []).every(isOn));
+  // A section with parts (e.g. Missingness Page) has its own switch; it's on when the switch is on and any part is.
+  const isOn = (n: TreeNode): boolean =>
+    n.key ? (opts[n.key] as boolean) && (!n.children || n.children.some(isOn)) : n.type ? opts.dataTypes.includes(n.type) : (n.children ?? []).every(isOn);
   const setNode = (n: TreeNode, on: boolean, o: CodebookOptions): CodebookOptions => {
-    if (n.key) return { ...o, [n.key]: on };
+    const kids = (acc: CodebookOptions) => (n.children ?? []).reduce((a, c) => setNode(c, on, a), acc);
+    if (n.key) return n.children ? kids({ ...o, [n.key]: on }) : { ...o, [n.key]: on };
     if (n.type) return { ...o, dataTypes: on ? [...new Set([...o.dataTypes, n.type])] : o.dataTypes.filter((t) => t !== n.type) };
-    return (n.children ?? []).reduce((acc, c) => setNode(c, on, acc), o);
+    return kids(o);
   };
-  const renderNode = (n: TreeNode) => {
+  /** Switching a part on also switches on the section it belongs to. */
+  const setChild = (parent: TreeNode | null, n: TreeNode, on: boolean) => {
+    let o = setNode(n, on, opts);
+    if (on && parent?.key) o = { ...o, [parent.key]: true };
+    setOpts(o);
+  };
+  const renderNode = (n: TreeNode, parent: TreeNode | null = null) => {
     const disabled = n.needsData && !hasData;
     const on = isOn(n);
-    const partial = !n.key && !n.type && !on && (n.children ?? []).some(isOn);
+    const anyChildOn = (n.children ?? []).some(isOn);
+    const partial = n.children ? (on ? !n.children.every(isOn) : !n.key && anyChildOn) : false;
     return (
       <li key={n.label}>
         <label className={`dm-tree-item ${disabled ? 'is-disabled' : ''}`}>
@@ -134,12 +180,12 @@ export function CodebookGeneratorPage({ spec, settings, setSettings, codebook, o
             ref={(el) => {
               if (el) el.indeterminate = partial;
             }}
-            onChange={(e) => setOpts(setNode(n, e.target.checked, opts))}
+            onChange={(e) => setChild(parent, n, e.target.checked)}
           />
           <span>{n.label}</span>
           {disabled && <span className="dm-hint">(needs response data)</span>}
         </label>
-        {n.children && <ul>{n.children.map(renderNode)}</ul>}
+        {n.children && <ul>{n.children.map((c) => renderNode(c, n))}</ul>}
       </li>
     );
   };
@@ -273,7 +319,7 @@ export function CodebookGeneratorPage({ spec, settings, setSettings, codebook, o
 
           {panel === 'content' && (
             <Box title="Codebook Options">
-              <ul className="dm-tree">{TREE.map(renderNode)}</ul>
+              <ul className="dm-tree">{TREE.map((n) => renderNode(n))}</ul>
             </Box>
           )}
 

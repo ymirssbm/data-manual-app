@@ -46,6 +46,9 @@ export interface CodebookOptions {
   studySchedule: boolean;
   /** Enrollment over time and surveys by day since first survey (needs response data). */
   participationPlots: boolean;
+  /** Parts of the participation page. */
+  partEnrollment: boolean;
+  partTimeline: boolean;
   flowcharts: boolean;
   /** Question types to include on variable pages ("Block" controls block headings). */
   dataTypes: string[];
@@ -56,9 +59,22 @@ export interface CodebookOptions {
   frequencyTable: boolean;
   barPlot: boolean;
   histograms: boolean;
+  /** Parts of the histogram tab. */
+  histStats: boolean;
+  histChart: boolean;
   missingness: boolean;
+  /** Parts of the missingness tab, each on its own. */
+  missAnswered: boolean;
+  missMissing: boolean;
+  missParticipants: boolean;
+  missIcc: boolean;
+  missPerPerson: boolean;
+  missNote: boolean;
   /** Outlier screen (box plot + flagged values) for numeric items. */
   outlierPlots: boolean;
+  /** Parts of the outlier tab. */
+  outlierSummary: boolean;
+  outlierPlot: boolean;
   screenshots: boolean;
 }
 
@@ -72,6 +88,8 @@ export const DEFAULT_CODEBOOK_OPTIONS: CodebookOptions = {
   executiveSummary: true,
   studySchedule: true,
   participationPlots: true,
+  partEnrollment: true,
+  partTimeline: true,
   flowcharts: true,
   dataTypes: [...QUESTION_TYPES],
   deliveryType: true,
@@ -81,8 +99,18 @@ export const DEFAULT_CODEBOOK_OPTIONS: CodebookOptions = {
   frequencyTable: true,
   barPlot: true,
   histograms: true,
+  histStats: true,
+  histChart: true,
   missingness: true,
+  missAnswered: true,
+  missMissing: true,
+  missParticipants: true,
+  missIcc: true,
+  missPerPerson: true,
+  missNote: true,
   outlierPlots: true,
+  outlierSummary: true,
+  outlierPlot: true,
   screenshots: true,
 };
 
@@ -284,17 +312,18 @@ export function generateCodebookHtml(
   if (o.participationPlots && hasResponseData(spec)) {
     const enrolled = enrollment(spec);
     const tl = surveyTimeline(spec);
-    if (enrolled.length && tl) {
-      out.push(
-        page(
-          'Participation',
-          `<h4 class="cb-chart-h">Enrollment over time</h4>${enrollmentSvg(enrolled)}<p class="cb-small">Cumulative participants by the date of their first completed survey (${enrolled.length} participants, ${esc(enrolled[0]!.date)} to ${esc(enrolled[enrolled.length - 1]!.date)}).</p>
-<h4 class="cb-chart-h">Surveys by day since first survey</h4>${timelineSvg(tl)}<p class="cb-small">Each row is a participant (in enrollment order) and each dot a completed survey. The shaded curve shows how many surveys were completed on each day.${
-            tl.bursts > 1 ? ' Colors mark measurement bursts: a gap of more than a week starts a new burst.' : ''
-          }</p>`,
-        ),
+    const parts: string[] = [];
+    if (o.partEnrollment && enrolled.length)
+      parts.push(
+        `<h4 class="cb-chart-h">Enrollment over time</h4>${enrollmentSvg(enrolled)}<p class="cb-small">Cumulative participants by the date of their first completed survey (${enrolled.length} participants, ${esc(enrolled[0]!.date)} to ${esc(enrolled[enrolled.length - 1]!.date)}).</p>`,
       );
-    }
+    if (o.partTimeline && tl)
+      parts.push(
+        `<h4 class="cb-chart-h">Surveys by day since first survey</h4>${timelineSvg(tl)}<p class="cb-small">Each row is a participant (in enrollment order) and each dot a completed survey. The shaded curve shows how many surveys were completed on each day.${
+          tl.bursts > 1 ? ' Colors mark measurement bursts: a gap of more than a week starts a new burst.' : ''
+        }</p>`,
+      );
+    if (parts.length) out.push(page('Participation', parts.join('')));
   }
 
   // ---- Variable list: survey > block > variable, each level collapsible
@@ -436,9 +465,11 @@ function variablePage(m: SurveyModel, q: Question, o: CodebookOptions, t: Codebo
   const tabs: Array<{ name: string; html: string }> = [];
   if (stats?.frequencies && o.frequencyTable) tabs.push({ name: 'Frequency Table', html: frequencyTableHtml(stats) });
   if (stats?.frequencies && o.barPlot) tabs.push({ name: 'Barplot', html: barplotSvg(text, stats.frequencies) });
-  if (stats?.numeric && o.histograms) tabs.push({ name: 'Histogram', html: histogramHtml(stats) });
-  if (stats && o.missingness) tabs.push({ name: 'Missingness', html: missingnessHtml(q, stats, m) });
-  if (stats?.outliers && o.outlierPlots) tabs.push({ name: 'Outliers', html: outliersHtml(stats) });
+  // A tab shows when its section is on and at least one of its parts is.
+  const add = (name: string, html: string) => html && tabs.push({ name, html });
+  if (stats?.numeric && o.histograms) add('Histogram', histogramHtml(stats, o));
+  if (stats && o.missingness) add('Missingness', missingnessHtml(q, stats, m, o));
+  if (stats?.outliers && o.outlierPlots) add('Outliers', outliersHtml(stats, o));
   if (o.screenshots && screenshotsURL) {
     const base = screenshotsURL.replace(/\/+$/, '');
     tabs.push({
@@ -479,28 +510,38 @@ function frequencyTableHtml(s: ItemDescriptives): string {
     .join('')}</tbody></table>`;
 }
 
-function missingnessHtml(q: Question, s: ItemDescriptives, m: SurveyModel): string {
+function missingnessHtml(q: Question, s: ItemDescriptives, m: SurveyModel, o: CodebookOptions): string {
   const r2 = (x: number) => Number(x.toFixed(2));
   const pct = s.delivered ? (s.answered / s.delivered) * 100 : 0;
   const conditional = (m.branchesTo.get(q['Item.ID'])?.length ?? 0) > 0 || s.participants < s.totalParticipants;
   const mm = s.missingness;
   const tiles = [
-    `<div class="cb-stat"><span class="cb-stat-l">Answered / Delivered</span><span class="cb-stat-n">${s.answered} / ${s.delivered}</span><span class="cb-meter"><span style="width:${pct.toFixed(1)}%"></span></span><span class="cb-stat-sub">${pct.toFixed(1)}% response rate</span></div>`,
-    `<div class="cb-stat"><span class="cb-stat-l">Missing</span><span class="cb-stat-n">${s.missing}</span><span class="cb-stat-sub">${s.delivered ? ((s.missing / s.delivered) * 100).toFixed(1) : '0'}% of deliveries</span></div>`,
-    `<div class="cb-stat"><span class="cb-stat-l">Participants</span><span class="cb-stat-n">${s.participants}${s.totalParticipants ? ` / ${s.totalParticipants}` : ''}</span><span class="cb-stat-sub">${conditional ? (s.participants >= s.totalParticipants ? 'all were delivered this item' : 'were delivered this item') : 'delivered this item'}</span></div>`,
-    mm ? `<div class="cb-stat"><span class="cb-stat-l">Missingness ICC</span><span class="cb-stat-n">${mm.icc == null ? 'NA' : r2(mm.icc)}</span><span class="cb-stat-sub">share of missingness between people</span></div>` : '',
-  ].join('');
-  const perPerson = mm
+    o.missAnswered && `<div class="cb-stat"><span class="cb-stat-l">Answered / Delivered</span><span class="cb-stat-n">${s.answered} / ${s.delivered}</span><span class="cb-meter"><span style="width:${pct.toFixed(1)}%"></span></span><span class="cb-stat-sub">${pct.toFixed(1)}% response rate</span></div>`,
+    o.missMissing && `<div class="cb-stat"><span class="cb-stat-l">Missing</span><span class="cb-stat-n">${s.missing}</span><span class="cb-stat-sub">${s.delivered ? ((s.missing / s.delivered) * 100).toFixed(1) : '0'}% of deliveries</span></div>`,
+    o.missParticipants && `<div class="cb-stat"><span class="cb-stat-l">Participants</span><span class="cb-stat-n">${s.participants}${s.totalParticipants ? ` / ${s.totalParticipants}` : ''}</span><span class="cb-stat-sub">${conditional ? (s.participants >= s.totalParticipants ? 'all were delivered this item' : 'were delivered this item') : 'delivered this item'}</span></div>`,
+    o.missIcc && mm ? `<div class="cb-stat"><span class="cb-stat-l">Missingness ICC</span><span class="cb-stat-n">${mm.icc == null ? 'NA' : r2(mm.icc)}</span><span class="cb-stat-sub">share of missingness between people</span></div>` : '',
+  ]
+    .filter(Boolean)
+    .join('');
+  const perPerson = o.missPerPerson && mm
     ? `<table class="cb-table cb-compact"><thead><tr><th>Missing per participant</th><th>Min</th><th>Max</th><th>Mean</th><th>SD</th></tr></thead><tbody><tr><td>Count of missed deliveries</td><td>${r2(mm.min)}</td><td>${r2(mm.max)}</td><td>${r2(mm.mean)}</td><td>${r2(mm.sd)}</td></tr></tbody></table>`
     : '';
-  return `<p class="cb-miss-title"><strong>Missingness Descriptives</strong></p><div class="cb-stats">${tiles}</div>${perPerson}<p class="cb-small">ICC(1) of answered vs. missed across participants: near 0 means missed prompts are spread evenly; near 1 means a few participants account for most of them.</p>`;
+  // The note explains the ICC, so it goes with it.
+  const note = o.missNote && (o.missIcc || o.missPerPerson) && mm
+    ? `<p class="cb-small">ICC(1) of answered vs. missed across participants: near 0 means missed prompts are spread evenly; near 1 means a few participants account for most of them.</p>`
+    : '';
+  if (!tiles && !perPerson) return '';
+  return `<p class="cb-miss-title"><strong>Missingness Descriptives</strong></p>${tiles ? `<div class="cb-stats">${tiles}</div>` : ''}${perPerson}${note}`;
 }
 
-function outliersHtml(s: ItemDescriptives): string {
+function outliersHtml(s: ItemDescriptives, opts: CodebookOptions): string {
   const o = s.outliers!;
   const f = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(2));
   // Summary only: no per-response listing, so the codebook never exposes individual records.
-  return `<p><strong>Outlier screen</strong>: values below ${f(o.lower)} or above ${f(o.upper)} (1.5 × IQR beyond the quartiles) are flagged. ${o.flagged.length} of ${o.points.length} responses flagged.</p>${boxPlotSvg(o)}`;
+  const summary = opts.outlierSummary
+    ? `<p><strong>Outlier screen</strong>: values below ${f(o.lower)} or above ${f(o.upper)} (1.5 × IQR beyond the quartiles) are flagged. ${o.flagged.length} of ${o.points.length} responses flagged.</p>`
+    : '';
+  return summary + (opts.outlierPlot ? boxPlotSvg(o) : '');
 }
 
 function boxPlotSvg(o: NonNullable<ItemDescriptives['outliers']>): string {
@@ -539,11 +580,11 @@ ${pts
 </svg>`;
 }
 
-function histogramHtml(s: ItemDescriptives): string {
+function histogramHtml(s: ItemDescriptives, o: CodebookOptions): string {
   const n = s.numeric!;
   const f = (x: number) => Number(x.toFixed(2));
   const cells: Array<[string, number]> = [['N', n.n], ['Mean', f(n.mean)], ['SD', f(n.sd)], ['Median', f(n.median)], ['Min', f(n.min)], ['Max', f(n.max)]];
-  return `<dl class="cb-numstats">${cells.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>${histogramSvg(n.bins)}`;
+  return (o.histStats ? `<dl class="cb-numstats">${cells.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>` : '') + (o.histChart ? histogramSvg(n.bins) : '');
 }
 
 // Charts take their colours from CSS (ggplot2 grey, or the theme accent).
