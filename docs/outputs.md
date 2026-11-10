@@ -4,7 +4,7 @@ Every output is generated from the study spec alone, so it works the same whatev
 
 ## Codebook
 
-**Codebook → Generator** builds a self-contained HTML codebook with a live preview; **Codebook → Viewer** shows it full size. Download it as HTML, or **Save as PDF**. The print version is its own compact layout: every section expanded, light colors whatever the theme, a two-column contents list, each survey on a new page, charts sized for paper, page numbers and the study title in the margins, and screen-only extras (the per-participant response chart) left out.
+**Codebook → Generator** builds a self-contained HTML codebook with a live preview; **Codebook → Viewer** shows it full size. Download it as HTML, or **Save as PDF**. The print version is its own compact layout: every section expanded, light colors whatever the theme, a two-column contents list, each survey on a new page, charts sized for paper, page numbers and the study title in the margins.
 
 Structure:
 

@@ -32,7 +32,6 @@ How it works:
 ## Codebooks and exports
 
 - Codebooks and the data dictionary describe variables and report **aggregates only**: counts, percentages, means, response rates. They never list individual responses or link a value to a participant (outlier plots show anonymous points; there is no outlier table).
-- The "Response rate by participant" chart labels bars with participant IDs. If IDs themselves are sensitive, switch off "Missingness Plots" in the codebook options.
 - The **study spec** and **response CSV** exports contain response data. Treat them like the raw data.
 
 ## AI features

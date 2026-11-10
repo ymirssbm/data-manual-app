@@ -57,7 +57,7 @@ const SECTION_KEYS: Record<string, keyof CodebookOptions | Array<keyof CodebookO
   'Study Schedule': 'studySchedule',
   'Participation Plots': 'participationPlots',
   'Survey Flowcharts': 'flowcharts',
-  'Variable Pages': ['deliveryType', 'typeOfData', 'responseOptions', 'skipLogic', 'frequencyTable', 'barPlot', 'histograms', 'missingness', 'missingnessPlots', 'outlierPlots', 'screenshots'],
+  'Variable Pages': ['deliveryType', 'typeOfData', 'responseOptions', 'skipLogic', 'frequencyTable', 'barPlot', 'histograms', 'missingness', 'outlierPlots', 'screenshots'],
   'Way question was delivered': 'deliveryType',
   'Type of data': 'typeOfData',
   'Response options': 'responseOptions',
@@ -66,7 +66,6 @@ const SECTION_KEYS: Record<string, keyof CodebookOptions | Array<keyof CodebookO
   'Bar Plot': 'barPlot',
   Histograms: 'histograms',
   'Missingness Page': 'missingness',
-  'Missingness Plots': 'missingnessPlots',
   'Outlier Plots': 'outlierPlots',
   Screenshot: 'screenshots',
 };

@@ -56,8 +56,6 @@ export interface CodebookOptions {
   barPlot: boolean;
   histograms: boolean;
   missingness: boolean;
-  /** Response-rate plots (by participant, over time) on the Missingness tab. */
-  missingnessPlots: boolean;
   /** Outlier screen (box plot + flagged values) for numeric items. */
   outlierPlots: boolean;
   screenshots: boolean;
@@ -83,7 +81,6 @@ export const DEFAULT_CODEBOOK_OPTIONS: CodebookOptions = {
   barPlot: true,
   histograms: true,
   missingness: true,
-  missingnessPlots: true,
   outlierPlots: true,
   screenshots: true,
 };
@@ -439,7 +436,7 @@ function variablePage(m: SurveyModel, q: Question, o: CodebookOptions, t: Codebo
   if (stats?.frequencies && o.frequencyTable) tabs.push({ name: 'Frequency Table', html: frequencyTableHtml(stats) });
   if (stats?.frequencies && o.barPlot) tabs.push({ name: 'Barplot', html: barplotSvg(text, stats.frequencies) });
   if (stats?.numeric && o.histograms) tabs.push({ name: 'Histogram', html: histogramHtml(stats) });
-  if (stats && o.missingness) tabs.push({ name: 'Missingness', html: missingnessHtml(q, stats, m, o.missingnessPlots) });
+  if (stats && o.missingness) tabs.push({ name: 'Missingness', html: missingnessHtml(q, stats, m) });
   if (stats?.outliers && o.outlierPlots) tabs.push({ name: 'Outliers', html: outliersHtml(stats) });
   if (o.screenshots && screenshotsURL) {
     const base = screenshotsURL.replace(/\/+$/, '');
@@ -481,7 +478,7 @@ function frequencyTableHtml(s: ItemDescriptives): string {
     .join('')}</tbody></table>`;
 }
 
-function missingnessHtml(q: Question, s: ItemDescriptives, m: SurveyModel, plots: boolean): string {
+function missingnessHtml(q: Question, s: ItemDescriptives, m: SurveyModel): string {
   const r2 = (x: number) => Number(x.toFixed(2));
   const pct = s.delivered ? (s.answered / s.delivered) * 100 : 0;
   const conditional = (m.branchesTo.get(q['Item.ID'])?.length ?? 0) > 0 || s.participants < s.totalParticipants;
@@ -495,10 +492,7 @@ function missingnessHtml(q: Question, s: ItemDescriptives, m: SurveyModel, plots
   const perPerson = mm
     ? `<table class="cb-table cb-compact"><thead><tr><th>Missing per participant</th><th>Min</th><th>Max</th><th>Mean</th><th>SD</th></tr></thead><tbody><tr><td>Count of missed deliveries</td><td>${r2(mm.min)}</td><td>${r2(mm.max)}</td><td>${r2(mm.mean)}</td><td>${r2(mm.sd)}</td></tr></tbody></table>`
     : '';
-  const charts = plots
-    ? `${s.byParticipant.length > 1 ? `<div class="cb-screen-only"><h4 class="cb-chart-h">Response rate by participant</h4>${participantRateSvg(s.byParticipant)}</div>` : ''}`
-    : '';
-  return `<p class="cb-miss-title"><strong>Missingness Descriptives</strong></p><div class="cb-stats">${tiles}</div>${perPerson}${charts}<p class="cb-small">ICC(1) of answered vs. missed across participants: near 0 means missed prompts are spread evenly; near 1 means a few participants account for most of them.</p>`;
+  return `<p class="cb-miss-title"><strong>Missingness Descriptives</strong></p><div class="cb-stats">${tiles}</div>${perPerson}<p class="cb-small">ICC(1) of answered vs. missed across participants: near 0 means missed prompts are spread evenly; near 1 means a few participants account for most of them.</p>`;
 }
 
 function outliersHtml(s: ItemDescriptives): string {
@@ -506,29 +500,6 @@ function outliersHtml(s: ItemDescriptives): string {
   const f = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(2));
   // Summary only: no per-response listing, so the codebook never exposes individual records.
   return `<p><strong>Outlier screen</strong>: values below ${f(o.lower)} or above ${f(o.upper)} (1.5 × IQR beyond the quartiles) are flagged. ${o.flagged.length} of ${o.points.length} responses flagged.</p>${boxPlotSvg(o)}`;
-}
-
-function participantRateSvg(rows: Array<{ participant: string; delivered: number; answered: number }>): string {
-  const shown = rows.slice(0, 40);
-  const W = 760;
-  const L = 110;
-  const rowH = 16;
-  const top = 8;
-  const plotW = W - L - 60;
-  const H = top + shown.length * rowH + 30;
-  const x = (p: number) => L + p * plotW;
-  const grid = [0, 0.25, 0.5, 0.75, 1];
-  return `<svg class="cb-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Response rate by participant">
-<rect class="cb-panel" x="${L}" y="${top}" width="${plotW}" height="${shown.length * rowH}"/>
-${grid.map((g) => `<line class="cb-grid" x1="${x(g)}" x2="${x(g)}" y1="${top}" y2="${top + shown.length * rowH}"/><text class="cb-axis" x="${x(g)}" y="${top + shown.length * rowH + 14}" text-anchor="middle">${g * 100}%</text>`).join('')}
-${shown
-  .map((r, i) => {
-    const rate = r.delivered ? r.answered / r.delivered : 0;
-    const y = top + i * rowH;
-    return `<rect class="cb-bar" x="${L}" y="${y + 3}" width="${(rate * plotW).toFixed(1)}" height="${rowH - 6}"><title>${esc(r.participant)}: ${r.answered}/${r.delivered}</title></rect><text class="cb-axis" x="${L - 6}" y="${y + rowH / 2 + 4}" text-anchor="end">${esc(r.participant.length > 16 ? `${r.participant.slice(0, 15)}…` : r.participant)}</text><text class="cb-axis" x="${x(rate) + 4}" y="${y + rowH / 2 + 4}">${Math.round(rate * 100)}%</text>`;
-  })
-  .join('')}
-</svg>${rows.length > 40 ? `<p class="cb-small">Showing the 40 participants with the lowest response rates of ${rows.length}.</p>` : ''}`;
 }
 
 function boxPlotSvg(o: NonNullable<ItemDescriptives['outliers']>): string {

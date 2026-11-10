@@ -34,12 +34,6 @@ export interface MissingnessSummary {
   icc: number | null;
 }
 
-export interface ParticipantRate {
-  participant: string;
-  delivered: number;
-  answered: number;
-}
-
 export interface DayRate {
   /** YYYY-MM-DD */
   date: string;
@@ -73,8 +67,6 @@ export interface ItemDescriptives {
   /** Participants anywhere in the data set. */
   totalParticipants: number;
   missingness: MissingnessSummary | null;
-  /** Response rate per participant, lowest first. */
-  byParticipant: ParticipantRate[];
   /** Response rate per day of the study (when the data has dates). */
   byDay: DayRate[];
   /** Outlier screen for numeric items. */
@@ -146,7 +138,6 @@ export function describeItem(q: Question, responses: Response[] | undefined, tot
     participantsAnswered: new Set(answered.map((r) => r.participant).filter(Boolean)).size,
     totalParticipants,
     missingness: missingness(responses),
-    byParticipant: rates(responses, (r) => r.participant ?? '').map(([participant, x]) => ({ participant, ...x })).sort((a, b) => a.answered / a.delivered - b.answered / b.delivered),
     byDay: rates(responses.filter((r) => r.date), (r) => r.date!).map(([date, x]) => ({ date, ...x })).sort((a, b) => a.date.localeCompare(b.date)),
     outliers: null as OutlierSummary | null,
   };

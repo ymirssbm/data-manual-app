@@ -95,14 +95,13 @@ describe('Qualtrics responses', () => {
 });
 
 describe('every example has data and the new descriptives', () => {
-  it('missingness tiles, response-rate plots and outlier screen render', () => {
+  it('missingness tiles and outlier screen render, with no per-participant charts', () => {
     const spec = validateSpec(JSON.parse(ex('ai-generated-ema-study.json'))).spec!;
     expect(spec.data?.['Question.ID']?.length).toBeGreaterThan(500);
     const html = generateCodebookHtml(spec);
-    for (const s of ['cb-stats', 'Response rate by participant', 'Outlier screen', 'cb-dot-out']) expect(html, s).toContain(s);
-    for (const s of ['Response rate over the study', '<th>z</th>', '<th>Participant</th><th>Value</th>']) expect(html, s).not.toContain(s);
-    const off = generateCodebookHtml(spec, { missingnessPlots: false, outlierPlots: false });
-    expect(off).not.toContain('Response rate by participant');
+    for (const s of ['cb-stats', 'Outlier screen', 'cb-dot-out']) expect(html, s).toContain(s);
+    for (const s of ['Response rate by participant', 'Response rate over the study', '<th>z</th>', '<th>Participant</th><th>Value</th>']) expect(html, s).not.toContain(s);
+    const off = generateCodebookHtml(spec, { outlierPlots: false });
     expect(off).not.toContain('Outlier screen');
   });
 

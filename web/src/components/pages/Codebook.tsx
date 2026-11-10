@@ -61,7 +61,6 @@ const TREE: TreeNode[] = [
       { label: 'Bar Plot', key: 'barPlot', needsData: true },
       { label: 'Histograms', key: 'histograms', needsData: true },
       { label: 'Missingness Page', key: 'missingness', needsData: true },
-      { label: 'Missingness Plots', key: 'missingnessPlots', needsData: true },
       { label: 'Outlier Plots', key: 'outlierPlots', needsData: true },
       { label: 'Screenshot', key: 'screenshots' },
     ],

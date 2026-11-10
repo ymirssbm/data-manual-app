@@ -4,6 +4,7 @@ import { validateSpec, type StudySpec, type ValidationResult } from '../core';
 import type { HostAdapter } from '../adapters/types';
 import { Icon, Toasts, useToasts } from './ui';
 import { HomePage } from './pages/Home';
+import { StandardPage } from './pages/Standard';
 import { DataPullPage, type LoadedSource } from './pages/DataPull';
 import { CodebookGeneratorPage, CodebookViewerPage, type GeneratedCodebook } from './pages/Codebook';
 import { DictionaryGeneratorPage, DictionaryViewerPage } from './pages/Dictionary';
@@ -15,7 +16,7 @@ import { DataExportPage } from './pages/DataExport';
 import { SurveyEditorPage } from './pages/SurveyEditor';
 import { appStyle, ContactDialog, loadAppSettings, saveAppSettings, SettingsDialog, useResolvedMode, type AppSettings } from './AppSettings';
 
-export type PageId = 'home' | 'datapull' | 'dataset' | 'export' | 'editor' | 'codebook_gen' | 'codebook_view' | 'datadict_gen' | 'datadict_view' | 'flowchart' | 'schedule' | 'ai';
+export type PageId = 'home' | 'datapull' | 'dataset' | 'export' | 'editor' | 'codebook_gen' | 'codebook_view' | 'datadict_gen' | 'datadict_view' | 'flowchart' | 'schedule' | 'ai' | 'standard';
 
 interface MenuItem {
   id?: PageId;
@@ -54,6 +55,7 @@ const MENU: MenuItem[] = [
   { id: 'flowchart', label: 'Study Flowchart', icon: 'diagram' },
   { id: 'schedule', label: 'Study Schedule', icon: 'calendar' },
   { id: 'ai', label: 'AI Study Generator', icon: 'spark' },
+  { id: 'standard', label: 'Data Description Standard', icon: 'file' },
 ];
 
 export interface Session {
@@ -228,6 +230,7 @@ export function App({ adapter }: { adapter: HostAdapter }) {
         {page === 'datadict_view' && <DictionaryViewerPage spec={spec} go={go} />}
         {page === 'flowchart' && <FlowchartPage spec={spec} go={go} notify={notify} />}
         {page === 'schedule' && <SchedulePage spec={spec} go={go} />}
+        {page === 'standard' && <StandardPage />}
         {page === 'ai' && <AiPage spec={spec} onLoaded={(s, r) => { onLoaded(s, r); go('home'); }} notify={notify} />}
       </main>
 
