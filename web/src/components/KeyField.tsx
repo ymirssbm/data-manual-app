@@ -168,7 +168,7 @@ export function SavedKeysList() {
   const vault = useVault();
   const [error, setError] = useState<string | null>(null);
   if (vault === undefined) return <p className="dm-hint">Loading…</p>;
-  if (vault === null) return <p className="dm-hint">Saved keys need the app's local server (npm run dev / preview). Here, keys are entered per session.</p>;
+  if (vault === null) return <p className="dm-hint">This online version can't save keys: a key you enter is used for that tab only and forgotten when you close it. The installed app saves keys in your computer's secure storage.</p>;
   return (
     <>
       {vault.keys.length ? (

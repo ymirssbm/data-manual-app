@@ -229,6 +229,23 @@ export function DataPullPage({ session, spec, onLoaded, onDatasetLoaded, notify,
       </div>
       {tab === 'api' && (
       <Box title="Pull from a Data Collection Platform">
+        {vault === null && (
+          <div className="dm-callout">
+            <Icon name="lock" />
+            <div>
+              <strong>API pulls need the installed app.</strong> Wear-IT, REDCap and Qualtrics block requests that come straight from a website, so this
+              online version can't reach them. Instead, export from the platform and drop the file on{' '}
+              <button className="dm-link-btn" onClick={() => setTab('file')}>
+                Your dataset
+              </button>{' '}
+              (a Qualtrics .qsf, a REDCap data dictionary, a saved Wear-IT response, or your response CSV), or look around with the{' '}
+              <button className="dm-link-btn" onClick={() => setTab('example')}>
+                Example Study
+              </button>
+              .
+            </div>
+          </div>
+        )}
         <div className="dm-segmented dm-segmented-inline" role="tablist">
           {(['wearit', 'redcap', 'qualtrics'] as const).map((s) => (
             <button key={s} role="tab" aria-selected={source === s} className={source === s ? 'is-active' : ''} onClick={() => setSource(s)} disabled={!!busy}>
@@ -424,8 +441,10 @@ export function DataPullPage({ session, spec, onLoaded, onDatasetLoaded, notify,
         )}
 
         <div className="dm-security-note">
-          <Icon name="lock" /> Keys are only sent to {label}, through this app's local server.{' '}
-          {vault ? `Saved keys are kept by ${vault.storage}, never in the browser.` : 'Keys entered here are forgotten when you close the tab.'}
+          <Icon name="lock" />{' '}
+          {vault === null
+            ? 'Keys entered here are only sent to the platform, are never saved, and are forgotten when you close the tab.'
+            : `Keys are only sent to ${label}, through this app's local server. ${vault ? `Saved keys are kept by ${vault.storage}, never in the browser.` : ''}`}
         </div>
       </Box>
       )}
