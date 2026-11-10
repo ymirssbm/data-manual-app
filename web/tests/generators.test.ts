@@ -117,6 +117,13 @@ describe('codebook', () => {
     expect(none).not.toContain('Missingness Descriptives');
   });
 
+  it('tags each part with the option that controls it, for the preview highlight', () => {
+    const html = generateCodebookHtml(spec());
+    expect(html).toContain('data-cb-opt="missParticipants"');
+    expect(html).toMatch(/class="cb-tab[^"]*" data-tab="[^"]+-missingness"[^>]*data-cb-opt="missingness /);
+    expect(html).toContain('data-cb-opt="type-multiple-choice"');
+  });
+
   it('keeps the prior codebook structure', () => {
     const html = generateCodebookHtml(spec(), TITLE_PAGE, { generatedAt: new Date('2026-01-01') });
     expect(html.startsWith('<!doctype html>')).toBe(true);

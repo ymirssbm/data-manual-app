@@ -280,9 +280,9 @@ export function generateCodebookHtml(
   };
   const caret = (label: string) => `<button class="cb-sec-toggle" type="button" aria-expanded="true" aria-label="Collapse ${esc(label)}" title="Collapse / expand">▲</button>`;
   /** A collapsible top-level page between rules, as in the prior codebook. */
-  const page = (label: string, body: string, cls = '') => {
+  const page = (label: string, body: string, keys: string[] = []) => {
     const id = entry(label, 1);
-    return `<section class="cb-page ${cls}"><hr><h1 id="${id}">${esc(label)}${caret(label)}</h1><hr><div class="cb-sec-body">${body}</div></section>`;
+    return `<section class="cb-page"${keys.length ? optAttr(...keys) : ''}><hr><h1 id="${id}">${esc(label)}${caret(label)}</h1><hr><div class="cb-sec-body">${body}</div></section>`;
   };
   const out: string[] = [];
 
@@ -292,38 +292,39 @@ export function generateCodebookHtml(
   const titleId = entry('Title Page', 1);
   const titleParts: string[] = [];
   const h2 = (label: string) => `<h2 id="${entry(label, 2)}">${esc(label)}</h2>`;
-  if (o.nameOfStudy) titleParts.push(h2('Name of study'), `<p>${esc(meta['Study.Name'])}</p>`);
-  if (o.authors && authors) titleParts.push(h2('Authors'), `<p>${esc(authors)}</p>`);
+  const part = (key: string, html: string) => `<div${optAttr(key)}>${html}</div>`;
+  if (o.nameOfStudy) titleParts.push(part('nameOfStudy', `${h2('Name of study')}<p>${esc(meta['Study.Name'])}</p>`));
+  if (o.authors && authors) titleParts.push(part('authors', `${h2('Authors')}<p>${esc(authors)}</p>`));
   if (o.studyMetadata) {
     const block = studyMetadataHtml(spec, overview);
-    if (block) titleParts.push(h2('Study Metadata'), block);
+    if (block) titleParts.push(part('studyMetadata', `${h2('Study Metadata')}${block}`));
   }
-  if (o.funding && funding) titleParts.push(h2('Funding source'), `<p>${esc(funding)}</p>`);
+  if (o.funding && funding) titleParts.push(part('funding', `${h2('Funding source')}<p>${esc(funding)}</p>`));
   if (titleParts.length) {
-    out.push(`<section class="cb-page"><hr><h1 id="${titleId}">Title Page${caret('Title Page')}</h1><hr><div class="cb-sec-body">${titleParts.join('\n')}</div></section>`);
+    out.push(`<section class="cb-page"${optAttr('nameOfStudy', 'authors', 'studyMetadata', 'funding')}><hr><h1 id="${titleId}">Title Page${caret('Title Page')}</h1><hr><div class="cb-sec-body">${titleParts.join('\n')}</div></section>`);
   } else toc.splice(tocMark, 1);
 
-  if (o.abstract && abstract) out.push(page('Abstract Page', `<p class="cb-prose">${esc(abstract)}</p>`));
+  if (o.abstract && abstract) out.push(page('Abstract Page', `<p class="cb-prose">${esc(abstract)}</p>`, ['abstract']));
   if (o.executiveSummary) {
     const summary = text.summary?.trim();
-    out.push(page('Executive Summary', summary ? `<p class="cb-prose">${esc(summary)}</p>` : autoSummary(models, overview)));
+    out.push(page('Executive Summary', summary ? `<p class="cb-prose">${esc(summary)}</p>` : autoSummary(models, overview), ['executiveSummary']));
   }
-  if (o.studySchedule && spec.schedules.length) out.push(page('Study Schedule', scheduleHtml(spec, models)));
+  if (o.studySchedule && spec.schedules.length) out.push(page('Study Schedule', scheduleHtml(spec, models), ['studySchedule']));
   if (o.participationPlots && hasResponseData(spec)) {
     const enrolled = enrollment(spec);
     const tl = surveyTimeline(spec);
     const parts: string[] = [];
     if (o.partEnrollment && enrolled.length)
       parts.push(
-        `<h4 class="cb-chart-h">Enrollment over time</h4>${enrollmentSvg(enrolled)}<p class="cb-small">Cumulative participants by the date of their first completed survey (${enrolled.length} participants, ${esc(enrolled[0]!.date)} to ${esc(enrolled[enrolled.length - 1]!.date)}).</p>`,
+        `<div${optAttr('partEnrollment')}><h4 class="cb-chart-h">Enrollment over time</h4>${enrollmentSvg(enrolled)}<p class="cb-small">Cumulative participants by the date of their first completed survey (${enrolled.length} participants, ${esc(enrolled[0]!.date)} to ${esc(enrolled[enrolled.length - 1]!.date)}).</p></div>`,
       );
     if (o.partTimeline && tl)
       parts.push(
-        `<h4 class="cb-chart-h">Surveys by day since first survey</h4>${timelineSvg(tl)}<p class="cb-small">Each row is a participant (in enrollment order) and each dot a completed survey. The shaded curve shows how many surveys were completed on each day.${
+        `<div${optAttr('partTimeline')}><h4 class="cb-chart-h">Surveys by day since first survey</h4>${timelineSvg(tl)}<p class="cb-small">Each row is a participant (in enrollment order) and each dot a completed survey. The shaded curve shows how many surveys were completed on each day.${
           tl.bursts > 1 ? ' Colors mark measurement bursts: a gap of more than a week starts a new burst.' : ''
-        }</p>`,
+        }</p></div>`,
       );
-    if (parts.length) out.push(page('Participation', parts.join('')));
+    if (parts.length) out.push(page('Participation', parts.join(''), ['participationPlots', 'partEnrollment', 'partTimeline']));
   }
 
   // ---- Variable list: survey > block > variable, each level collapsible
@@ -339,7 +340,7 @@ export function generateCodebookHtml(
     const lazy = !svg && extras.flowchartsInBrowser && flowKnown(m.survey) ? `<pre class="cb-mermaid">${esc(generateFlowchart(m.survey))}</pre>` : '';
     if (o.flowcharts && (svg || lazy)) {
       const pid = `flow-${slug(m.name)}`;
-      parts.push(`<div class="cb-anchor cb-flow">${toggleButton(pid, 'Click to view survey flowchart', t.expandVisuals)}<div id="${pid}" class="cb-visuals" ${t.expandVisuals ? '' : 'hidden'}><div class="cb-flowchart">${svg ?? lazy}</div></div></div>`);
+      parts.push(`<div class="cb-anchor cb-flow"${optAttr('flowcharts')}>${toggleButton(pid, 'Click to view survey flowchart', t.expandVisuals)}<div id="${pid}" class="cb-visuals" ${t.expandVisuals ? '' : 'hidden'}><div class="cb-flowchart">${svg ?? lazy}</div></div></div>`);
     }
     type OpenBlock = { path: string; items: string[]; id: string; note: string };
     let openBlock = null as OpenBlock | null;
@@ -348,7 +349,7 @@ export function generateCodebookHtml(
     const closeBlock = () => {
       if (!openBlock) return;
       parts.push(
-        `<section class="cb-block"><div class="cb-block-head"><span class="cb-block-tag">Block</span><h3 id="${openBlock.id}">${esc(openBlock.path)}${caret(`Block: ${openBlock.path}`)}</h3>${openBlock.note}</div><div class="cb-sec-body">${openBlock.items.join('\n')}</div></section>`,
+        `<section class="cb-block"><div class="cb-block-head"${optAttr(codebookTypeKey('Block'))}><span class="cb-block-tag">Block</span><h3 id="${openBlock.id}">${esc(openBlock.path)}${caret(`Block: ${openBlock.path}`)}</h3>${openBlock.note}</div><div class="cb-sec-body">${openBlock.items.join('\n')}</div></section>`,
       );
       openBlock = null;
     };
@@ -420,6 +421,14 @@ ${
 </html>`;
 }
 
+/**
+ * Marks which Content-tab options an element belongs to (space-separated option keys, or "type-<slug>"
+ * for question types), so the generator can highlight it while that option is hovered.
+ */
+const optAttr = (...keys: string[]) => ` data-cb-opt="${keys.join(' ')}"`;
+/** Option key for a question type, as used in data-cb-opt. */
+export const codebookTypeKey = (type: string) => `type-${slug(type)}`;
+
 function toggleButton(targetId: string, label: string, open: boolean): string {
   return `<button class="cb-toggle" type="button" data-target="${targetId}" aria-expanded="${open}">${esc(label)} <span class="cb-arrow">${open ? '▲' : '▼'}</span></button>`;
 }
@@ -439,7 +448,7 @@ function skipNote(m: SurveyModel, itemId: string): string {
     const text = parent ? stripHtml(itemLabel(parent)) : '';
     return `<strong>${esc(parent?.['Question.ID'] ?? b.parentId)}</strong>${text ? ` <span class="cb-cond-q">(${esc(text.length > 70 ? `${text.slice(0, 69)}…` : text)})</span>` : ''}${answer}`;
   });
-  return `<p class="cb-cond"><span class="cb-cond-tag">Skip logic</span> Shown only if ${parts.join('; or ')}</p>`;
+  return `<p class="cb-cond"${optAttr('skipLogic')}><span class="cb-cond-tag">Skip logic</span> Shown only if ${parts.join('; or ')}</p>`;
 }
 
 function variablePage(m: SurveyModel, q: Question, o: CodebookOptions, t: CodebookTheme, stats: ItemDescriptives | null, id: string, screenshotsURL: string | undefined): string {
@@ -448,7 +457,11 @@ function variablePage(m: SurveyModel, q: Question, o: CodebookOptions, t: Codebo
   const cond = o.skipLogic ? skipNote(m, q['Item.ID']) : '';
   // Delivery and data type sit in the question header as one quiet line ("Multiple Choice • Integer").
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-  const meta = [o.deliveryType ? q['Question.Type.Display.Name'] : '', o.typeOfData && q['Data.Type'] ? cap(q['Data.Type']) : '', cond ? 'Conditional' : ''].filter(Boolean);
+  const meta = [
+    o.deliveryType ? `<span${optAttr('deliveryType')}>${esc(q['Question.Type.Display.Name'])}</span>` : '',
+    o.typeOfData && q['Data.Type'] ? `<span${optAttr('typeOfData')}>${esc(cap(q['Data.Type']))}</span>` : '',
+    cond ? `<span${optAttr('skipLogic')}>Conditional</span>` : '',
+  ].filter(Boolean);
   // Everything else opens by clicking the question header.
   const body: string[] = [];
   if (cond) body.push(cond);
@@ -456,41 +469,42 @@ function variablePage(m: SurveyModel, q: Question, o: CodebookOptions, t: Codebo
   const opts = responseOptions(q);
   if (o.responseOptions && opts.length && !stats?.frequencies) {
     body.push(
-      `<table class="cb-table cb-options"><thead><tr><th>Value</th><th>Label</th></tr></thead><tbody>${opts
+      `<table class="cb-table cb-options"${optAttr('responseOptions')}><thead><tr><th>Value</th><th>Label</th></tr></thead><tbody>${opts
         .map((r) => `<tr><td>${esc(r.value)}</td><td>${esc(r.label)}</td></tr>`)
         .join('')}</tbody></table>`,
     );
   }
 
-  const tabs: Array<{ name: string; html: string }> = [];
-  if (stats?.frequencies && o.frequencyTable) tabs.push({ name: 'Frequency Table', html: frequencyTableHtml(stats) });
-  if (stats?.frequencies && o.barPlot) tabs.push({ name: 'Barplot', html: barplotSvg(text, stats.frequencies) });
+  const tabs: Array<{ name: string; html: string; keys: string[] }> = [];
   // A tab shows when its section is on and at least one of its parts is.
-  const add = (name: string, html: string) => html && tabs.push({ name, html });
-  if (stats?.numeric && o.histograms) add('Histogram', histogramHtml(stats, o));
-  if (stats && o.missingness) add('Missingness', missingnessHtml(q, stats, m, o));
-  if (stats?.outliers && o.outlierPlots) add('Outliers', outliersHtml(stats, o));
+  const add = (name: string, html: string, ...keys: string[]) => html && tabs.push({ name, html, keys });
+  if (stats?.frequencies && o.frequencyTable) add('Frequency Table', frequencyTableHtml(stats), 'frequencyTable');
+  if (stats?.frequencies && o.barPlot) add('Barplot', barplotSvg(text, stats.frequencies), 'barPlot');
+  if (stats?.numeric && o.histograms) add('Histogram', histogramHtml(stats, o), 'histograms', 'histStats', 'histChart');
+  if (stats && o.missingness) add('Missingness', missingnessHtml(q, stats, m, o), 'missingness', 'missAnswered', 'missMissing', 'missParticipants', 'missIcc', 'missPerPerson', 'missNote');
+  if (stats?.outliers && o.outlierPlots) add('Outliers', outliersHtml(stats, o), 'outlierPlots', 'outlierSummary', 'outlierPlot');
   if (o.screenshots && screenshotsURL) {
     const base = screenshotsURL.replace(/\/+$/, '');
     tabs.push({
       name: 'Screenshots',
+      keys: ['screenshots'],
       html: `<img class="cb-screenshot" alt="Screenshot of ${esc(q['Item.ID'])}" src="${esc(`${base}/${encodeURIComponent(q['Item.ID'])}.png`)}" onerror="this.replaceWith(Object.assign(document.createElement('p'),{textContent:'No screenshot available.'}))">`,
     });
   }
   const vid = `vis-${id}`;
   if (tabs.length) {
     body.push(`<h3 class="cb-visuals-title">Descriptives</h3>
-<div class="cb-tabs" role="tablist">${tabs.map((tab, i) => `<button type="button" role="tab" class="cb-tab${i === 0 ? ' is-active' : ''}" data-tab="${vid}-${i}" aria-selected="${i === 0}">${esc(tab.name)}</button>`).join('')}</div>
-${tabs.map((tab, i) => `<div class="cb-pane${i === 0 ? ' is-active' : ''}" id="${vid}-${i}" role="tabpanel"><h4 class="cb-print-only">${esc(tab.name)}</h4>${tab.html}</div>`).join('')}`);
+<div class="cb-tabs" role="tablist">${tabs.map((tab, i) => `<button type="button" role="tab" class="cb-tab${i === 0 ? ' is-active' : ''}" data-tab="${vid}-${slug(tab.name)}" aria-selected="${i === 0}"${optAttr(...tab.keys)}>${esc(tab.name)}</button>`).join('')}</div>
+${tabs.map((tab, i) => `<div class="cb-pane${i === 0 ? ' is-active' : ''}" id="${vid}-${slug(tab.name)}" role="tabpanel"><h4 class="cb-print-only">${esc(tab.name)}</h4>${tab.html}</div>`).join('')}`);
   }
   const open = t.expandVisuals;
   const foldable = body.length > 0;
   if (foldable) lines.push(`<div id="${vid}" class="cb-visuals cb-q-body" ${open ? '' : 'hidden'}>${body.join('\n')}</div>`);
 
   const head = `<h4 id="${id}">${esc(text)}<span class="cb-q-sub"><span class="item-id">[${esc(q['Item.ID'])}]</span>${
-    meta.length ? `<span class="cb-q-meta">${meta.map(esc).join(' • ')}</span>` : ''
+    meta.length ? `<span class="cb-q-meta">${meta.join(' • ')}</span>` : ''
   }</span></h4>${foldable ? `<span class="cb-arrow cb-q-arrow" aria-hidden="true">${open ? '▲' : '▼'}</span>` : ''}`;
-  return `<div class="cb-var">
+  return `<div class="cb-var"${optAttr(codebookTypeKey(q['Question.Type.Display.Name']))}>
 ${
   foldable
     ? `<div class="header-shading cb-q-head" role="button" tabindex="0" data-target="${vid}" aria-expanded="${open}" title="Click to show or hide descriptives">${head}</div>`
@@ -516,19 +530,19 @@ function missingnessHtml(q: Question, s: ItemDescriptives, m: SurveyModel, o: Co
   const conditional = (m.branchesTo.get(q['Item.ID'])?.length ?? 0) > 0 || s.participants < s.totalParticipants;
   const mm = s.missingness;
   const tiles = [
-    o.missAnswered && `<div class="cb-stat"><span class="cb-stat-l">Answered / Delivered</span><span class="cb-stat-n">${s.answered} / ${s.delivered}</span><span class="cb-meter"><span style="width:${pct.toFixed(1)}%"></span></span><span class="cb-stat-sub">${pct.toFixed(1)}% response rate</span></div>`,
-    o.missMissing && `<div class="cb-stat"><span class="cb-stat-l">Missing</span><span class="cb-stat-n">${s.missing}</span><span class="cb-stat-sub">${s.delivered ? ((s.missing / s.delivered) * 100).toFixed(1) : '0'}% of deliveries</span></div>`,
-    o.missParticipants && `<div class="cb-stat"><span class="cb-stat-l">Participants</span><span class="cb-stat-n">${s.participants}${s.totalParticipants ? ` / ${s.totalParticipants}` : ''}</span><span class="cb-stat-sub">${conditional ? (s.participants >= s.totalParticipants ? 'all were delivered this item' : 'were delivered this item') : 'delivered this item'}</span></div>`,
-    o.missIcc && mm ? `<div class="cb-stat"><span class="cb-stat-l">Missingness ICC</span><span class="cb-stat-n">${mm.icc == null ? 'NA' : r2(mm.icc)}</span><span class="cb-stat-sub">share of missingness between people</span></div>` : '',
+    o.missAnswered && `<div class="cb-stat"${optAttr('missAnswered')}><span class="cb-stat-l">Answered / Delivered</span><span class="cb-stat-n">${s.answered} / ${s.delivered}</span><span class="cb-meter"><span style="width:${pct.toFixed(1)}%"></span></span><span class="cb-stat-sub">${pct.toFixed(1)}% response rate</span></div>`,
+    o.missMissing && `<div class="cb-stat"${optAttr('missMissing')}><span class="cb-stat-l">Missing</span><span class="cb-stat-n">${s.missing}</span><span class="cb-stat-sub">${s.delivered ? ((s.missing / s.delivered) * 100).toFixed(1) : '0'}% of deliveries</span></div>`,
+    o.missParticipants && `<div class="cb-stat"${optAttr('missParticipants')}><span class="cb-stat-l">Participants</span><span class="cb-stat-n">${s.participants}${s.totalParticipants ? ` / ${s.totalParticipants}` : ''}</span><span class="cb-stat-sub">${conditional ? (s.participants >= s.totalParticipants ? 'all were delivered this item' : 'were delivered this item') : 'delivered this item'}</span></div>`,
+    o.missIcc && mm ? `<div class="cb-stat"${optAttr('missIcc')}><span class="cb-stat-l">Missingness ICC</span><span class="cb-stat-n">${mm.icc == null ? 'NA' : r2(mm.icc)}</span><span class="cb-stat-sub">share of missingness between people</span></div>` : '',
   ]
     .filter(Boolean)
     .join('');
   const perPerson = o.missPerPerson && mm
-    ? `<table class="cb-table cb-compact"><thead><tr><th>Missing per participant</th><th>Min</th><th>Max</th><th>Mean</th><th>SD</th></tr></thead><tbody><tr><td>Count of missed deliveries</td><td>${r2(mm.min)}</td><td>${r2(mm.max)}</td><td>${r2(mm.mean)}</td><td>${r2(mm.sd)}</td></tr></tbody></table>`
+    ? `<table class="cb-table cb-compact"${optAttr('missPerPerson')}><thead><tr><th>Missing per participant</th><th>Min</th><th>Max</th><th>Mean</th><th>SD</th></tr></thead><tbody><tr><td>Count of missed deliveries</td><td>${r2(mm.min)}</td><td>${r2(mm.max)}</td><td>${r2(mm.mean)}</td><td>${r2(mm.sd)}</td></tr></tbody></table>`
     : '';
   // The note explains the ICC, so it goes with it.
   const note = o.missNote && (o.missIcc || o.missPerPerson) && mm
-    ? `<p class="cb-small">ICC(1) of answered vs. missed across participants: near 0 means missed prompts are spread evenly; near 1 means a few participants account for most of them.</p>`
+    ? `<p class="cb-small"${optAttr('missNote')}>ICC(1) of answered vs. missed across participants: near 0 means missed prompts are spread evenly; near 1 means a few participants account for most of them.</p>`
     : '';
   if (!tiles && !perPerson) return '';
   return `<p class="cb-miss-title"><strong>Missingness Descriptives</strong></p>${tiles ? `<div class="cb-stats">${tiles}</div>` : ''}${perPerson}${note}`;
@@ -539,9 +553,9 @@ function outliersHtml(s: ItemDescriptives, opts: CodebookOptions): string {
   const f = (x: number) => (Number.isInteger(x) ? String(x) : x.toFixed(2));
   // Summary only: no per-response listing, so the codebook never exposes individual records.
   const summary = opts.outlierSummary
-    ? `<p><strong>Outlier screen</strong>: values below ${f(o.lower)} or above ${f(o.upper)} (1.5 × IQR beyond the quartiles) are flagged. ${o.flagged.length} of ${o.points.length} responses flagged.</p>`
+    ? `<p${optAttr('outlierSummary')}><strong>Outlier screen</strong>: values below ${f(o.lower)} or above ${f(o.upper)} (1.5 × IQR beyond the quartiles) are flagged. ${o.flagged.length} of ${o.points.length} responses flagged.</p>`
     : '';
-  return summary + (opts.outlierPlot ? boxPlotSvg(o) : '');
+  return summary + (opts.outlierPlot ? `<div${optAttr('outlierPlot')}>${boxPlotSvg(o)}</div>` : '');
 }
 
 function boxPlotSvg(o: NonNullable<ItemDescriptives['outliers']>): string {
@@ -584,7 +598,7 @@ function histogramHtml(s: ItemDescriptives, o: CodebookOptions): string {
   const n = s.numeric!;
   const f = (x: number) => Number(x.toFixed(2));
   const cells: Array<[string, number]> = [['N', n.n], ['Mean', f(n.mean)], ['SD', f(n.sd)], ['Median', f(n.median)], ['Min', f(n.min)], ['Max', f(n.max)]];
-  return (o.histStats ? `<dl class="cb-numstats">${cells.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>` : '') + (o.histChart ? histogramSvg(n.bins) : '');
+  return (o.histStats ? `<dl class="cb-numstats"${optAttr('histStats')}>${cells.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('')}</dl>` : '') + (o.histChart ? `<div${optAttr('histChart')}>${histogramSvg(n.bins)}</div>` : '');
 }
 
 // Charts take their colours from CSS (ggplot2 grey, or the theme accent).

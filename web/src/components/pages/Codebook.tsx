@@ -3,6 +3,7 @@ import type { StudySpec } from '../../core';
 import {
   CODEBOOK_FONTS,
   CODEBOOK_PRESETS,
+  codebookTypeKey,
   hasResponseData,
   QUESTION_TYPES,
   type CodebookFont,
@@ -13,6 +14,7 @@ import {
 import type { PageId } from '../App';
 import { buildCodebook, type CodebookSettings } from '../codebookBuild';
 import { HtmlFrame } from '../HtmlFrame';
+import { capturePreviewState, highlightOptions, restorePreviewState } from '../codebookPreview';
 import { Box, Field, Icon, PageTitle } from '../ui';
 import { download, safeFileName } from '../util';
 import { NoStudy } from './common';
@@ -142,6 +144,13 @@ export function CodebookGeneratorPage({ spec, settings, setSettings, codebook, o
   const [previewOpen, setPreviewOpen] = useState(true);
   const hasData = useMemo(() => (spec ? hasResponseData(spec) : false), [spec]);
   const { building, error } = useCodebook(spec, settings, codebook, onBuilt);
+  const previewRef = useRef<HTMLIFrameElement>(null);
+  const [hoverNote, setHoverNote] = useState<string | null>(null);
+  // Rebuilds keep what was open in the preview, unless "show visuals expanded" itself was switched.
+  const preserve = useMemo(
+    () => ({ capture: capturePreviewState, restore: restorePreviewState, key: String(settings.theme.expandVisuals) }),
+    [settings.theme.expandVisuals],
+  );
 
   if (!spec) return (<><PageTitle>Codebook Generator</PageTitle><NoStudy go={go} what="a codebook" /></>);
   const { options: opts, theme, text } = settings;
@@ -165,6 +174,18 @@ export function CodebookGeneratorPage({ spec, settings, setSettings, codebook, o
     if (on && parent?.key) o = { ...o, [parent.key]: true };
     setOpts(o);
   };
+  // Hovering an option highlights what it controls in the live preview.
+  const keysOf = (n: TreeNode): string[] => [...(n.key ? [n.key] : []), ...(n.type ? [codebookTypeKey(n.type)] : []), ...(n.children ?? []).flatMap(keysOf)];
+  const hover = (n: TreeNode | null) => {
+    const doc = previewRef.current?.contentDocument;
+    if (!doc?.body) return;
+    const { total, visible } = highlightOptions(doc, n ? keysOf(n) : []);
+    if (!n) return setHoverNote(null);
+    if (!isOn(n)) setHoverNote(`${n.label} is off: tick it to add it to the codebook.`);
+    else if (!total) setHoverNote(`${n.label}: nothing in this study uses it.`);
+    else if (!visible) setHoverNote(`${n.label} is highlighted, but not on screen: it may be folded away or further down.`);
+    else setHoverNote(null);
+  };
   const renderNode = (n: TreeNode, parent: TreeNode | null = null) => {
     const disabled = n.needsData && !hasData;
     const on = isOn(n);
@@ -172,7 +193,7 @@ export function CodebookGeneratorPage({ spec, settings, setSettings, codebook, o
     const partial = n.children ? (on ? !n.children.every(isOn) : !n.key && anyChildOn) : false;
     return (
       <li key={n.label}>
-        <label className={`dm-tree-item ${disabled ? 'is-disabled' : ''}`}>
+        <label className={`dm-tree-item ${disabled ? 'is-disabled' : ''}`} onMouseEnter={() => hover(n)} onMouseLeave={() => hover(null)}>
           <input
             type="checkbox"
             checked={on && !disabled}
@@ -349,10 +370,10 @@ export function CodebookGeneratorPage({ spec, settings, setSettings, codebook, o
             <button className="dm-preview-toggle" onClick={() => setPreviewOpen((o) => !o)} aria-expanded={previewOpen}>
               <span className="dm-caret">{previewOpen ? '▾' : '▸'}</span> Live preview
             </button>
-            <span className="dm-hint">{error ? `Error: ${error}` : building ? 'Updating…' : 'Up to date'}</span>
+            <span className="dm-hint">{error ? `Error: ${error}` : hoverNote ?? (building ? 'Updating…' : 'Up to date')}</span>
           </div>
           {previewOpen &&
-            (codebook && codebook.spec === spec ? <HtmlFrame html={codebook.html} title="Codebook preview" className="dm-preview-frame" /> : <p className="dm-empty">Building preview…</p>)}
+            (codebook && codebook.spec === spec ? <HtmlFrame ref={previewRef} html={codebook.html} title="Codebook preview" className="dm-preview-frame" preserve={preserve} /> : <p className="dm-empty">Building preview…</p>)}
         </section>
       </div>
     </>
