@@ -1,6 +1,7 @@
 // Saved API keys, from the browser's side. The keys live in this computer's secret storage, managed
 // by the app's local server (src/server/relay.ts); the browser only sees names and references
 // ("vault:<id>"), never the secrets.
+import { hostUrl } from './host';
 import { VAULT_PREFIX, isVaultRef, type KeyEntry, type KeyKind, type NewKey } from '../keystore/types';
 
 export type { KeyEntry, KeyKind };
@@ -14,15 +15,15 @@ export interface KeyVault {
   storage: string;
   /** The folder holding the key list (and, on Windows, the encrypted keys). */
   folder?: string;
-  /** default: ~/.data-manual · chosen: picked in Settings · env: set by DATA_MANUAL_HOME */
-  source?: 'default' | 'chosen' | 'env';
+  /** default: ~/.data-manual · chosen: picked in Settings · env: set by DATA_MANUAL_HOME · host: read by R/Shiny */
+  source?: 'default' | 'chosen' | 'env' | 'host';
   keys: KeyEntry[];
 }
 
 /** The saved keys, or null when there is no local server (e.g. a static website). */
 export async function loadVault(): Promise<KeyVault | null> {
   try {
-    const res = await fetch('/keys', { headers: APP_HEADER, cache: 'no-store' });
+    const res = await fetch(hostUrl('/keys'), { headers: APP_HEADER, cache: 'no-store' });
     if (!res.ok || !(res.headers.get('content-type') ?? '').includes('json')) return null;
     return (await res.json()) as KeyVault;
   } catch {
@@ -42,22 +43,22 @@ async function check(res: Response): Promise<Response> {
 }
 
 export async function saveVaultKey(k: NewKey): Promise<KeyEntry> {
-  const res = await check(await fetch('/keys', { method: 'POST', headers: { ...APP_HEADER, 'content-type': 'application/json' }, body: JSON.stringify(k) }));
+  const res = await check(await fetch(hostUrl('/keys'), { method: 'POST', headers: { ...APP_HEADER, 'content-type': 'application/json' }, body: JSON.stringify(k) }));
   return (await res.json()) as KeyEntry;
 }
 
 export async function deleteVaultKey(id: string): Promise<void> {
-  await check(await fetch(`/keys/${encodeURIComponent(id)}`, { method: 'DELETE', headers: APP_HEADER }));
+  await check(await fetch(hostUrl(`/keys/${encodeURIComponent(id)}`), { method: 'DELETE', headers: APP_HEADER }));
 }
 
 /** Move saved keys to another folder on this computer (null = back to the default). */
 export async function setVaultFolder(dir: string | null): Promise<void> {
-  await check(await fetch('/keys/folder', { method: 'POST', headers: { ...APP_HEADER, 'content-type': 'application/json' }, body: JSON.stringify({ dir }) }));
+  await check(await fetch(hostUrl('/keys/folder'), { method: 'POST', headers: { ...APP_HEADER, 'content-type': 'application/json' }, body: JSON.stringify({ dir }) }));
 }
 
 /** Open the key folder in Explorer / Finder. */
 export async function openVaultFolder(): Promise<void> {
-  await check(await fetch('/keys/open-folder', { method: 'POST', headers: APP_HEADER }));
+  await check(await fetch(hostUrl('/keys/open-folder'), { method: 'POST', headers: APP_HEADER }));
 }
 
 export const vaultRef = (k: KeyEntry) => `${VAULT_PREFIX}${k.id}`;

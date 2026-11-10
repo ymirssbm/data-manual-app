@@ -65,7 +65,7 @@ const STORAGE_KEY = 'data-manual:last-session';
 
 function restore(adapter: HostAdapter): Session | null {
   if (adapter.initialSpec != null) {
-    return { source: { fileName: 'Provided by host', translatorLabel: 'Study spec (JSON)', notes: [] }, result: validateSpec(adapter.initialSpec) };
+    return { source: { fileName: adapter.kind === 'widget' ? 'your R session' : 'the host page', translatorLabel: 'Study spec (JSON)', notes: [] }, result: validateSpec(adapter.initialSpec) };
   }
   if (adapter.kind !== 'standalone') return null;
   try {

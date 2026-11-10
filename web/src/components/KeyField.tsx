@@ -234,6 +234,7 @@ function KeyFolderSetting({ vault }: { vault: KeyVault }) {
       <p className="dm-hint">
         {what} are kept here, encrypted by {vault.storage}.
         {vault.source === 'env' ? ' This folder is set by the DATA_MANUAL_HOME environment variable.' : ''}
+        {vault.source === 'host' ? ' Your R session reads and saves keys here. Change the folder in the standalone app.' : ''}
       </p>
       {editing ? (
         <form
@@ -256,7 +257,7 @@ function KeyFolderSetting({ vault }: { vault: KeyVault }) {
           <button className="dm-btn dm-btn-secondary dm-btn-sm" onClick={() => openVaultFolder().catch((e: Error) => setError(e.message))}>
             Open folder
           </button>
-          {vault.source !== 'env' && (
+          {vault.source !== 'env' && vault.source !== 'host' && (
             <button
               className="dm-btn dm-btn-secondary dm-btn-sm"
               onClick={() => {

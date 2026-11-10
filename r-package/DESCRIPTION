@@ -1,0 +1,28 @@
+Package: datamanual
+Title: Document, Check and Move Survey Studies in Shiny
+Version: 0.1.0
+Authors@R:
+    person("Ethan O.", "Kile", email = "eok5206@psu.edu", role = c("aut", "cre"))
+Description: Embeds the Data Manual app in R and Shiny. Data Manual reads studies
+    from Wear-IT, REDCap, Qualtrics or a spreadsheet into one study specification,
+    then produces codebooks, data dictionaries, flowcharts and schedules, edits
+    surveys, and exports them to other platforms. This package passes studies
+    between R and the app, relays the app's API calls through the R session, and
+    reads the API keys saved by the standalone app.
+License: MIT + file LICENSE
+URL: https://github.com/ymirssbm/data-manual-app
+BugReports: https://github.com/ymirssbm/data-manual-app/issues
+Encoding: UTF-8
+Depends: R (>= 4.1)
+Imports:
+    curl,
+    htmlwidgets (>= 1.6),
+    jsonlite,
+    processx,
+    shiny (>= 1.7)
+Suggests:
+    openssl,
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2

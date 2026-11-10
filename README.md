@@ -4,7 +4,7 @@ An open-source, browser-based tool for documenting research studies, especially 
 
 Everything is built on one study JSON spec ([`schema/study.schema.json`](schema/study.schema.json)): every source is translated into it, and every output is generated from it. AI assistants can design and edit studies in the same spec, inside the app or through the [MCP server](docs/ai-and-mcp.md).
 
-No R or other heavy runtime is needed: it runs in the browser, and can also be embedded in R/Shiny as an htmlwidget.
+No R or other heavy runtime is needed: it runs in the browser. R users can also open it from R or embed it in Shiny with the [datamanual R package](r-package/README.md).
 
 > Status: early development.
 

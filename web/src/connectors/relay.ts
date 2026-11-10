@@ -1,6 +1,8 @@
 // Calls an external API through the app's local relay (see vite.config.ts),
 // because REDCap, Qualtrics and many AI endpoints refuse browser requests.
 
+import { hostUrl } from './host';
+
 export class ConnectorError extends Error {}
 
 /** Outside a browser (the MCP server runs in Node) there is no CORS, so calls go straight to the API. */
@@ -36,7 +38,7 @@ export async function relayFetch(target: string, init: { method?: 'GET' | 'POST'
     }
   }
   try {
-    res = await fetch('/proxy/http', {
+    res = await fetch(hostUrl('/proxy/http'), {
       method: init.method ?? 'GET',
       signal: init.signal,
       // x-data-manual lets the local server swap saved keys into this request (see src/server/relay.ts).

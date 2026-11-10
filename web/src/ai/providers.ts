@@ -6,6 +6,15 @@
 //   a plain chat-completions request, optionally relayed by the app's local server
 //   because most of those endpoints don't allow browser (CORS) calls.
 import Anthropic from '@anthropic-ai/sdk';
+import { hostRelay, hostUrl } from '../connectors/host';
+
+/** fetch for the Anthropic SDK inside R/Shiny: the R session relays the call and fills in the saved key. */
+function relayAnthropic(url: string, init: RequestInit = {}): Promise<Response> {
+  const headers = new Headers(init.headers);
+  headers.set('x-target-url', url);
+  headers.set('x-data-manual', '1');
+  return fetch(hostUrl('/proxy/http'), { method: init.method ?? 'POST', headers, body: init.body, signal: init.signal });
+}
 
 export type AiProvider = 'anthropic' | 'openai';
 
@@ -54,7 +63,12 @@ async function callClaude(config: AiConfig, system: string, turns: ChatTurn[], o
   const client = new Anthropic({
     apiKey: config.apiKey.trim(),
     dangerouslyAllowBrowser: true,
-    ...(saved ? { baseURL: `${window.location.origin}/proxy/anthropic`, defaultHeaders: { 'x-data-manual': '1' } } : {}),
+    ...(saved
+      ? hostRelay()
+        ? // Inside R/Shiny: every call goes through the R session's relay with its real URL.
+          { fetch: (url: RequestInfo | URL, init?: RequestInit) => relayAnthropic(String(url instanceof Request ? url.url : url), init) }
+        : { baseURL: `${window.location.origin}/proxy/anthropic`, defaultHeaders: { 'x-data-manual': '1' } }
+      : {}),
   });
   const model = config.model.trim() || 'claude-opus-5-5';
   const withFallback = FALLBACK_MODELS.has(model);
@@ -108,7 +122,7 @@ async function callOpenAiCompatible(config: AiConfig, system: string, turns: Cha
   };
   // Saved keys only work through the local server, which swaps in the secret.
   const relay = config.useRelay || config.apiKey.trim().startsWith('vault:');
-  const res = await fetch(relay ? '/proxy/http' : target, {
+  const res = await fetch(relay ? hostUrl('/proxy/http') : target, {
     method: 'POST',
     signal,
     headers: relay ? { ...headers, 'x-target-url': target, 'x-data-manual': '1' } : headers,

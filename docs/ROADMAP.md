@@ -65,7 +65,9 @@ Rough order. Check items off as they land.
 ## Phase 3: Distribution
 - [ ] GitHub Pages deployment of the standalone app
 - [ ] Relay for hosted deployments (Wear-IT, REDCap, Qualtrics, OpenAI-compatible APIs block browser calls)
-- [ ] `r-package/` htmlwidget wrapper + Shiny bindings (trim widget bundle: Mermaid makes it 5.7 MB)
+- [x] `r-package/` htmlwidget wrapper + Shiny bindings: two-way study sync, `run_data_manual()`, API relay and saved keys through the R session
+- [ ] Trim the widget bundle (8 MB; Mermaid and SurveyJS are most of it)
+- [ ] R package on CRAN / r-universe
 - [x] Contributor guide for adding translators, exporters and MCP tools (`docs/contributing.md`)
 - [ ] Publish the MCP server to npm (`npx data-manual-mcp`)
 - [ ] Verify Qualtrics .qsf and REDCap dictionary exports by importing them into live accounts

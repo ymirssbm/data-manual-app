@@ -2,7 +2,8 @@
 // The Wear-IT server sends no CORS headers, so browsers can't call it directly;
 // the dev/preview server forwards /proxy/wearit/<server>/... to it (see vite.config.ts).
 
-import { resolveSecrets } from '../relay';
+import { hostRelay } from '../host';
+import { relayFetch, resolveSecrets } from '../relay';
 
 export const WEARIT_SERVERS = [
   { id: 'wearables-survey', label: 'wearables-survey' },
@@ -13,7 +14,9 @@ export type WearitServer = (typeof WEARIT_SERVERS)[number]['id'];
 export const WEARIT_HOST = 'https://wearables.vmhost.psu.edu';
 /** Browser: the local proxy. Node (MCP server): the Wear-IT host itself. */
 const DIRECT = typeof window === 'undefined';
-const proxyBase = (server: string) => (DIRECT ? `${WEARIT_HOST}/${server}` : `/proxy/wearit/${server}`);
+/** Inside R/Shiny, requests go through the R session's relay with full Wear-IT URLs. */
+const full = () => DIRECT || hostRelay();
+const proxyBase = (server: string) => (full() ? `${WEARIT_HOST}/${server}` : `/proxy/wearit/${server}`);
 
 export interface PullOptions {
   server: WearitServer;
@@ -35,7 +38,9 @@ export async function pullWearit({ server, studyId, token, maxPages = 5000, sign
   let url: string | null = `${proxyBase(server)}/api/getData/${encodeURIComponent(id)}`;
   while (url && pages.length < maxPages) {
     const req = withToken(url, token.trim());
-    const res = await fetch(DIRECT ? await resolveSecrets(req, new URL(req)) : req, { signal, headers: { Accept: 'application/json', 'x-data-manual': '1' } });
+    const res = hostRelay()
+      ? await relayFetch(req, { signal, headers: { Accept: 'application/json' } })
+      : await fetch(DIRECT ? await resolveSecrets(req, new URL(req)) : req, { signal, headers: { Accept: 'application/json', 'x-data-manual': '1' } });
     if (res.status === 401 || res.status === 403) throw new WearitError('Wear-IT rejected the request: check the study ID, API token and server.');
     // A static host without the proxy answers 200 with the app's own HTML page (or a 404).
     if ((res.ok && (res.headers.get('content-type') ?? '').includes('text/html')) || (res.status === 404 && pages.length === 0)) {
@@ -57,9 +62,9 @@ export async function pullWearit({ server, studyId, token, maxPages = 5000, sign
 }
 
 function withToken(url: string, token: string): string {
-  const u = new URL(url, DIRECT ? WEARIT_HOST : window.location.origin);
+  const u = new URL(url, full() ? WEARIT_HOST : window.location.origin);
   u.searchParams.set('api_token', token);
-  return DIRECT ? u.href : u.pathname + u.search;
+  return full() ? u.href : u.pathname + u.search;
 }
 
 /** Rewrite the server's absolute "next" links onto the proxy. */

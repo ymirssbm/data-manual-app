@@ -18,7 +18,7 @@ web/                         the app (React + Vite + TypeScript)
   src/mcp/                   MCP server (tools.ts, server.ts)
   src/components/            the UI
   tests/                     Vitest tests and fixtures
-r-package/                   htmlwidget bundle for R/Shiny (in progress)
+r-package/                   R package: the app as an htmlwidget, Shiny bindings, API relay
 docs/                        this documentation
 ```
 
