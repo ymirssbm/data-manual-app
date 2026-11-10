@@ -24,6 +24,7 @@ How it works:
 - Other websites can't use your saved keys through the local server: key requests must come from the app itself.
 - **Use once without saving** is still available: the key stays in memory for this tab and is never written anywhere.
 - Delete saved keys in **Settings → Saved API keys**. `~/.data-manual/keys.json` lists their names and masked hints; it never holds a key in plain text.
+- The key folder is `~/.data-manual` (on Windows, `C:\Users\<you>\.data-manual`). **Settings → Saved API keys → Change folder…** moves it, for example to an encrypted drive, and saved keys move with it. The `DATA_MANUAL_HOME` environment variable overrides both. On Windows the encrypted keys are in this folder and only open for your Windows account; on macOS and Linux the folder holds only the list, and the keys stay in the Keychain or keyring.
 - When the app runs without its local server (a static website), keys can't be saved and are forgotten when the tab closes.
 - Earlier versions could keep tokens in browser storage. The app moves any it finds into secure storage automatically and removes them from the browser.
 - The MCP server uses the same saved keys (or environment variables), so keys never appear in an AI conversation.
