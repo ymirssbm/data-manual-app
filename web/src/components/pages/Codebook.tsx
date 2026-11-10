@@ -319,10 +319,12 @@ interface ViewProps {
   codebook: GeneratedCodebook | null;
   onBuilt(c: GeneratedCodebook): void;
   go(id: PageId): void;
+  notify(text: string, kind?: 'message' | 'error' | 'warning', ms?: number): number;
 }
 
-export function CodebookViewerPage({ spec, settings, codebook, onBuilt, go }: ViewProps) {
+export function CodebookViewerPage({ spec, settings, codebook, onBuilt, go, notify }: ViewProps) {
   const frame = useRef<HTMLIFrameElement>(null);
+  const [exporting, setExporting] = useState(false);
   // The viewer builds the codebook itself if there isn't a current one, so it's never blank.
   const { building } = useCodebook(spec, settings, codebook, onBuilt, 0);
   if (!spec) return (<><PageTitle>Codebook Viewer</PageTitle><NoStudy go={go} what="a codebook" /></>);
@@ -339,6 +341,25 @@ export function CodebookViewerPage({ spec, settings, codebook, onBuilt, go }: Vi
             </button>
             <button className="dm-btn dm-btn-secondary" disabled={!current} onClick={() => frame.current?.contentWindow?.print()}>
               <Icon name="print" /> Save as PDF
+            </button>
+            <button
+              className="dm-btn dm-btn-secondary"
+              disabled={!current || exporting}
+              onClick={async () => {
+                if (!current) return;
+                setExporting(true);
+                try {
+                  const { codebookDocx } = await import('../codebookDocx');
+                  const title = settings.text.title || spec['Study.Metadata']['Study.Name'];
+                  download(fileName.replace(/\.html$/, '.docx'), await codebookDocx(current.html, current.settings.theme, title));
+                } catch (e) {
+                  notify(`Word export failed: ${(e as Error).message}`, 'error');
+                } finally {
+                  setExporting(false);
+                }
+              }}
+            >
+              <Icon name="file" /> {exporting ? 'Making Word file…' : 'Download Word'}
             </button>
             <button className="dm-btn dm-btn-primary" disabled={!current} onClick={() => current && download(fileName, current.html, 'text/html')}>
               <Icon name="download" /> Download HTML

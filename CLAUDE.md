@@ -93,6 +93,7 @@ Known weak spots in the old tool worth fixing, not copying: it is file-based (Da
 Before reimplementing a feature, read the relevant file in the prior implementation to learn what it does, then design the best version here. Don't copy known bugs (e.g. the `tolower(x) == "NA"` check in `GenerateCodebook.R` can never match).
 
 ## Open design questions: ask the user, don't decide alone
+- Word export: `web/src/components/codebookDocx.ts` walks the codebook HTML (the same document the PDF prints) and builds a .docx with the `docx` library, loaded on demand. Change the codebook in `generators/codebook.ts` and both follow; only new kinds of HTML elements need a case there.
 - PDF approach: currently browser print of the codebook HTML (print CSS, "Save as PDF"). Revisit if one-click PDF files are needed (Paged.js / pdf library / headless Chrome)
 - Question types the schema enum can't express (REDCap calc/file fields, Qualtrics matrix/rank order). Translators currently skip or approximate them, with a note
 - How browser-based connectors handle CORS and API tokens for REDCap/Qualtrics/Wear-IT (direct calls vs. a small optional local proxy/CLI)

@@ -23,6 +23,15 @@ export const ACCENTS: Record<string, { label: string; main: string; bright: stri
   rose: { label: 'Rose', main: '#c2416b', bright: '#e11d48', dark: '#9f1239' },
   orange: { label: 'Orange', main: '#c8661c', bright: '#ea580c', dark: '#9a3412' },
   slate: { label: 'Slate', main: '#475569', bright: '#475569', dark: '#1e293b' },
+  // Deeper versions of the same hues, shown in a second row under their light versions.
+  'blue-deep': { label: 'Deep blue', main: '#1f5f8b', bright: '#1d4ed8', dark: '#1e3a8a' },
+  'indigo-deep': { label: 'Deep indigo', main: '#3730a3', bright: '#4338ca', dark: '#312e81' },
+  'teal-deep': { label: 'Deep teal', main: '#0b6466', bright: '#0f766e', dark: '#134e4a' },
+  'green-deep': { label: 'Deep green', main: '#1f6335', bright: '#15803d', dark: '#14532d' },
+  'purple-deep': { label: 'Deep purple', main: '#5a3191', bright: '#7e22ce', dark: '#581c87' },
+  'rose-deep': { label: 'Deep rose', main: '#93294d', bright: '#be123c', dark: '#881337' },
+  'orange-deep': { label: 'Deep orange', main: '#964a12', bright: '#c2410c', dark: '#7c2d12' },
+  'slate-deep': { label: 'Deep slate', main: '#273342', bright: '#334155', dark: '#0f172a' },
 };
 
 const FONTS: Record<AppSettings['font'], string> = {

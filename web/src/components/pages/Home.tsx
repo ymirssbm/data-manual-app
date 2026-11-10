@@ -28,7 +28,7 @@ const STAGES: Stage[] = [
       { label: 'Wear-IT', page: 'datapull' },
       { label: 'REDCap', page: 'datapull' },
       { label: 'Qualtrics', page: 'datapull' },
-      { label: 'Upload a file', page: 'datapull' },
+      { label: 'Upload a file', page: 'dataset' },
       { label: 'Your dataset (CSV)', page: 'dataset' },
       { label: 'AI generation', page: 'ai' },
     ],
@@ -47,7 +47,7 @@ const STAGES: Stage[] = [
     text: 'Generate the documents a study needs, straight from the spec.',
     items: [
       { label: 'Codebook', page: 'codebook_gen' },
-      { label: 'Data dictionary', page: 'datadict_gen' },
+      { label: 'Data dictionary', page: 'datadict' },
       { label: 'Flowchart', page: 'flowchart' },
       { label: 'Schedule', page: 'schedule' },
     ],

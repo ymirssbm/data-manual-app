@@ -5,18 +5,17 @@ import type { HostAdapter } from '../adapters/types';
 import { Icon, Toasts, useToasts } from './ui';
 import { HomePage } from './pages/Home';
 import { StandardPage } from './pages/Standard';
-import { DataPullPage, type LoadedSource } from './pages/DataPull';
+import { DataPullPage, type ImportTab, type LoadedSource } from './pages/DataPull';
 import { CodebookGeneratorPage, CodebookViewerPage, type GeneratedCodebook } from './pages/Codebook';
-import { DictionaryGeneratorPage, DictionaryViewerPage } from './pages/Dictionary';
+import { DictionaryPage } from './pages/Dictionary';
 import { FlowchartPage } from './pages/Flowchart';
 import { SchedulePage } from './pages/Schedule';
 import { AiPage } from './pages/Ai';
-import { DatasetPage } from './pages/Dataset';
 import { DataExportPage } from './pages/DataExport';
 import { SurveyEditorPage } from './pages/SurveyEditor';
 import { appStyle, ContactDialog, loadAppSettings, saveAppSettings, SettingsDialog, useResolvedMode, type AppSettings } from './AppSettings';
 
-export type PageId = 'home' | 'datapull' | 'dataset' | 'export' | 'editor' | 'codebook_gen' | 'codebook_view' | 'datadict_gen' | 'datadict_view' | 'flowchart' | 'schedule' | 'ai' | 'standard';
+export type PageId = 'home' | 'datapull' | 'dataset' | 'export' | 'editor' | 'codebook_gen' | 'codebook_view' | 'datadict' | 'flowchart' | 'schedule' | 'ai' | 'standard';
 
 interface MenuItem {
   id?: PageId;
@@ -31,7 +30,7 @@ const MENU: MenuItem[] = [
     label: 'Data',
     icon: 'table',
     children: [
-      { id: 'datapull', label: 'Data Import', icon: 'import', also: ['dataset'] },
+      { id: 'datapull', label: 'Data Import', icon: 'import' },
       { id: 'export', label: 'Data Export', icon: 'export' },
     ],
   },
@@ -44,14 +43,7 @@ const MENU: MenuItem[] = [
       { id: 'codebook_view', label: 'Codebook Viewer', icon: 'eye' },
     ],
   },
-  {
-    label: 'Data Dictionary',
-    icon: 'table',
-    children: [
-      { id: 'datadict_gen', label: 'Data Dictionary Generator', icon: 'cog' },
-      { id: 'datadict_view', label: 'Data Dictionary Viewer', icon: 'eye' },
-    ],
-  },
+  { id: 'datadict', label: 'Data Dictionary', icon: 'table' },
   { id: 'flowchart', label: 'Study Flowchart', icon: 'diagram' },
   { id: 'schedule', label: 'Study Schedule', icon: 'calendar' },
   { id: 'ai', label: 'AI Study Generator', icon: 'spark' },
@@ -87,6 +79,7 @@ export function App({ adapter }: { adapter: HostAdapter }) {
   const [codebook, setCodebook] = useState<GeneratedCodebook | null>(null);
   const { toasts, notify, dismiss } = useToasts();
   const [datasetFile, setDatasetFile] = useState<{ name: string; text: string } | null>(null);
+  const [importTab, setImportTab] = useState<ImportTab>('api');
   const spec: StudySpec | null = session?.result.spec ?? null;
   const [cbSettings, setCbSettingsState] = useState<CodebookSettings>(() => loadSettings(spec));
   const setCbSettings = useCallback((s: CodebookSettings) => {
@@ -124,6 +117,11 @@ export function App({ adapter }: { adapter: HostAdapter }) {
   };
 
   const go = (id: PageId) => {
+    // "Your dataset" is a tab of Data Import.
+    if (id === 'dataset') {
+      setImportTab('file');
+      id = 'datapull';
+    }
     setPage(id);
     if (window.matchMedia('(max-width: 767px)').matches) setCollapsed(true);
   };
@@ -192,17 +190,20 @@ export function App({ adapter }: { adapter: HostAdapter }) {
         {page === 'datapull' && (
           <DataPullPage
             session={session}
+            spec={spec}
             onLoaded={onLoaded}
+            onDatasetLoaded={(s, r) => {
+              onLoaded(s, r);
+              setDatasetFile(null);
+              go('home');
+            }}
             notify={notify}
             go={go}
-            openDataset={(f) => {
-              setDatasetFile(f);
-              go('dataset');
-            }}
+            tab={importTab}
+            setTab={setImportTab}
+            datasetFile={datasetFile}
+            setDatasetFile={setDatasetFile}
           />
-        )}
-        {page === 'dataset' && (
-          <DatasetPage spec={spec} go={go} file={datasetFile} setFile={setDatasetFile} onLoaded={(s, r) => { onLoaded(s, r); go('home'); }} notify={notify} />
         )}
         {page === 'export' && <DataExportPage spec={spec} go={go} notify={notify} />}
         {page === 'editor' && (
@@ -216,18 +217,8 @@ export function App({ adapter }: { adapter: HostAdapter }) {
         {page === 'codebook_gen' && (
           <CodebookGeneratorPage spec={spec} settings={cbSettings} setSettings={setCbSettings} codebook={codebook} onBuilt={setCodebook} go={go} notify={notify} />
         )}
-        {page === 'codebook_view' && <CodebookViewerPage spec={spec} settings={cbSettings} codebook={codebook} onBuilt={setCodebook} go={go} />}
-        {page === 'datadict_gen' && (
-          <DictionaryGeneratorPage
-            spec={spec}
-            go={go}
-            onGenerated={() => {
-              notify('Data dictionary generated.');
-              go('datadict_view');
-            }}
-          />
-        )}
-        {page === 'datadict_view' && <DictionaryViewerPage spec={spec} go={go} />}
+        {page === 'codebook_view' && <CodebookViewerPage spec={spec} settings={cbSettings} codebook={codebook} onBuilt={setCodebook} go={go} notify={notify} />}
+        {page === 'datadict' && <DictionaryPage spec={spec} go={go} />}
         {page === 'flowchart' && <FlowchartPage spec={spec} go={go} notify={notify} />}
         {page === 'schedule' && <SchedulePage spec={spec} go={go} />}
         {page === 'standard' && <StandardPage />}

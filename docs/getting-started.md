@@ -1,4 +1,4 @@
-# Getting started
+﻿# Getting started
 
 ## Open the app
 
@@ -40,7 +40,7 @@ The study name appears in the top bar once it's loaded. Every page then works on
 
 - **From a platform**: Data Import → pick Wear-IT, REDCap or Qualtrics, enter your API details, and pull. See [Importing and exporting](import-export.md).
 - **From a file**: Data Import → drop the file on "Upload a File". The format is detected automatically.
-- **From a spreadsheet of responses**: Data Import → "Your dataset (CSV)". Describe the layout (long EMA, wide), map the columns, and either attach it to the loaded study or build a study from the data.
+- **From a spreadsheet of responses**: Data Import → "Your dataset" tab. Drop the file in, describe the layout (long EMA, wide), map the columns, and either attach it to the loaded study or build a study from the data.
 - **From scratch**: AI Study Generator, or Survey Editor → "+ Survey".
 
 ## From an AI assistant

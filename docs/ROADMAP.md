@@ -1,4 +1,4 @@
-# Roadmap
+﻿# Roadmap
 
 Rough order. Check items off as they land.
 
@@ -9,7 +9,7 @@ Rough order. Check items off as they land.
 - [x] One schema only: every example in the current spec, with example response data; older-format files kept only as translator test fixtures
 - [x] Data Pull: REDCap API connection (instrument metadata + records), translated into the spec. Not yet tested against a real project: needs a token
 - [x] Data Pull: Qualtrics API connection (survey definition + response export), translated into the spec. Not yet tested against a real survey: needs a token
-- [x] Bring your own dataset: upload a CSV, describe its layout (long EMA / wide), map ID, time, question and response columns, and use every tool on it (attach to a loaded study or build a study from the data). Has its own "Your Dataset" page
+- [x] Bring your own dataset: upload a CSV, describe its layout (long EMA / wide), map ID, time, question and response columns, and use every tool on it (attach to a loaded study or build a study from the data). Lives in the "Your dataset" tab of Data Import, next to API Pull and the Example Study
 - [x] Qualtrics: connect once with an account token, browse and search all your surveys, pull with one click
 - [x] REDCap: "My REDCap projects" list (one token per project, as REDCap requires), pull with one click
 - [x] Codebook TOC redesign (in-document style, foldable nodes, counts, deep levels folded by default)
@@ -55,6 +55,7 @@ Rough order. Check items off as they land.
 
 ## Phase 2: New features
 - [x] PDF output via print-optimized codebook ("Save as PDF")
+- [x] Word (.docx) codebook, converted from the same HTML as the PDF
 - [x] Study schedule display: event cards, typical-day view, study timeline
 - [x] REDCap data dictionary translator (forms, sections, field types, simple branching logic)
 - [x] Manual survey builder (Survey Editor), synced with the spec; SurveyJS preview and JSON round trip

@@ -8,34 +8,14 @@ import { NoStudy } from './common';
 
 const csvName = (spec: StudySpec) => `${safeFileName(spec['Study.Metadata']['Study.Name'])}_DataDictionary.csv`;
 
-export function DictionaryGeneratorPage({ spec, go, onGenerated }: { spec: StudySpec | null; go(id: PageId): void; onGenerated(): void }) {
-  return (
-    <>
-      <PageTitle>Data Dictionary Generator</PageTitle>
-      {spec ? (
-        <Box title="Generate Data Dictionary">
-          <p>Press the button to generate a data dictionary from the study you loaded.</p>
-          <div className="dm-inline">
-            <button className="dm-btn dm-btn-primary dm-btn-lg" onClick={onGenerated}>
-              <Icon name="table" size={18} /> Generate Data Dictionary
-            </button>
-            <button className="dm-btn dm-btn-secondary" onClick={() => download(csvName(spec), dataDictionaryCsv(generateDataDictionary(spec)), 'text/csv')}>
-              <Icon name="download" /> Download CSV
-            </button>
-          </div>
-        </Box>
-      ) : (
-        <NoStudy go={go} what="a data dictionary" />
-      )}
-    </>
-  );
-}
-
-/** The prior tool's table (same columns, same order, blocks as rows), formatted for reading. */
-export function DictionaryViewerPage({ spec, go }: { spec: StudySpec | null; go(id: PageId): void }) {
+/**
+ * The data dictionary: built from the loaded study as you look at it (the prior tool's columns and
+ * order, blocks as rows), searchable, and downloadable as CSV.
+ */
+export function DictionaryPage({ spec, go }: { spec: StudySpec | null; go(id: PageId): void }) {
   const rows = useMemo(() => (spec ? generateDataDictionary(spec) : []), [spec]);
   const [query, setQuery] = useState('');
-  if (!spec) return (<><PageTitle>Data Dictionary Viewer</PageTitle><NoStudy go={go} what="a data dictionary" /></>);
+  if (!spec) return (<><PageTitle>Data Dictionary</PageTitle><NoStudy go={go} what="a data dictionary" /></>);
 
   const q = query.trim().toLowerCase();
   const visible = q ? rows.filter((r) => DICTIONARY_COLUMNS.some((c) => r[c].toLowerCase().includes(q))) : rows;
@@ -49,7 +29,7 @@ export function DictionaryViewerPage({ spec, go }: { spec: StudySpec | null; go(
           </button>
         }
       >
-        Data Dictionary Viewer
+        Data Dictionary
       </PageTitle>
       <Box>
         <div className="dm-table-toolbar">

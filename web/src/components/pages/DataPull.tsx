@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { validateSpec, type ValidationResult } from '../../core';
+import { validateSpec, type StudySpec, type ValidationResult } from '../../core';
 import { pullWearit, WEARIT_SERVERS, type WearitServer } from '../../connectors/wearit/fetch';
 import { wearitPagesToSpec } from '../../connectors/wearit/convert';
 import { normalizeRedcapUrl, pullRedcap, redcapProjectInfo } from '../../connectors/redcap';
@@ -10,8 +10,8 @@ import { addKey, keyLabel, KeyField, useVault } from '../KeyField';
 import { detectTranslator, TRANSLATORS } from '../../translators';
 import type { PageId, Session } from '../App';
 import { IssueList } from '../IssueList';
-import { ImportTabs } from './common';
-import { Box, Field, Icon, PageTitle, Row } from '../ui';
+import { DatasetImport } from './DatasetImport';
+import { Box, Field, Icon, PageTitle } from '../ui';
 
 export interface LoadedSource {
   fileName: string;
@@ -19,14 +19,31 @@ export interface LoadedSource {
   notes: string[];
 }
 
+export type ImportTab = 'api' | 'file' | 'example';
+type DataFile = { name: string; text: string };
+
 interface Props {
   session: Session | null;
+  spec: StudySpec | null;
   onLoaded(source: LoadedSource, result: ValidationResult): void;
+  /** A response dataset was mapped and loaded (the app then goes Home). */
+  onDatasetLoaded(source: LoadedSource, result: ValidationResult): void;
   notify(text: string, kind?: 'message' | 'error' | 'warning', ms?: number): number;
-  /** Hand a CSV to the dataset page. */
-  openDataset(file: { name: string; text: string }): void;
+  tab: ImportTab;
+  setTab(t: ImportTab): void;
+  /** The response CSV being mapped, kept by the app so it survives leaving the page. */
+  datasetFile: DataFile | null;
+  setDatasetFile(f: DataFile | null): void;
   go(id: PageId): void;
 }
+
+/** What the file importer reads: one line per kind of file, however many translators sit behind it. */
+const FILE_KINDS = [
+  { label: 'Study spec (.json)', text: 'A study saved from this app (current or older format), or a saved Wear-IT getData response.' },
+  { label: 'Qualtrics survey (.qsf)', text: 'In Qualtrics: Survey → Tools → Import/Export → Export Survey.' },
+  { label: 'REDCap data dictionary (.csv)', text: 'In REDCap: Project Setup → Data Dictionary → Download the current Data Dictionary.' },
+  { label: 'Response data (.csv / .tsv)', text: 'Raw responses from anywhere (an EMA app export, a spreadsheet, SPSS or R saved as CSV). You map its columns next.' },
+];
 
 type Source = 'wearit' | 'redcap' | 'qualtrics';
 const LOCAL_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -59,7 +76,7 @@ const EXAMPLE = {
     'Three 7-day measurement bursts with morning, evening and weekly surveys, complex branching (nested, multi-select, threshold and mutually exclusive paths) and simulated responses from 200 participants enrolled over six months (about 80% of surveys completed).',
 };
 
-export function DataPullPage({ session, onLoaded, notify, openDataset, go }: Props) {
+export function DataPullPage({ session, spec, onLoaded, onDatasetLoaded, notify, tab, setTab, datasetFile, setDatasetFile }: Props) {
   const [source, setSource] = useState<Source>('wearit');
   const [busy, setBusy] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
@@ -163,7 +180,7 @@ export function DataPullPage({ session, onLoaded, notify, openDataset, go }: Pro
     const input = { fileName, text };
     const t = detectTranslator(input);
     if (!t) {
-      if (/\.(csv|tsv|txt)$/i.test(fileName)) return openDataset({ name: fileName, text });
+      if (/\.(csv|tsv|txt)$/i.test(fileName)) return setDatasetFile({ name: fileName, text });
       notify(`Couldn't recognize ${fileName}. Supported: ${TRANSLATORS.map((x) => x.label).join(', ')}, or a dataset CSV.`, 'error', 10000);
       return;
     }
@@ -197,7 +214,20 @@ export function DataPullPage({ session, onLoaded, notify, openDataset, go }: Pro
   return (
     <>
       <PageTitle>Data Import</PageTitle>
-      <ImportTabs page="datapull" go={go} />
+      <div className="dm-segmented dm-segmented-inline dm-import-tabs" role="tablist">
+        {(
+          [
+            ['api', 'API Pull'],
+            ['file', 'Your dataset (CSV, JSON, QSF)'],
+            ['example', 'Example Study'],
+          ] as const
+        ).map(([id, text]) => (
+          <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'is-active' : ''} onClick={() => setTab(id)}>
+            {text}
+          </button>
+        ))}
+      </div>
+      {tab === 'api' && (
       <Box title="Pull from a Data Collection Platform">
         <div className="dm-segmented dm-segmented-inline" role="tablist">
           {(['wearit', 'redcap', 'qualtrics'] as const).map((s) => (
@@ -398,54 +428,68 @@ export function DataPullPage({ session, onLoaded, notify, openDataset, go }: Pro
           {vault ? `Saved keys are kept by ${vault.storage}, never in the browser.` : 'Keys entered here are forgotten when you close the tab.'}
         </div>
       </Box>
+      )}
 
-      <Row>
-        <Box title="Import a Study File" width={6}>
-          <div
-            className="dm-drop"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              const f = e.dataTransfer.files[0];
-              if (f) void f.text().then((t) => loadText(f.name, t));
-            }}
-          >
-            <Icon name="upload" size={28} />
-            <p>Drop a file here</p>
-            <label className="dm-btn dm-btn-primary">
-              Choose file
-              <input
-                type="file"
-                hidden
-                accept={[...new Set([...TRANSLATORS.flatMap((t) => t.accept.split(',')), '.tsv', '.txt'])].join(',')}
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  e.target.value = '';
-                  if (f) void f.text().then((t) => loadText(f.name, t));
-                }}
-              />
-            </label>
-          </div>
-          <ul className="dm-sources">
-            {TRANSLATORS.map((t) => (
-              <li key={t.id}>
-                <strong>{t.label}</strong>
-                <span>{t.howToGet}</span>
-              </li>
-            ))}
-            <li>
-              <strong>A dataset (.csv / .tsv)</strong>
-              <span>
-                Raw responses from anywhere: opens{' '}
-                <button className="dm-link-btn" onClick={() => go('dataset')}>
-                  Your Dataset
-                </button>{' '}
-                to map its columns.
-              </span>
-            </li>
-          </ul>
-        </Box>
-        <Box title="Example Study" width={6}>
+      {tab === 'file' && (
+        <>
+          <Box title="Import a File">
+            <div
+              className="dm-drop"
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const f = e.dataTransfer.files[0];
+                if (f) void f.text().then((t) => loadText(f.name, t));
+              }}
+            >
+              <Icon name="upload" size={28} />
+              <p>Drop a file here</p>
+              <label className="dm-btn dm-btn-primary">
+                Choose file
+                <input
+                  type="file"
+                  hidden
+                  accept={[...new Set([...TRANSLATORS.flatMap((t) => t.accept.split(',')), '.tsv', '.txt'])].join(',')}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = '';
+                    if (f) void f.text().then((t) => loadText(f.name, t));
+                  }}
+                />
+              </label>
+            </div>
+            <ul className="dm-sources">
+              {FILE_KINDS.map((k) => (
+                <li key={k.label}>
+                  <strong>{k.label}</strong>
+                  <span>{k.text}</span>
+                </li>
+              ))}
+            </ul>
+          </Box>
+          {datasetFile && (
+            <Box title={`Map Your Response Data: ${datasetFile.name}`}>
+              <p className="dm-hint">
+                Say how the file is laid out: <strong>long</strong> (one row per response) or <strong>wide</strong> (one row per session, a column per variable).{' '}
+                {spec ? (
+                  <>
+                    The data can be attached to <strong>{spec['Study.Metadata']['Study.Name']}</strong> (matched by variable name), or used to build a new study.
+                  </>
+                ) : (
+                  <>No study is loaded, so a study will be built from the data. For question text and labels, load the study or survey first, then attach this data to it.</>
+                )}
+              </p>
+              <DatasetImport initial={datasetFile} spec={spec} onLoaded={onDatasetLoaded} notify={notify} />
+              <button className="dm-link-btn dm-mt" onClick={() => setDatasetFile(null)}>
+                Cancel
+              </button>
+            </Box>
+          )}
+        </>
+      )}
+
+      {tab === 'example' && (
+        <Box title="Example Study">
           <div className="dm-examples">
             <button className="dm-example" onClick={() => void loadExample()}>
               <strong>{EXAMPLE.title}</strong>
@@ -453,14 +497,24 @@ export function DataPullPage({ session, onLoaded, notify, openDataset, go }: Pro
             </button>
           </div>
           <p className="dm-hint dm-mt">
-            Its responses are also available as a plain CSV on{' '}
-            <button className="dm-link-btn" onClick={() => go('dataset')}>
-              Your Dataset
-            </button>{' '}
-            to try the dataset importer.
+            To try importing your own data, use{' '}
+            <button
+              className="dm-link-btn"
+              onClick={() =>
+                void readExample('branching-ema-data.csv')
+                  .then((text) => {
+                    setDatasetFile({ name: 'branching-ema-data.csv', text });
+                    setTab('file');
+                  })
+                  .catch((e: Error) => notify(e.message, 'error', 8000))
+              }
+            >
+              the example's responses as a plain CSV
+            </button>
+            : it opens in Your dataset, ready to map its columns.
           </p>
         </Box>
-      </Row>
+      )}
 
       {session && (
         <Box title={`Loaded: ${session.source.fileName}`}>

@@ -496,7 +496,8 @@ textarea.dm-input { resize: vertical; min-height: 70px; }
 .dm-modal-body { padding: 14px 16px 16px; display: grid; gap: 16px; }
 .dm-set-label { font-size: calc(12px * var(--ts, 1)); font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-2); margin-bottom: 6px; }
 .dm-modal .dm-segmented { margin: 0; }
-.dm-swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Eight columns: each deep accent sits directly under its light version. */
+.dm-swatches { display: grid; grid-template-columns: repeat(8, 30px); gap: 8px; }
 .dm-swatch { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--border-2); cursor: pointer; padding: 0; }
 .dm-swatch.is-active { box-shadow: 0 0 0 2px var(--text); }
 .dm-modal-foot { display: flex; justify-content: space-between; align-items: center; padding-top: 4px; }

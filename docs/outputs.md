@@ -4,7 +4,9 @@ Every output is generated from the study spec alone, so it works the same whatev
 
 ## Codebook
 
-**Codebook → Generator** builds a self-contained HTML codebook with a live preview; **Codebook → Viewer** shows it full size. Download it as HTML, or **Save as PDF**. The print version is its own compact layout: every section expanded, light colors whatever the theme, a two-column contents list, each survey on a new page, charts sized for paper, page numbers and the study title in the margins.
+**Codebook → Generator** builds a self-contained HTML codebook with a live preview; **Codebook → Viewer** shows it full size. Download it as HTML, as a **Word** file (.docx), or **Save as PDF**. The print version is its own compact layout: every section expanded, light colors whatever the theme, a two-column contents list, each survey on a new page, charts sized for paper, page numbers and the study title in the margins.
+
+The Word file has the same content as the PDF, as an editable document: Word headings (so the navigation pane and the table of contents work), real tables, and charts and flowcharts as pictures. A long flowchart continues over several pages instead of being shrunk to fit one. Word fills in the table of contents and page numbers when the file opens (it asks to update fields; choose Yes). Google Docs and LibreOffice open it too, but show the table of contents only after you update it there.
 
 Structure:
 

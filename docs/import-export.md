@@ -1,4 +1,4 @@
-# Importing and exporting
+﻿# Importing and exporting
 
 Studies come in through **Data → Data Import** and go out through **Data → Data Export**. In between, they're always the same study spec, so anything imported can be documented, edited, and exported to another platform.
 
@@ -27,9 +27,9 @@ Drop a file on "Upload a File". The format is detected automatically:
 
 Anything that can't be carried over exactly (complex REDCap branching, unsupported question types) is listed in the notes after import.
 
-### Your dataset (CSV)
+### Your dataset (response CSV)
 
-Have responses in a spreadsheet? The "Your dataset (CSV)" tab reads CSV or TSV, then:
+Have responses in a spreadsheet? Drop it on the "Your dataset" tab of Data Import (the same place study files go). A CSV or TSV that isn't a REDCap data dictionary opens the column mapper:
 
 1. **Layout**: long (one row per answer, typical for EMA) or wide (one row per survey, one column per question).
 2. **Columns**: map participant, time, question and response columns (guessed automatically, then adjustable). Timestamps in many formats are understood, including US dates and Unix times, with a timezone you choose.
