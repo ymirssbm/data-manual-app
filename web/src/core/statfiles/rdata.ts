@@ -291,24 +291,30 @@ function isoInZone(sec: number, tz: string): string {
   }
 }
 
-function columnToStrings(col: RObj, n: number): { values: string[]; valueLabels?: ValueLabel[]; label?: string } {
+/** Factors with more levels than this are free text read in as a factor, not a set of choices. */
+const MAX_FACTOR_LEVELS = 30;
+
+function columnToStrings(col: RObj, n: number): { values: string[]; valueLabels?: ValueLabel[]; label?: string; factor?: boolean; textFactor?: boolean } {
   const cls = classes(col);
   const label = attrStrings(col, 'label')[0] ?? undefined;
   const data = (col.data ?? []) as Array<number | string | null>;
   const out = (f: (v: number | string) => string) => Array.from({ length: n }, (_, i) => (data[i] == null ? '' : f(data[i]!)));
-  // Factors: the integer codes, labelled by their levels.
+  // Factors: a short set of levels is a choice question (codes, labelled by their levels); a long
+  // one is really text read in as a factor (old read.csv defaults), so it stays text.
   if (cls.includes('factor')) {
     const levels = attrStrings(col, 'levels');
-    return { values: out((v) => String(v)), valueLabels: levels.map((l, i) => ({ value: String(i + 1), label: l ?? '' })), label };
+    if (levels.length > MAX_FACTOR_LEVELS) return { values: out((v) => levels[Number(v) - 1] ?? ''), label, textFactor: true };
+    return { values: out((v) => String(v)), valueLabels: levels.map((l, i) => ({ value: String(i + 1), label: l ?? '' })), label, factor: true };
   }
   if (cls.includes('Date')) return { values: out((v) => isoFromEpochSeconds(Number(v) * 86400, false)), label };
   if (cls.includes('POSIXct')) {
     const tz = attrStrings(col, 'tzone')[0] ?? '';
     return { values: out((v) => isoInZone(Number(v), tz)), label };
   }
-  // haven/labelled: a named vector of value labels in the "labels" attribute.
+  // haven/labelled keep value labels in "labels"; foreign::read.spss in "value.labels".
+  // Both are named vectors: the values, with the labels as their names.
   let valueLabels: ValueLabel[] | undefined;
-  const labs = col.attrs?.get('labels');
+  const labs = col.attrs?.get('labels') ?? col.attrs?.get('value.labels');
   if (labs?.data) {
     const names = attrStrings(labs, 'names');
     valueLabels = (labs.data as Array<number | string | null>).map((v, i) => ({ value: v == null ? '' : typeof v === 'number' ? numText(v) : v, label: names[i] ?? '' }));
@@ -339,7 +345,36 @@ function dataFrameToFile(df: RObj, format: string, notes: string[]): StatFile {
     if (c.label) labels[names[i]!] = c.label;
     if (c.valueLabels?.length) valueLabels[names[i]!] = c.valueLabels;
   });
-  if (cols.some((c) => classes(c).includes('factor'))) notes.push('Factors were read as their integer codes, with the levels as response options.');
+  // Labels kept on the data frame itself rather than on each column:
+  // foreign::read.spss puts them in "variable.labels" (named by column), foreign::read.dta in
+  // "var.labels" (in column order), with value labels in "label.table" + "val.labels".
+  const vl = df.attrs?.get('variable.labels');
+  if (vl?.data) {
+    const keys = attrStrings(vl, 'names');
+    (vl.data as Array<string | null>).forEach((t, i) => {
+      const col = keys[i] ?? names[i];
+      if (t && col && !labels[col]) labels[col] = t;
+    });
+  }
+  const varLabels = attrStrings(df, 'var.labels');
+  varLabels.forEach((t, i) => {
+    if (t && names[i] && !labels[names[i]!]) labels[names[i]!] = t;
+  });
+  const table = df.attrs?.get('label.table');
+  const sets = attrStrings(df, 'val.labels');
+  if (table?.data && sets.length) {
+    const setNames = attrStrings(table, 'names');
+    sets.forEach((set, i) => {
+      const lt = set ? (table.data as RObj[])[setNames.indexOf(set)] : undefined;
+      if (!lt?.data || !names[i] || valueLabels[names[i]!]) return;
+      const labelNames = attrStrings(lt, 'names');
+      valueLabels[names[i]!] = (lt.data as Array<number | null>).map((v, k) => ({ value: v == null ? '' : numText(v), label: labelNames[k] ?? '' }));
+    });
+  }
+  const factors = converted.filter((c) => c.factor).length;
+  const textFactors = converted.filter((c) => c.textFactor).length;
+  if (factors) notes.push(`${factors} column${factors === 1 ? ' is a factor' : 's are factors'}: read as integer codes, with the levels as response options.`);
+  if (textFactors) notes.push(`${textFactors} factor column${textFactors === 1 ? ' has' : 's have'} more than ${MAX_FACTOR_LEVELS} levels, so ${textFactors === 1 ? 'it was' : 'they were'} read as text rather than as choices.`);
   return { format, columns: names, rows, labels, valueLabels, notes };
 }
 

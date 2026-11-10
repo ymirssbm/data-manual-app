@@ -82,6 +82,18 @@ describe('statistical package files', () => {
     expect(f.notes.join(' ')).toMatch(/2 data frames/);
   });
 
+  it('reads labels foreign keeps on the data frame, and keeps long factors as text', async () => {
+    const f = await read('foreign-style.rds');
+    expect(f.labels).toEqual({ id: 'Participant', q1: 'Did you sleep well?', q2: 'Energy today' });
+    expect(f.valueLabels.q1).toEqual([
+      { value: '1', label: 'Yes' },
+      { value: '2', label: 'No' },
+    ]);
+    expect(f.valueLabels.comment).toBeUndefined();
+    expect(f.rows.map((r) => r[3])).toEqual(['free text answer 1', 'free text answer 2', 'free text answer 3']);
+    expect(f.notes.join(' ')).toMatch(/more than 30 levels/);
+  });
+
   it('can use variable labels as question IDs, or ignore them', async () => {
     const table = statFileToTable(await read('study.sav'));
     const m = guessMapping(table);
