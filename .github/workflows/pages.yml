@@ -1,4 +1,4 @@
-# Publishes the web app as a static website on GitHub Pages, on every push to main.
+﻿# Publishes the web app as a static website on GitHub Pages, on every push to main, so the site always matches main.
 # Everything that works from files runs there with nothing to install; API pulls and saved
 # keys need the installed app (its local server), and the site says so.
 name: Publish website
@@ -6,7 +6,6 @@ name: Publish website
 on:
   push:
     branches: [main]
-    paths: ['web/**', 'schema/**', 'examples/**', '.github/workflows/pages.yml']
   workflow_dispatch:
 
 permissions:

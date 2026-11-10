@@ -1,10 +1,12 @@
-# Data Manual App
+﻿# Data Manual App
 
-An open-source, browser-based tool for documenting research studies, especially complex ones like EMA and other intensive longitudinal designs. Bring a study in from Wear-IT, REDCap, Qualtrics, a study file or your own CSV. Then generate a codebook (HTML or PDF), a data dictionary, survey flowcharts and a study schedule. You can also edit the surveys and skip logic, and export the study to REDCap, Qualtrics or SurveyJS.
+An open-source, browser-based tool for documenting research studies, especially complex ones like EMA and other intensive longitudinal designs. Bring a study in from Wear-IT, REDCap, Qualtrics, a study file or your own CSV. Then generate a codebook (HTML, PDF or Word), a data dictionary, survey flowcharts and a study schedule. You can also edit the surveys and skip logic, and export the study to REDCap, Qualtrics or SurveyJS.
 
 Everything is built on one study JSON spec ([`schema/study.schema.json`](schema/study.schema.json)): every source is translated into it, and every output is generated from it. AI assistants can design and edit studies in the same spec, inside the app or through the [MCP server](docs/ai-and-mcp.md).
 
 No R or other heavy runtime is needed: it runs in the browser. R users can also open it from R or embed it in Shiny with the [datamanual R package](r-package/README.md).
+
+**Try it online, nothing to install:** https://ymirssbm.github.io/data-manual-app/ (everything except API pulls and saved keys, which need the installed app).
 
 > Status: early development.
 
