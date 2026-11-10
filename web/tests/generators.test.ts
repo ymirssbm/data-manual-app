@@ -49,7 +49,8 @@ describe('flowchart', () => {
     const nodes = flowchartQuestionNodes(survey);
     const code = generateFlowchart(survey);
     expect(nodes.length).toBe((survey.questions ?? []).filter((q) => q['Item.Type'] === 'Question').length);
-    for (const n of nodes) expect(code).toMatch(new RegExp(`\b${n.nodeId}\[`));
+    const lines = code.split('\n').map((l) => l.trim());
+    for (const n of nodes) expect(lines.some((l) => l.startsWith(`${n.nodeId}[`))).toBe(true);
   });
 
   it('draws a decision for the branching question and rejoins the main path', () => {
