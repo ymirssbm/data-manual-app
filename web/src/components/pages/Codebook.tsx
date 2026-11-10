@@ -15,7 +15,7 @@ import {
 import type { PageId } from '../App';
 import { buildCodebook, type CodebookSettings } from '../codebookBuild';
 import { HtmlFrame } from '../HtmlFrame';
-import { capturePreviewState, highlightOptions, restorePreviewState } from '../codebookPreview';
+import { capturePreviewState, highlightOptions, restorePreviewState, revealItem } from '../codebookPreview';
 import { Box, Field, Icon, PageTitle } from '../ui';
 import { download, safeFileName } from '../util';
 import { NoStudy } from './common';
@@ -381,6 +381,9 @@ export function CodebookGeneratorPage({ spec, settings, setSettings, codebook, o
 }
 
 interface ViewProps {
+  /** A variable to scroll to once the codebook is showing (codebookItemKey), e.g. from the flowchart. */
+  focus?: string | null;
+  onFocused?(): void;
   spec: StudySpec | null;
   settings: CodebookSettings;
   codebook: GeneratedCodebook | null;
@@ -389,7 +392,7 @@ interface ViewProps {
   notify(text: string, kind?: 'message' | 'error' | 'warning', ms?: number): number;
 }
 
-export function CodebookViewerPage({ spec, settings, codebook, onBuilt, go, notify }: ViewProps) {
+export function CodebookViewerPage({ spec, settings, codebook, onBuilt, go, notify, focus, onFocused }: ViewProps) {
   const frame = useRef<HTMLIFrameElement>(null);
   const [exporting, setExporting] = useState(false);
   // The viewer builds the codebook itself if there isn't a current one, so it's never blank.
@@ -437,7 +440,19 @@ export function CodebookViewerPage({ spec, settings, codebook, onBuilt, go, noti
         Codebook Viewer
       </PageTitle>
       <section className="dm-viewer">
-        {current ? <HtmlFrame ref={frame} html={current.html} title="Codebook" className="dm-viewer-frame" /> : <p className="dm-empty">{building ? 'Building codebook…' : 'Preparing…'}</p>}
+        {current ? (
+          <HtmlFrame
+            ref={frame}
+            html={current.html}
+            title="Codebook"
+            className="dm-viewer-frame"
+            onDocLoad={(doc) => {
+              if (!focus) return;
+              if (!revealItem(doc, focus)) notify('That question isn’t in the codebook: it’s left out in the Codebook Generator’s Variables or Content options.', 'warning', 8000);
+              onFocused?.();
+            }}
+          />
+        ) : <p className="dm-empty">{building ? 'Building codebook…' : 'Preparing…'}</p>}
       </section>
       <p className="dm-hint dm-viewer-hint">Save as PDF opens the print dialog: choose "Save as PDF" as the printer. All visuals print expanded.</p>
     </>

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadSettings, saveSettings, textAfterEdit, textFromSpec, type CodebookSettings } from './codebookBuild';
 import { validateSpec, type DatasetTable, type StudySpec, type ValidationResult } from '../core';
+import { codebookItemKey } from '../generators';
 import type { HostAdapter } from '../adapters/types';
 import { Icon, Toasts, useToasts } from './ui';
 import { HomePage } from './pages/Home';
@@ -81,6 +82,8 @@ export function App({ adapter }: { adapter: HostAdapter }) {
   const [datasetFile, setDatasetFile] = useState<{ name: string; text?: string; table?: DatasetTable } | null>(null);
   const [importTab, setImportTab] = useState<ImportTab>('api');
   const spec: StudySpec | null = session?.result.spec ?? null;
+  /** A variable the Codebook Viewer should scroll to when it opens. */
+  const [codebookFocus, setCodebookFocus] = useState<string | null>(null);
   const [cbSettings, setCbSettingsState] = useState<CodebookSettings>(() => loadSettings(spec));
   const setCbSettings = useCallback((s: CodebookSettings) => {
     setCbSettingsState(s);
@@ -231,10 +234,21 @@ export function App({ adapter }: { adapter: HostAdapter }) {
         {page === 'codebook_gen' && (
           <CodebookGeneratorPage spec={spec} settings={cbSettings} setSettings={setCbSettings} codebook={codebook} onBuilt={setCodebook} go={go} notify={notify} />
         )}
-        {page === 'codebook_view' && <CodebookViewerPage spec={spec} settings={cbSettings} codebook={codebook} onBuilt={setCodebook} go={go} notify={notify} />}
+        {page === 'codebook_view' && (
+          <CodebookViewerPage spec={spec} settings={cbSettings} codebook={codebook} onBuilt={setCodebook} go={go} notify={notify} focus={codebookFocus} onFocused={() => setCodebookFocus(null)} />
+        )}
         {page === 'datadict' && <DictionaryPage spec={spec} go={go} />}
         {page === 'flowchart' && (
-          <FlowchartPage spec={spec} go={go} notify={notify} onChange={(s) => session && setSession({ source: session.source, result: validateSpec(s) })} />
+          <FlowchartPage
+            spec={spec}
+            go={go}
+            notify={notify}
+            onChange={(s) => session && setSession({ source: session.source, result: validateSpec(s) })}
+            openInCodebook={(surveyName, itemId) => {
+              setCodebookFocus(codebookItemKey(surveyName, itemId));
+              go('codebook_view');
+            }}
+          />
         )}
         {page === 'schedule' && <SchedulePage spec={spec} go={go} />}
         {page === 'standard' && <StandardPage />}

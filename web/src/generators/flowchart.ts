@@ -9,7 +9,7 @@
 //  - Items with branches get a decision diamond with one labelled edge per
 //    child, plus an "Otherwise" edge (the fail item, or wherever flow continues).
 //  - Blocks are drawn as subgraphs around their members rather than as nodes.
-import { buildSurveyModel, isBlock, itemLabel, type Question, type SurveyModel, type Survey } from '../core';
+import { buildSurveyModel, isBlock, isQuestion, itemLabel, type Question, type SurveyModel, type Survey } from '../core';
 
 export interface FlowchartOptions {
   /** Max characters per line inside a node. */
@@ -39,6 +39,14 @@ export function flowchartBlocks(survey: Survey): FlowchartBlock[] {
     .map((q, i) => ({ q, i }))
     .filter(({ q }) => isBlock(q))
     .map(({ q, i }) => ({ itemId: q['Item.ID'], label: itemLabel(q), questions: count(q['Item.ID']), clusterId: `n${i}_g`, collapsedId: `n${i}_c` }));
+}
+
+/** Questions in a survey with the Mermaid node id each is drawn as (for click-to-inspect). */
+export function flowchartQuestionNodes(survey: Survey): Array<{ itemId: string; nodeId: string }> {
+  return buildSurveyModel(survey)
+    .items.map((q, i) => ({ q, i }))
+    .filter(({ q }) => isQuestion(q))
+    .map(({ q, i }) => ({ itemId: q['Item.ID'], nodeId: `n${i}` }));
 }
 
 export function generateFlowchart(survey: Survey, opts: FlowchartOptions = {}): string {

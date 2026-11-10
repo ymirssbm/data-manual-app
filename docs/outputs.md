@@ -36,6 +36,7 @@ One chart per survey (pick from the menu on the left), drawn top to bottom:
 - Questions in order; blocks drawn as panels.
 - Decision diamonds right under the question that controls them. Multi-select questions become a column of yes/no checks, one per option, so the flow never doubles back.
 - Fold a block into one node by clicking it, or **Collapse all blocks**.
+- Click a question for its details beside the chart: ID, type, block, when it's shown, what it leads to, response options and (with data) how often it was answered. **Open in codebook** jumps to that variable in the Codebook Viewer, unfolded.
 - Scroll to move, Ctrl + scroll (or pinch) to zoom, drag to pan; a minimap shows where you are.
 - A survey built from a dataset's columns has no known question order or skip logic, so instead of guessing a straight line, the page says there is no flowchart for it. Set the order and skip logic in the Survey Editor, import the survey's design and attach the data to it, or confirm that the columns are in the order the questions were asked. (In the study spec this is `Survey.Flow.Known: false`.)
 - Export SVG or PNG; **Show text outline** gives an indented text version (copy or download); **Show Mermaid code** gives the source.

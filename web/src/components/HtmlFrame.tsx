@@ -14,6 +14,8 @@ interface Props {
   className?: string;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   preserve?: FramePreserve<any>;
+  /** Runs each time a document has loaded (after state and scroll are restored). */
+  onDocLoad?(doc: Document): void;
 }
 
 /**
@@ -23,7 +25,7 @@ interface Props {
  * Scroll position is kept when the document is replaced, so live previews
  * don't jump back to the top on every change; with `preserve`, so is what was open.
  */
-export const HtmlFrame = forwardRef<HTMLIFrameElement, Props>(function HtmlFrame({ html, title, className, preserve }, ref) {
+export const HtmlFrame = forwardRef<HTMLIFrameElement, Props>(function HtmlFrame({ html, title, className, preserve, onDocLoad }, ref) {
   const [url, setUrl] = useState<string | null>(null);
   const frame = useRef<HTMLIFrameElement | null>(null);
   const scroll = useRef(0);
@@ -68,6 +70,7 @@ export const HtmlFrame = forwardRef<HTMLIFrameElement, Props>(function HtmlFrame
           }
         }
         if (w && scroll.current) w.scrollTo(0, scroll.current);
+        if (doc) onDocLoad?.(doc);
       }}
     />
   ) : null;

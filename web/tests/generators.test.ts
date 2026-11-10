@@ -6,6 +6,7 @@ import {
   describeItem,
   expandDates,
   codebookItemKey,
+  flowchartQuestionNodes,
   generateCodebookHtml,
   generateDataDictionary,
   generateFlowchart,
@@ -43,6 +44,14 @@ describe('data dictionary', () => {
 });
 
 describe('flowchart', () => {
+  it('maps each question to the node it is drawn as, for click-to-inspect', () => {
+    const survey = spec().surveys[0]!;
+    const nodes = flowchartQuestionNodes(survey);
+    const code = generateFlowchart(survey);
+    expect(nodes.length).toBe((survey.questions ?? []).filter((q) => q['Item.Type'] === 'Question').length);
+    for (const n of nodes) expect(code).toMatch(new RegExp(`\b${n.nodeId}\[`));
+  });
+
   it('draws a decision for the branching question and rejoins the main path', () => {
     const m = generateFlowchart(spec().surveys[0]!);
     expect(m.startsWith('flowchart TD')).toBe(true);

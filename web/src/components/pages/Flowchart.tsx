@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { buildSurveyModel, flowKnown, isQuestion, type StudySpec } from '../../core';
-import { flowchartBlocks, flowchartText, generateFlowchart } from '../../generators';
+import { blockPath, buildSurveyModel, flowKnown, isQuestion, itemLabel, responseOptions, shownWhen, stripHtml, triggers, type StudySpec, type Survey } from '../../core';
+import { dataOverview, describeItem, flowchartBlocks, flowchartQuestionNodes, flowchartText, generateFlowchart, hasResponseData, indexResponses } from '../../generators';
 import type { PageId } from '../App';
 import { Icon, PageTitle } from '../ui';
 import { download, renderMermaid, safeFileName, svgToPng } from '../util';
@@ -12,6 +12,8 @@ interface Props {
   notify(text: string, kind?: 'message' | 'error' | 'warning', ms?: number): number;
   /** Save a changed study (here: marking a survey's column order as its real order). */
   onChange(spec: StudySpec): void;
+  /** Show one question in the Codebook Viewer. */
+  openInCodebook(surveyName: string, itemId: string): void;
 }
 
 interface View {
@@ -20,7 +22,7 @@ interface View {
   k: number;
 }
 
-export function FlowchartPage({ spec, go, notify, onChange }: Props) {
+export function FlowchartPage({ spec, go, notify, onChange, openInCodebook }: Props) {
   const surveys = spec?.surveys ?? [];
   const [surveyName, setSurveyName] = useState(surveys[0]?.['Survey.Name'] ?? '');
   const [showIds, setShowIds] = useState(false);
@@ -34,6 +36,11 @@ export function FlowchartPage({ spec, go, notify, onChange }: Props) {
   const [showText, setShowText] = useState(false);
   const survey = surveys.find((s) => s['Survey.Name'] === surveyName) ?? surveys[0];
   const blocks = useMemo(() => (survey ? flowchartBlocks(survey) : []), [survey]);
+  const questionNodes = useMemo(() => (survey ? flowchartQuestionNodes(survey) : []), [survey]);
+  /** The question whose details are open, per survey. */
+  const [picked, setPicked] = useState<Record<string, string | null>>({});
+  const selected = survey ? (picked[survey['Survey.Name']] ?? null) : null;
+  const select = useCallback((itemId: string | null) => survey && setPicked((p) => ({ ...p, [survey['Survey.Name']]: itemId })), [survey]);
   const collapsed = survey ? (folded[survey['Survey.Name']] ?? []) : [];
   const known = survey ? flowKnown(survey) : true;
   const code = useMemo(() => (survey && known ? generateFlowchart(survey, { showIds, direction, collapsed }) : ''), [survey, known, showIds, direction, collapsed.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -148,9 +155,16 @@ export function FlowchartPage({ spec, go, notify, onChange }: Props) {
                 </button>
               </span>
             )}
-            <span className="dm-hint dm-push-right">{blocks.length ? 'Click a block to fold or unfold it · ' : ''}scroll or drag to move · Ctrl + scroll to zoom</span>
+            <span className="dm-hint dm-push-right">Click a question for details · {blocks.length ? 'click a block to fold or unfold it · ' : ''}scroll or drag to move · Ctrl + scroll to zoom</span>
           </div>
-          {drawn ? <Canvas svg={drawn.svg} fitKey={drawn.key} blocks={blocks} onToggleBlock={toggleBlock} /> : <p className="dm-empty">Drawing…</p>}
+          <div className={`dm-flow-canvas-row ${selected ? 'has-panel' : ''}`}>
+            {drawn ? (
+              <Canvas svg={drawn.svg} fitKey={drawn.key} blocks={blocks} onToggleBlock={toggleBlock} questions={questionNodes} selected={selected} onQuestion={select} />
+            ) : (
+              <p className="dm-empty">Drawing…</p>
+            )}
+            {selected && <QuestionPanel spec={spec} survey={survey} itemId={selected} onClose={() => select(null)} openInCodebook={() => openInCodebook(survey['Survey.Name'], selected)} />}
+          </div>
           <div className="dm-inline dm-mt">
             <label className="dm-check">
               <input type="checkbox" checked={showText} onChange={(e) => setShowText(e.target.checked)} /> Show text outline
@@ -170,7 +184,23 @@ export function FlowchartPage({ spec, go, notify, onChange }: Props) {
 
 /** Pan/zoom canvas with a clickable minimap; clicks on block clusters fold them. */
 /** `fitKey` changes when a different survey/layout is shown (refit); folding keeps the current view. */
-function Canvas({ svg, fitKey, blocks, onToggleBlock }: { svg: string; fitKey: string; blocks: ReturnType<typeof flowchartBlocks>; onToggleBlock(itemId: string): void }) {
+function Canvas({
+  svg,
+  fitKey,
+  blocks,
+  onToggleBlock,
+  questions,
+  selected,
+  onQuestion,
+}: {
+  svg: string;
+  fitKey: string;
+  blocks: ReturnType<typeof flowchartBlocks>;
+  onToggleBlock(itemId: string): void;
+  questions: Array<{ itemId: string; nodeId: string }>;
+  selected: string | null;
+  onQuestion(itemId: string | null): void;
+}) {
   const host = useRef<HTMLDivElement>(null);
   const [view, setViewRaw] = useState<View>({ x: 0, y: 0, k: 1 });
   const [size, setSizeRaw] = useState({ w: 800, h: 600, cw: 800, ch: 500 });
@@ -216,14 +246,24 @@ function Canvas({ svg, fitKey, blocks, onToggleBlock }: { svg: string; fitKey: s
       const k = Math.max(0.4, Math.min(1.1, (el.clientWidth - 40) / w, (el.clientHeight - 40) / h));
       setView({ k, x: (el.clientWidth - w * k) / 2, y: h * k < el.clientHeight ? (el.clientHeight - h * k) / 2 : 20 });
     }
-    // Make block clusters and folded nodes look clickable.
+    // Make block clusters, folded nodes and questions look clickable.
     for (const b of blocks) {
       for (const id of [b.clusterId, b.collapsedId]) {
         const g = findMermaidEl(svgEl, id);
         if (g) g.classList.add('dm-foldable');
       }
     }
-  }, [svg, blocks, fitKey]);
+    for (const q of questions) findMermaidEl(svgEl, q.nodeId)?.classList.add('dm-inspectable');
+  }, [svg, blocks, fitKey, questions]);
+
+  // Mark the question whose details are open.
+  useEffect(() => {
+    const svgEl = host.current?.querySelector('.dm-canvas-inner svg');
+    if (!svgEl) return;
+    svgEl.querySelectorAll('.dm-node-selected').forEach((g) => g.classList.remove('dm-node-selected'));
+    const node = questions.find((q) => q.itemId === selected);
+    if (node) findMermaidEl(svgEl, node.nodeId)?.classList.add('dm-node-selected');
+  }, [svg, selected, questions]);
 
   const fit = () => {
     const k = Math.max(0.1, Math.min(1.1, (size.cw - 40) / size.w, (size.ch - 40) / size.h));
@@ -264,9 +304,13 @@ function Canvas({ svg, fitKey, blocks, onToggleBlock }: { svg: string; fitKey: s
 
   const onClick = (target: EventTarget | null) => {
     let el = target as Element | null;
+    const matches = (id: string, dataId: string, x: string) => id === x || dataId === x || id.includes(`-${x}-`) || id.endsWith(`-${x}`);
     while (el && el !== host.current) {
       const id = el.getAttribute('id') ?? '';
       const dataId = el.getAttribute('data-id') ?? '';
+      // A question node sits inside its block's cluster, so it is reached (and wins) first.
+      const question = el.matches('g.node') ? questions.find((q) => matches(id, dataId, q.nodeId)) : undefined;
+      if (question) return onQuestion(question.itemId === selected ? null : question.itemId);
       const block = blocks.find((b) => [b.clusterId, b.collapsedId].some((x) => id === x || dataId === x || id.includes(`-${x}-`) || id.endsWith(`-${x}`)));
       if (block) return onToggleBlock(block.itemId);
       el = el.parentElement;
@@ -403,5 +447,91 @@ function TextOutline({ text, fileName, notify }: { text: string; fileName: strin
       </div>
       <pre className="dm-outline-text">{text}</pre>
     </div>
+  );
+}
+
+/** Details of one question, opened by clicking it in the flowchart. */
+function QuestionPanel({ spec, survey, itemId, onClose, openInCodebook }: { spec: StudySpec; survey: Survey; itemId: string; onClose(): void; openInCodebook(): void }) {
+  const model = useMemo(() => buildSurveyModel(survey), [survey]);
+  // Indexing every response is the slow part, so it happens once per study, and only when a panel opens.
+  const responses = useMemo(() => (hasResponseData(spec) ? indexResponses(spec) : null), [spec]);
+  const total = useMemo(() => dataOverview(spec)?.participants ?? 0, [spec]);
+  const q = model.byId.get(itemId);
+  if (!q) return null;
+  const text = stripHtml(q['Question.Text'] ?? '') || itemLabel(q);
+  const opts = responseOptions(q);
+  const when = shownWhen(model, itemId);
+  const leadsTo = triggers(model, itemId);
+  const path = blockPath(model, q);
+  const stats = responses ? describeItem(q, responses.get(q['Question.ID']), total) : null;
+  const pct = stats?.delivered ? Math.round((stats.answered / stats.delivered) * 1000) / 10 : null;
+  const MAX_OPTS = 12;
+  return (
+    <aside className="dm-q-panel" aria-label="Question details">
+      <div className="dm-q-panel-head">
+        <code>{q['Question.ID']}</code>
+        <button className="dm-icon-btn" onClick={onClose} aria-label="Close details" title="Close">
+          ×
+        </button>
+      </div>
+      <h3>{text}</h3>
+      <p className="dm-q-panel-meta">
+        {[q['Question.Type.Display.Name'], q['Data.Type'], path.length ? `Block: ${path.join(' › ')}` : ''].filter(Boolean).join(' · ')}
+      </p>
+      {q['Question.Description'] && <p>{q['Question.Description']}</p>}
+      <dl className="dm-q-panel-dl">
+        <dt>Shown</dt>
+        <dd>{when ? `Only if ${when}` : 'Always'}</dd>
+        {leadsTo.length > 0 && (
+          <>
+            <dt>Leads to</dt>
+            <dd>
+              <ul>
+                {leadsTo.map((t) => (
+                  <li key={t}>{t}</li>
+                ))}
+              </ul>
+            </dd>
+          </>
+        )}
+        {stats && (
+          <>
+            <dt>Responses</dt>
+            <dd>
+              {stats.answered.toLocaleString()} answered of {stats.delivered.toLocaleString()} delivered{pct != null ? ` (${pct}%)` : ''}, from {stats.participantsAnswered.toLocaleString()} participant
+              {stats.participantsAnswered === 1 ? '' : 's'}
+            </dd>
+          </>
+        )}
+      </dl>
+      {opts.length > 0 && (
+        <table className="dm-q-panel-opts">
+          <thead>
+            <tr>
+              <th>Value</th>
+              <th>Label</th>
+            </tr>
+          </thead>
+          <tbody>
+            {opts.slice(0, MAX_OPTS).map((o) => (
+              <tr key={o.value}>
+                <td>{o.value}</td>
+                <td>{o.label}</td>
+              </tr>
+            ))}
+            {opts.length > MAX_OPTS && (
+              <tr>
+                <td colSpan={2} className="dm-hint">
+                  and {opts.length - MAX_OPTS} more
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      )}
+      <button className="dm-btn dm-btn-primary dm-btn-sm" onClick={openInCodebook}>
+        <Icon name="book" size={14} /> Open in codebook
+      </button>
+    </aside>
   );
 }

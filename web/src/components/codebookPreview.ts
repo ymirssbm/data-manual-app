@@ -83,3 +83,26 @@ export function highlightOptions(doc: Document, keys: string[]): { total: number
   });
   return { total, visible };
 }
+
+/**
+ * Scrolls the codebook to one variable (a codebookItemKey), opening the sections around it and its
+ * details, and flashes it. Returns false when the variable isn't in this codebook.
+ */
+export function revealItem(doc: Document, key: string): boolean {
+  const v = doc.querySelector(`[data-cb-opt~="${CSS.escape(`item:${encodeURIComponent(key)}`)}"]`);
+  const h = v?.querySelector('h4[id]');
+  if (!v || !h) return false;
+  // An in-page link runs the codebook's own navigation: it unfolds what's around the target and scrolls to it.
+  const a = doc.createElement('a');
+  a.href = `#${h.id}`;
+  doc.body.appendChild(a);
+  a.click();
+  a.remove();
+  const head = v.querySelector<HTMLElement>('.cb-q-head');
+  const body = head && doc.getElementById(head.getAttribute('data-target') ?? '');
+  if (head && body?.hasAttribute('hidden')) head.click();
+  if (!doc.getElementById('dm-opt-hl-style')) highlightOptions(doc, []);
+  v.classList.add(HL_CLASS);
+  setTimeout(() => v.classList.remove(HL_CLASS), 2500);
+  return true;
+}
