@@ -195,7 +195,8 @@ export function App({ adapter }: { adapter: HostAdapter }) {
             onDatasetLoaded={(s, r) => {
               onLoaded(s, r);
               setDatasetFile(null);
-              go('home');
+              // Show what was imported, not the start screen.
+              go('datadict');
             }}
             notify={notify}
             go={go}

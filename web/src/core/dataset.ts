@@ -12,7 +12,7 @@ import { buildBlockMap } from './model';
 import { parseCsv } from './csv';
 import type { StudySpec, Survey } from './spec';
 import type { StatFile, ValueLabel } from './statfiles';
-import { toIsoDateTime } from './time';
+import { isRfc3339, toIsoDateTime } from './time';
 
 export interface DatasetTable {
   columns: string[];
@@ -179,13 +179,19 @@ export function datasetToData(table: DatasetTable, m: DatasetMapping, now = new 
   const questionText = new Map<string, string>();
   const valueLabels = new Map<string, ValueLabel[]>();
   let badTimes = 0;
+  let badTimeExample = '';
   let skippedNoId = 0;
 
   const rowMeta = (r: string[]) => {
     const pid = r[pI] ?? '';
     const rawTime = tI >= 0 ? (r[tI] ?? '') : '';
     let time = tI >= 0 ? toIsoDateTime(rawTime, m.timeZone) : null;
-    if (tI >= 0 && !time && rawTime) badTimes++;
+    // Never pass on anything that isn't a full date-time; count it and use the fallback instead.
+    if (time && !isRfc3339(time)) time = null;
+    if (tI >= 0 && !time && rawTime) {
+      badTimes++;
+      badTimeExample ||= rawTime;
+    }
     time ??= fallbackTime;
     const key = sI >= 0 ? `${pid}\u0000${r[sI]}` : `${pid}\u0000${rawTime}\u0000${svI >= 0 ? r[svI] : ''}`;
     let session = sessionIds.get(key);
@@ -258,7 +264,10 @@ export function datasetToData(table: DatasetTable, m: DatasetMapping, now = new 
 
   if (sI < 0) notes.push('Answers from the same participant with the same timestamp were grouped as one survey occasion.');
   if (tI < 0) notes.push(`No timestamp column was chosen, so every response is dated ${fallbackTime.slice(0, 10)} (the import date).`);
-  if (badTimes) notes.push(`${badTimes} row(s) had a timestamp that couldn't be read; they use the import date.`);
+  if (badTimes)
+    notes.push(
+      `Didn't match a date-time format: ${badTimes.toLocaleString()} timestamp${badTimes === 1 ? '' : 's'} (e.g. "${badTimeExample.slice(0, 40)}") couldn't be converted, so ${badTimes === 1 ? 'that row uses' : 'those rows use'} the import date. Timing features (charts by date, time between assessments) won't be accurate for ${badTimes === 1 ? 'it' : 'them'}.`,
+    );
   if (skippedNoId) notes.push(`Skipped ${skippedNoId} row(s) with no participant ID.`);
   const variables = [...new Set(cols['Question.ID'])];
   const dataRows = m.layout === 'wide' ? Math.max(0, table.rows.length - Math.max(0, (m.headerRows?.length ?? 1) - 1)) : table.rows.length;

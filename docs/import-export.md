@@ -43,7 +43,7 @@ Have responses in a spreadsheet? Drop it on the "Your dataset" tab of Data Impor
 1. **Layout**: long (one row per answer, typical for EMA) or wide (one row per survey occasion, one column per question).
 2. **Columns** (guessed automatically, then adjustable):
    - **Participant ID**.
-   - **Response timestamp**: the date and time each answer was submitted (not the study day or wave). Many formats are understood, including US dates and Unix times, with a timezone you choose for times written without one.
+   - **Response timestamp**: the date and time each answer was submitted (not the study day or wave). Many formats are understood, including US dates and Unix times, with a timezone you choose for times written without one. Timestamps that can't be read don't stop the import: those rows get the import date, a note names an example value, and timing features (charts by date, time between assessments) won't be accurate for them. A study file whose timestamps aren't proper date-times also loads, with a warning; readable ones are converted.
    - **Survey / form** (optional): which survey each answer belongs to.
    - **Survey occasion** (optional): which answers were given together in one sitting (one prompt, beep or survey completion). Leave it empty when all answers from one sitting share a timestamp; pick a column when the file has one (session, beep, prompt, REDCap event) or when each answer has its own timestamp.
    - Long files: the **question ID** column, an optional **question text** column, and the **response value** column.

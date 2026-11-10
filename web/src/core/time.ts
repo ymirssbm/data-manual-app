@@ -13,10 +13,16 @@ export function toIsoDateTime(raw: string | number | null | undefined, timeZone?
     const d = new Date(Number(raw) * 1000);
     return Number.isNaN(d.getTime()) ? null : d.toISOString().replace('.000Z', 'Z');
   }
-  const s = String(raw).trim().replace(/^(\d{4}-\d{2}-\d{2}) /, '$1T');
+  const s = String(raw).trim().replace(/^(\d{4}-\d{2}-\d{2})[ t]/, '$1T');
   if (/T.*([zZ]|[+-]\d{2}:?\d{2})$/.test(s)) {
     const d = new Date(s);
-    return Number.isNaN(d.getTime()) ? null : s.replace(/([+-]\d{2})(\d{2})$/, '$1:$2');
+    if (Number.isNaN(d.getTime())) return null;
+    // RFC 3339 needs seconds and a colon in the offset: "T08:11-0500" -> "T08:11:00-05:00".
+    const out = s
+      .replace(/([+-]\d{2})(\d{2})$/, '$1:$2')
+      .replace(/T(\d{1,2}):(\d{2})(?=[zZ+-])/, (_, h: string, m: string) => `T${h.padStart(2, '0')}:${m}:00`)
+      .replace(/z$/, 'Z');
+    return isRfc3339(out) ? out : d.toISOString().replace('.000Z', 'Z');
   }
   const parts = wallClock(s);
   if (!parts) return null;
@@ -29,6 +35,11 @@ export function toIsoDateTime(raw: string | number | null | undefined, timeZone?
   const sign = offset < 0 ? '-' : '+';
   const abs = Math.abs(offset);
   return `${wall}${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`;
+}
+
+/** True for a full RFC 3339 date-time, the form the study spec requires (seconds and zone included). */
+export function isRfc3339(s: unknown): boolean {
+  return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?([zZ]|[+-]\d{2}:\d{2})$/.test(s) && !Number.isNaN(new Date(s).getTime());
 }
 
 /** [year, month, day, hour, minute, second] from ISO-like or US m/d/y strings. */

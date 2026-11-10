@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseSpec, validateSpec, checkCrossReferences, type StudySpec } from '../src/core';
+import { isRfc3339, toIsoDateTime } from '../src/core/time';
 import example from './fixtures/minimal-study.json';
 
 const clone = (): StudySpec => structuredClone(example) as StudySpec;
@@ -25,6 +26,32 @@ describe('validateSpec', () => {
     const result = parseSpec('{ not json');
     expect(result.valid).toBe(false);
     expect(result.issues[0]?.message).toMatch(/Not valid JSON/);
+  });
+
+  it('still loads a study whose response timestamps are not date-times, with a warning', () => {
+    const s = clone() as unknown as { data: Record<string, unknown[]> };
+    const n = s.data['Survey.Date.Completed']!.length;
+    const times = s.data['Survey.Date.Completed']!.map(() => '2026-02-02 08:11:00');
+    times[0] = 'sometime tuesday';
+    s.data['Survey.Date.Completed'] = times;
+    const result = validateSpec(s);
+    expect(result.spec).not.toBeNull();
+    expect(result.valid).toBe(true);
+    const warn = result.issues.find((i) => i.path === '/data/Survey.Date.Completed')!;
+    expect(warn.severity).toBe('warning');
+    expect(warn.message).toMatch(/couldn’t be read/);
+    const fixed = (result.spec as unknown as { data: Record<string, unknown[]> }).data['Survey.Date.Completed']!;
+    expect(fixed[0]).toBe('sometime tuesday');
+    if (n > 1) expect(fixed[1]).toBe('2026-02-02T08:11:00Z');
+  });
+});
+
+describe('toIsoDateTime', () => {
+  it('adds missing seconds and the offset colon', () => {
+    expect(toIsoDateTime('2026-02-02T08:11-05:00')).toBe('2026-02-02T08:11:00-05:00');
+    expect(toIsoDateTime('2026-02-02 08:11:30-0500')).toBe('2026-02-02T08:11:30-05:00');
+    expect(isRfc3339(toIsoDateTime('6/2/2022 8:15 PM'))).toBe(true);
+    expect(toIsoDateTime('not a date')).toBeNull();
   });
 });
 
