@@ -8,3 +8,4 @@ export * from './model';
 export * from './csv';
 export * from './time';
 export * from './dataset';
+export * from './statfiles';

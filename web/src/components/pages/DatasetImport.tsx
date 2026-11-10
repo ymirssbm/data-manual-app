@@ -5,7 +5,11 @@ import {
   guessHeaderRows,
   guessMapping,
   inferSpecFromData,
+  isStatFile,
   parseDataset,
+  readStatFile,
+  statFileToTable,
+  STAT_FILE_EXTENSIONS,
   validateSpec,
   type DatasetMapping,
   type DatasetTable,
@@ -20,8 +24,8 @@ const LOCAL_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 const TIMEZONES = [...new Set([LOCAL_TZ, 'UTC', 'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'Europe/London', 'Europe/Berlin', 'Australia/Sydney'])];
 
 interface Props {
-  /** File handed in from outside (an example), shown immediately. */
-  initial?: { name: string; text: string } | null;
+  /** File handed in from outside, shown immediately: CSV text, or a table already read from an SPSS/SAS/Stata file. */
+  initial?: { name: string; text?: string; table?: DatasetTable } | null;
   spec: StudySpec | null;
   onLoaded(source: LoadedSource, result: ValidationResult): void;
   notify(text: string, kind?: 'message' | 'error' | 'warning', ms?: number): number;
@@ -38,19 +42,20 @@ export function DatasetImport({ initial, spec, onLoaded, notify, onReset }: Prop
   const [missing, setMissing] = useState('');
   const [target, setTarget] = useState<'attach' | 'new'>(spec ? 'attach' : 'new');
 
-  const load = (name: string, text: string) => {
+  const load = (name: string, text?: string, given?: DatasetTable) => {
     try {
-      const table = parseDataset(text);
+      const table = given ?? parseDataset(text ?? '');
       if (!table.columns.length || !table.rows.length) throw new Error('The file has no rows.');
       setFile({ name, table });
       setM({ ...guessMapping(table), timeZone: LOCAL_TZ });
-      setMissing(table.rows.some((r) => r.includes('-99')) ? '-99' : '');
+      // SPSS, SAS and Stata files mark their own missing values; for CSVs, -99 is a common code.
+      setMissing(!table.source && table.rows.some((r) => r.includes('-99')) ? '-99' : '');
     } catch (e) {
       notify(`Couldn't read ${name}: ${(e as Error).message}`, 'error', 8000);
     }
   };
   useEffect(() => {
-    if (initial) load(initial.name, initial.text);
+    if (initial) load(initial.name, initial.text, initial.table);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initial]);
   useEffect(() => setTarget(spec ? 'attach' : 'new'), [spec]);
@@ -105,12 +110,18 @@ export function DatasetImport({ initial, spec, onLoaded, notify, onReset }: Prop
           <Icon name="upload" /> Choose dataset
           <input
             type="file"
-            accept=".csv,.tsv,.txt,text/csv"
+            accept={['.csv', '.tsv', '.txt', 'text/csv', ...STAT_FILE_EXTENSIONS].join(',')}
             hidden
             onChange={async (e) => {
               const f = e.target.files?.[0];
               e.target.value = '';
-              if (f) load(f.name, await f.text());
+              if (!f) return;
+              if (!isStatFile(f.name)) return load(f.name, await f.text());
+              try {
+                load(f.name, undefined, statFileToTable(await readStatFile(f.name, await f.arrayBuffer())));
+              } catch (err) {
+                notify(`Couldn't read ${f.name}: ${(err as Error).message}`, 'error', 8000);
+              }
             }}
           />
         </label>
@@ -187,7 +198,18 @@ export function DatasetImport({ initial, spec, onLoaded, notify, onReset }: Prop
         </p>
       </details>
 
-      {m.layout === 'wide' && (
+      {file.table.source && (
+        <p className="dm-callout dm-callout-plain">
+          <Icon name="file" />
+          <span>
+            Read as <strong>{file.table.source}</strong>. Question text comes from its variable labels ({Object.keys(file.table.labels ?? {}).length} of {cols.length} columns have one)
+            {Object.keys(file.table.valueLabels ?? {}).length > 0 && <>, and response options from its value labels ({Object.keys(file.table.valueLabels ?? {}).length} variable{Object.keys(file.table.valueLabels ?? {}).length === 1 ? '' : 's'})</>}. Dates and missing values were read from
+            the file's own formats. {file.table.notes?.join(' ')}
+          </span>
+        </p>
+      )}
+
+      {m.layout === 'wide' && !file.table.source && (
         <Field label="Where are the question IDs and question text?" hint="Some exports put the question text in the column names and the IDs in the first row (or the other way round). Qualtrics CSVs have IDs, then text, then an import row.">
           <div className="dm-header-rows">
             {[0, 1, 2, 3].slice(0, Math.min(roles.length + 1, 4)).map((k) => (

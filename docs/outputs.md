@@ -12,7 +12,7 @@ Structure:
 
 - **Title page** (off by default): study name, authors, study metadata (data collection period, participants, devices, timezones) and funding.
 - **Abstract** and **Executive Summary** (your own text, or an automatic summary of the study).
-- **Study Schedule**: each delivery event, window and recurrence.
+- **Study Schedule**: a calendar of when each survey is delivered.
 - **Participation** (with response data):
   - *Enrollment over time*: cumulative participants by the date of each person's first completed survey (a "Sisyphus" plot).
   - *Surveys by day since first survey*: one row per participant, one dot per completed survey, with a shaded curve of surveys per day. In measurement-burst designs the dots are colored by burst (a gap of more than a week starts a new burst).
@@ -41,7 +41,13 @@ One chart per survey (pick from the menu on the left), drawn top to bottom:
 
 ## Study schedule
 
-Event cards (survey, window, recurrence), a **typical day** view, and a **study timeline** across every date.
+A vertical calendar of the study, in **Day**, **Week** or **Month** view. Each survey window is a labelled card at its time, coloured by survey; when windows overlap, the later one is drawn over the earlier one, shifted right, so both stay readable. Windows with no set time sit in an "Any time" row.
+
+How a survey is timed shows in how it's drawn: fixed windows are solid, **random** windows are striped (the prompt goes out once, at a random time inside the window), and **triggered** windows are dashed, with their rule (e.g. "only if ev_craving ≥ 70"), since they may not happen at all. The month view lists each day's surveys, with a count when one repeats ("Momentary Check ×3"); click a day to open it.
+
+- Step through the study with the arrows (by default skipping days without surveys), jump to the **Busiest day**, or click any day in the **Study days** strip, which shades each day by how many surveys it has.
+- Click a card for its details: window, how it repeats, timing (fixed, participant-set, triggered) and which schedule it belongs to.
+- The **Surveys** list shows each survey's windows and number of prompts; click one to highlight it: its cards get a ring and the rest fade, and in the **Study days** strip its days take its colour while days without it fade.
 
 ## Generating outside the app
 

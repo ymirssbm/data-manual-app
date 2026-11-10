@@ -47,10 +47,12 @@ describe('AI response handling', () => {
 });
 
 describe('branching example', () => {
-  it('is valid and every survey produces a flowchart with decisions', () => {
+  it('is valid and every survey with skip logic produces a flowchart with decisions', () => {
     const r = validateSpec(structuredClone(branching));
     expect(r.issues.filter((i) => i.severity === 'error')).toEqual([]);
-    for (const s of r.spec!.surveys) {
+    const branchingSurveys = r.spec!.surveys.filter((s) => (s.questions ?? []).some((q) => q['Conditional.Info']));
+    expect(branchingSurveys.map((s) => s['Survey.Name'])).toEqual(['morning', 'evening', 'weekly']);
+    for (const s of branchingSurveys) {
       const m = generateFlowchart(s);
       expect(m, s['Survey.Name']).toMatch(/_d\{/);
     }

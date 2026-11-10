@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { loadSettings, saveSettings, textFromSpec, type CodebookSettings } from './codebookBuild';
-import { validateSpec, type StudySpec, type ValidationResult } from '../core';
+import { validateSpec, type DatasetTable, type StudySpec, type ValidationResult } from '../core';
 import type { HostAdapter } from '../adapters/types';
 import { Icon, Toasts, useToasts } from './ui';
 import { HomePage } from './pages/Home';
@@ -78,7 +78,7 @@ export function App({ adapter }: { adapter: HostAdapter }) {
   const [collapsed, setCollapsed] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches);
   const [codebook, setCodebook] = useState<GeneratedCodebook | null>(null);
   const { toasts, notify, dismiss } = useToasts();
-  const [datasetFile, setDatasetFile] = useState<{ name: string; text: string } | null>(null);
+  const [datasetFile, setDatasetFile] = useState<{ name: string; text?: string; table?: DatasetTable } | null>(null);
   const [importTab, setImportTab] = useState<ImportTab>('api');
   const spec: StudySpec | null = session?.result.spec ?? null;
   const [cbSettings, setCbSettingsState] = useState<CodebookSettings>(() => loadSettings(spec));

@@ -24,10 +24,18 @@ Drop a file on "Upload a File". The format is detected automatically:
 | REDCap data dictionary `.csv` | Project Setup → Data Dictionary → Download the current Data Dictionary |
 | Wear-IT getData `.json` | A saved API response |
 | Study spec `.json` | This app's own format (also the older pre-`Study.Metadata` layout) |
+| SPSS `.sav` / `.zsav`, SAS `.sas7bdat` / `.xpt`, Stata `.dta` | Response data saved from the statistics package (opens the column mapper, below) |
 
 Anything that can't be carried over exactly (complex REDCap branching, unsupported question types) is listed in the notes after import.
 
-### Your dataset (response CSV)
+### Your dataset (response CSV, SPSS, SAS or Stata)
+
+SPSS (`.sav`, `.zsav`), SAS (`.sas7bdat`, including compressed files, and `.xpt` transport files) and Stata (`.dta`, Stata 8 to 18) files are read in the browser and go to the same column mapper as a CSV, with more filled in:
+
+- **Question text** from each variable's label, and **response options** from its value labels (SPSS and Stata), so an imported study has the real wording and the labelled choices.
+- **Dates and date-times** from the variables' formats, so a timestamp column needs no conversion.
+- **Missing values** as the file defines them (SPSS user-missing values, SAS and Stata missing codes).
+
 
 Have responses in a spreadsheet? Drop it on the "Your dataset" tab of Data Import (the same place study files go). A CSV or TSV that isn't a REDCap data dictionary opens the column mapper:
 

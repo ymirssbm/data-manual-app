@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { validateSpec, type StudySpec, type ValidationResult } from '../../core';
+import { isStatFile, readStatFile, statFileToTable, STAT_FILE_EXTENSIONS, validateSpec, type DatasetTable, type StudySpec, type ValidationResult } from '../../core';
 import { pullWearit, WEARIT_SERVERS, type WearitServer } from '../../connectors/wearit/fetch';
 import { wearitPagesToSpec } from '../../connectors/wearit/convert';
 import { normalizeRedcapUrl, pullRedcap, redcapProjectInfo } from '../../connectors/redcap';
@@ -20,7 +20,7 @@ export interface LoadedSource {
 }
 
 export type ImportTab = 'api' | 'file' | 'example';
-type DataFile = { name: string; text: string };
+type DataFile = { name: string; text?: string; table?: DatasetTable };
 
 interface Props {
   session: Session | null;
@@ -42,7 +42,11 @@ const FILE_KINDS = [
   { label: 'Study spec (.json)', text: 'A study saved from this app (current or older format), or a saved Wear-IT getData response.' },
   { label: 'Qualtrics survey (.qsf)', text: 'In Qualtrics: Survey → Tools → Import/Export → Export Survey.' },
   { label: 'REDCap data dictionary (.csv)', text: 'In REDCap: Project Setup → Data Dictionary → Download the current Data Dictionary.' },
-  { label: 'Response data (.csv / .tsv)', text: 'Raw responses from anywhere (an EMA app export, a spreadsheet, SPSS or R saved as CSV). You map its columns next.' },
+  { label: 'Response data (.csv / .tsv)', text: 'Raw responses from anywhere (an EMA app export, a spreadsheet, R saved as CSV). You map its columns next.' },
+  {
+    label: 'SPSS, SAS or Stata data (.sav, .zsav, .sas7bdat, .xpt, .dta)',
+    text: 'Responses straight from a statistics package, with their variable labels as question text and value labels as response options. You map its columns next.',
+  },
 ];
 
 type Source = 'wearit' | 'redcap' | 'qualtrics';
@@ -73,7 +77,7 @@ export const readExample = async (path: string) => {
 const EXAMPLE = {
   title: 'Recovery Pathways EMA (example study)',
   detail:
-    'Three 7-day measurement bursts with morning, evening and weekly surveys, complex branching (nested, multi-select, threshold and mutually exclusive paths) and simulated responses from 200 participants enrolled over six months (about 80% of surveys completed).',
+    'Three 7-day measurement bursts with morning and evening surveys, a momentary check at a random time each afternoon, a next-morning craving follow-up triggered by high evening craving, and a weekly review; complex branching (nested, multi-select, threshold and mutually exclusive paths) and simulated responses from 200 participants enrolled over six months (about 80% of surveys completed).',
 };
 
 export function DataPullPage({ session, spec, onLoaded, onDatasetLoaded, notify, tab, setTab, datasetFile, setDatasetFile }: Props) {
@@ -195,6 +199,21 @@ export function DataPullPage({ session, spec, onLoaded, onDatasetLoaded, notify,
     } catch (e) {
       notify((e as Error).message, 'error', 10000);
     }
+  };
+
+  /** Text files go through the translators; SPSS, SAS and Stata files are read as data and go to the column mapper. */
+  const loadFile = (f: File) => {
+    if (!isStatFile(f.name)) return void f.text().then((t) => loadText(f.name, t));
+    setBusy(`Reading ${f.name}…`);
+    void f
+      .arrayBuffer()
+      .then((b) => readStatFile(f.name, b))
+      .then((sf) => {
+        if (!sf.columns.length) throw new Error('The file has no variables.');
+        setDatasetFile({ name: f.name, table: statFileToTable(sf) });
+      })
+      .catch((e: Error) => notify(`Couldn't read ${f.name}: ${e.message}`, 'error', 10000))
+      .finally(() => setBusy(null));
   };
 
   const loadExample = async () => {
@@ -475,7 +494,7 @@ export function DataPullPage({ session, spec, onLoaded, onDatasetLoaded, notify,
               onDrop={(e) => {
                 e.preventDefault();
                 const f = e.dataTransfer.files[0];
-                if (f) void f.text().then((t) => loadText(f.name, t));
+                if (f) loadFile(f);
               }}
             >
               <Icon name="upload" size={28} />
@@ -485,11 +504,11 @@ export function DataPullPage({ session, spec, onLoaded, onDatasetLoaded, notify,
                 <input
                   type="file"
                   hidden
-                  accept={[...new Set([...TRANSLATORS.flatMap((t) => t.accept.split(',')), '.tsv', '.txt'])].join(',')}
+                  accept={[...new Set([...TRANSLATORS.flatMap((t) => t.accept.split(',')), '.tsv', '.txt', ...STAT_FILE_EXTENSIONS])].join(',')}
                   onChange={(e) => {
                     const f = e.target.files?.[0];
                     e.target.value = '';
-                    if (f) void f.text().then((t) => loadText(f.name, t));
+                    if (f) loadFile(f);
                   }}
                 />
               </label>

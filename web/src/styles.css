@@ -196,24 +196,78 @@ textarea.dm-input { resize: vertical; min-height: 70px; }
 .dm-code { margin: 12px 0 0; max-height: 320px; overflow: auto; font-size: calc(12px * var(--ts, 1)); background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
 
 /* ---- Schedule */
-.dm-events { display: grid; gap: 10px; }
-.dm-event { border: 1px solid var(--border); border-left: 5px solid; border-radius: 6px; padding: 10px 14px; }
-.dm-event-head { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .dm-dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 14px; margin: 6px 0 0; font-size: calc(14px * var(--ts, 1)); }
 .dm-dl dt { color: var(--text-2); }
 .dm-dl dd { margin: 0; }
-.dm-day { display: grid; gap: 6px; }
-.dm-day-axis { position: relative; height: 18px; margin-left: 180px; font-size: calc(12px * var(--ts, 1)); color: var(--text-2); }
-.dm-day-axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
-.dm-day-row { display: grid; grid-template-columns: 172px 1fr; gap: 8px; align-items: center; }
-.dm-day-label, .dm-tl-label { font-size: calc(13.5px * var(--ts, 1)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.dm-day-track { position: relative; height: 22px; background: var(--surface-3); border-radius: 4px; }
-.dm-day-grid { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border); }
-.dm-day-bar { position: absolute; top: 3px; bottom: 3px; border-radius: 3px; }
-.dm-timeline-wrap { overflow-x: auto; }
-.dm-timeline { display: grid; gap: 3px 2px; align-items: center; min-width: 520px; }
-.dm-tl-head { font-size: calc(11px * var(--ts, 1)); color: var(--text-2); white-space: nowrap; height: 16px; }
-.dm-tl-cell { height: 18px; border-radius: 2px; background: var(--surface-3); }
+/* Study Schedule: a vertical day / week calendar */
+.dm-cal-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin: 0 0 12px; }
+.dm-cal-nav { display: flex; align-items: center; gap: 6px; }
+.dm-cal-nav .dm-icon-btn { width: 34px; height: 34px; border: 1px solid var(--border-2); border-radius: 8px; background: var(--surface); font-size: calc(20px * var(--ts, 1)); line-height: 1; }
+.dm-cal-title { display: grid; margin-left: 8px; }
+.dm-cal-title strong { font-size: calc(18px * var(--ts, 1)); }
+.dm-cal-title span { font-size: calc(13px * var(--ts, 1)); color: var(--text-2); }
+.dm-cal-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.dm-strip { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
+.dm-strip-label { font-size: calc(12px * var(--ts, 1)); font-weight: 600; color: var(--text-3); white-space: nowrap; text-transform: uppercase; letter-spacing: .04em; }
+.dm-strip-days { display: flex; gap: 2px; flex: 1; min-width: 0; overflow-x: auto; padding: 3px 0; }
+.dm-strip-day { flex: 1 0 6px; max-width: 18px; height: 22px; padding: 0; border: 0; border-radius: 3px; cursor: pointer; background: color-mix(in srgb, var(--box-primary) calc(var(--n, 0) * 100%), var(--surface-3)); }
+.dm-strip-day[data-empty] { background: var(--surface-3); opacity: .6; }
+.dm-strip-day.is-on { outline: 2px solid var(--text); outline-offset: 1px; }
+.dm-cal-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+.dm-cal { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.dm-cal-head, .dm-cal-allday, .dm-cal-body { display: grid; grid-template-columns: 64px minmax(0, 1fr); }
+.dm-cal-head.is-week, .dm-cal-allday.is-week, .dm-cal-body.is-week { grid-template-columns: 64px repeat(7, minmax(0, 1fr)); }
+.dm-cal-head { border-bottom: 1px solid var(--border); }
+.dm-cal-dayhead { display: flex; align-items: baseline; justify-content: center; gap: 6px; padding: 8px 4px; border: 0; border-left: 1px solid var(--border); background: none; color: var(--text-2); font: inherit; font-size: calc(13px * var(--ts, 1)); cursor: pointer; }
+.dm-cal-dayhead:disabled { cursor: default; }
+.dm-cal-dayhead strong { font-size: calc(18px * var(--ts, 1)); color: var(--text); }
+.dm-cal-dayhead em { font-style: normal; font-size: calc(11.5px * var(--ts, 1)); color: var(--text-3); }
+.dm-cal-head.is-week .dm-cal-dayhead:hover { background: var(--surface-2); }
+.dm-cal-head.is-week .dm-cal-dayhead.is-current strong { color: var(--blue-dark); }
+.dm-cal-allday { border-bottom: 1px solid var(--border); }
+.dm-cal-gutter-label { padding: 8px 6px; font-size: calc(11.5px * var(--ts, 1)); color: var(--text-3); text-align: right; }
+.dm-cal-allday-cell { display: grid; gap: 4px; padding: 4px; border-left: 1px solid var(--border); align-content: start; }
+.dm-cal-body { position: relative; }
+.dm-cal-gutter { position: relative; }
+.dm-cal-gutter span { position: absolute; right: 8px; transform: translateY(-50%); font-size: calc(11.5px * var(--ts, 1)); color: var(--text-3); white-space: nowrap; }
+.dm-cal-col { position: relative; border-left: 1px solid var(--border); }
+.dm-cal-line { position: absolute; left: 0; right: 0; border-top: 1px solid var(--border); }
+.dm-cal-line:first-child { border-top: 0; }
+.dm-cal-empty { position: absolute; top: 40%; left: 0; right: 0; margin: 0; text-align: center; color: var(--text-3); font-size: calc(14px * var(--ts, 1)); }
+.dm-cal-card { position: absolute; display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: left; overflow: hidden; padding: 6px 9px; border: 1px solid color-mix(in srgb, var(--c) 45%, var(--surface)); border-left: 4px solid var(--c); border-radius: 7px; background: color-mix(in srgb, var(--c) 16%, var(--surface)); color: var(--text); font: inherit; font-size: calc(13.5px * var(--ts, 1)); line-height: 1.3; cursor: pointer; box-shadow: 0 1px 2px rgba(0, 0, 0, .06); transition: box-shadow .12s, opacity .12s; }
+.dm-cal-card:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, .14); }
+.dm-cal-card.is-selected { box-shadow: 0 0 0 2px var(--c); }
+.dm-cal-card.is-dim { opacity: .3; }
+.dm-cal-card.is-untimed { position: relative; }
+.dm-cal-card strong { font-weight: 650; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dm-cal-card.is-short { flex-direction: row; flex-wrap: nowrap; gap: 0 8px; align-items: center; padding: 0 8px; white-space: nowrap; }
+.dm-cal-card.is-short .dm-cal-time { overflow: hidden; text-overflow: ellipsis; }
+.dm-cal-card.is-compact { padding: 4px 6px; gap: 0; font-size: calc(12.5px * var(--ts, 1)); }
+.dm-cal-card.is-compact strong, .dm-cal-card.is-compact .dm-cal-time { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.dm-cal-card.is-compact .dm-cal-time { font-size: calc(11.5px * var(--ts, 1)); }
+/* A window drawn over an earlier one: a ring in the page colour keeps the two apart. */
+.dm-cal-card.is-over { box-shadow: 0 0 0 2px var(--surface), 0 2px 6px rgba(0, 0, 0, .12); }
+.dm-cal-card.is-over.is-selected { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--c); }
+.dm-cal-head.is-week .dm-cal-dayhead { flex-direction: column; align-items: center; gap: 0; }
+.dm-cal-time { font-size: calc(12.5px * var(--ts, 1)); color: var(--text-2); white-space: nowrap; }
+.dm-cal-tags { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 2px; font-size: calc(12px * var(--ts, 1)); color: var(--text-2); }
+.dm-cal-tags > span:not(.dm-cal-sub) { padding: 0 6px; border-radius: 999px; background: color-mix(in srgb, var(--c) 22%, var(--surface)); }
+.dm-cal-sub { width: 100%; color: var(--text-3); }
+.dm-cal-side { display: grid; gap: 14px; position: sticky; top: 12px; }
+.dm-cal-detail, .dm-cal-legend { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 12px 14px; }
+.dm-cal-detail-head { display: flex; align-items: center; gap: 8px; }
+.dm-cal-detail-head strong { flex: 1; font-size: calc(16px * var(--ts, 1)); }
+.dm-cal-event-title { margin: 4px 0 0; color: var(--text-2); font-size: calc(13.5px * var(--ts, 1)); }
+.dm-cal-dot { width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0; }
+.dm-cal-legend h4 { margin: 0 0 8px; font-size: calc(12.5px * var(--ts, 1)); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--text-3); }
+.dm-cal-legend-row { display: flex; gap: 10px; align-items: flex-start; width: 100%; padding: 7px 8px; border: 0; border-radius: 7px; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.dm-cal-legend-row .dm-cal-dot { margin-top: 5px; }
+.dm-cal-legend-row > span:last-child { display: grid; }
+.dm-cal-legend-row:hover, .dm-cal-legend-row.is-on { background: var(--surface-2); }
+@media (max-width: 1100px) {
+  .dm-cal-layout { grid-template-columns: minmax(0, 1fr); }
+  .dm-cal-side { position: static; }
+}
 
 /* ---- Notifications */
 .dm-toasts { position: fixed; right: 16px; bottom: 16px; display: grid; gap: 8px; z-index: 50; max-width: min(420px, calc(100vw - 32px)); }
@@ -727,3 +781,59 @@ label.dm-link-btn { display: inline-block; }
 .dm-var-sample ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 3px; }
 .dm-var-sample li { display: flex; gap: 10px; align-items: baseline; }
 .dm-var-sample code { min-width: 12ch; color: var(--blue-dark); }
+
+.dm-callout-plain { margin: 4px 0 14px; color: var(--text-2); }
+.dm-callout-plain strong { color: var(--text); }
+
+/* Schedule: random windows are striped (sent once, somewhere in the window); triggered ones are dashed (may not happen). */
+.dm-cal-dot { background: var(--c, var(--box-primary)); }
+.dm-cal-dot.is-random { background: repeating-linear-gradient(135deg, var(--c) 0 2px, color-mix(in srgb, var(--c) 30%, var(--surface)) 2px 4px); }
+.dm-cal-dot.is-triggered { background: none; border: 2px dashed var(--c); width: 12px; height: 12px; }
+.dm-cal-card.is-random { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c) 22%, var(--surface)) 0 7px, color-mix(in srgb, var(--c) 9%, var(--surface)) 7px 14px); }
+.dm-cal-card.is-triggered { background: color-mix(in srgb, var(--c) 7%, var(--surface)); border-style: dashed; border-left-style: dashed; }
+.dm-cal-kind { font-style: normal; font-weight: 500; font-size: calc(12px * var(--ts, 1)); color: var(--text-3); }
+
+/* Schedule: month view */
+.dm-month { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); overflow: hidden; }
+.dm-month-head, .dm-month-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.dm-month-head { border-bottom: 1px solid var(--border); }
+.dm-month-head span { padding: 8px; text-align: center; font-size: calc(12.5px * var(--ts, 1)); font-weight: 600; color: var(--text-2); }
+.dm-month-week + .dm-month-week { border-top: 1px solid var(--border); }
+.dm-month-day { display: flex; flex-direction: column; gap: 3px; min-height: 118px; padding: 6px; border: 0; border-left: 1px solid var(--border); background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; min-width: 0; }
+.dm-month-day:first-child { border-left: 0; }
+.dm-month-day:hover { background: var(--surface-2); }
+.dm-month-day.is-other { background: var(--surface-2); }
+.dm-month-day.is-other .dm-month-date, .dm-month-day.is-other .dm-month-chip { opacity: .55; }
+.dm-month-day.is-current { box-shadow: inset 0 0 0 2px var(--box-primary); }
+.dm-month-date { display: flex; align-items: baseline; justify-content: space-between; gap: 4px; margin-bottom: 2px; }
+.dm-month-date strong { font-size: calc(14px * var(--ts, 1)); }
+.dm-month-date em { font-style: normal; font-size: calc(11px * var(--ts, 1)); color: var(--text-3); }
+.dm-month-chip { display: flex; align-items: baseline; gap: 4px; padding: 1px 6px; border-left: 3px solid var(--c); border-radius: 4px; background: color-mix(in srgb, var(--c) 15%, var(--surface)); font-size: calc(12px * var(--ts, 1)); line-height: 1.45; min-width: 0; }
+.dm-month-chip.is-random { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c) 22%, var(--surface)) 0 5px, color-mix(in srgb, var(--c) 8%, var(--surface)) 5px 10px); }
+.dm-month-chip.is-triggered { background: none; border: 1px dashed var(--c); border-left: 3px dashed var(--c); }
+.dm-month-chip.is-dim { opacity: .3; }
+.dm-month-chip-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dm-month-chip-n { font-weight: 600; color: var(--text-2); }
+.dm-month-more { font-size: calc(11.5px * var(--ts, 1)); color: var(--text-3); padding-left: 6px; }
+@media (max-width: 760px) {
+  .dm-month-day { min-height: 70px; padding: 4px; }
+  .dm-month-chip-name { display: none; }
+  .dm-month-chip { padding: 0 4px; }
+}
+
+/* Month view: the calendar takes the full width; details and the survey list sit underneath, side by side. */
+.dm-cal-layout.is-month { grid-template-columns: minmax(0, 1fr); }
+.dm-cal-layout.is-month .dm-cal-side { position: static; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); align-items: start; }
+.dm-cal-layout.is-month .dm-cal-legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0 12px; }
+.dm-cal-layout.is-month .dm-cal-legend h4, .dm-cal-layout.is-month .dm-cal-legend > p { grid-column: 1 / -1; }
+
+/* Schedule: a survey picked in the list. Its days in the strip take its colour, the rest fade; its cards get a ring. */
+.dm-strip-day.is-focus { background: var(--fc); }
+.dm-strip-day.is-faded { opacity: .18; }
+.dm-cal-card.is-focus { box-shadow: 0 0 0 2px var(--c); }
+.dm-cal-legend-row.is-on { box-shadow: inset 3px 0 0 var(--box-primary); }
+
+/* A short window in the week view: one line, the survey's name only (the time is in its tooltip and details). */
+.dm-cal-card.is-short.is-compact { padding: 0 6px; }
+.dm-cal-card.is-short.is-compact .dm-cal-time { display: none; }
+.dm-cal-card.is-short.is-compact strong { overflow: hidden; text-overflow: ellipsis; }

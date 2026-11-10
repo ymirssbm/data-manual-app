@@ -11,11 +11,24 @@
 import { buildBlockMap } from './model';
 import { parseCsv } from './csv';
 import type { StudySpec, Survey } from './spec';
+import type { StatFile, ValueLabel } from './statfiles';
 import { toIsoDateTime } from './time';
 
 export interface DatasetTable {
   columns: string[];
   rows: string[][];
+  /** From SPSS, SAS and Stata files: column -> variable label (the question text). */
+  labels?: Record<string, string>;
+  /** From SPSS and Stata files: column -> value labels (the response options). */
+  valueLabels?: Record<string, ValueLabel[]>;
+  /** e.g. "SPSS (.sav)" when the table came from a statistical package's file. */
+  source?: string;
+  notes?: string[];
+}
+
+/** An SPSS, SAS or Stata file as a dataset table, keeping its labels. */
+export function statFileToTable(f: StatFile): DatasetTable {
+  return { columns: f.columns, rows: f.rows, labels: f.labels, valueLabels: f.valueLabels, source: f.format, notes: f.notes };
 }
 
 export type DatasetLayout = 'long' | 'wide';
@@ -60,6 +73,8 @@ export interface DatasetResult {
   variables: string[];
   /** Question ID -> question text, when the file has it. */
   questionText: Map<string, string>;
+  /** Question ID -> its response options, from SPSS or Stata value labels. */
+  valueLabels: Map<string, ValueLabel[]>;
   notes: string[];
 }
 
@@ -110,7 +125,8 @@ export function guessMapping(table: DatasetTable): DatasetMapping {
     response: layout === 'long' ? response : undefined,
     questionText: layout === 'long' ? questionText : undefined,
     variables,
-    headerRows: variables ? guessHeaderRows(table, variables) : undefined,
+    // Labelled files (SPSS, SAS, Stata) have one header row of names; the text comes from the labels.
+    headerRows: variables ? (table.labels ? ['id'] : guessHeaderRows(table, variables)) : undefined,
   };
 }
 
@@ -155,6 +171,7 @@ export function datasetToData(table: DatasetTable, m: DatasetMapping, now = new 
   const sessionIds = new Map<string, number>();
   const variableSurveys = new Map<string, string>();
   const questionText = new Map<string, string>();
+  const valueLabels = new Map<string, ValueLabel[]>();
   let badTimes = 0;
   let skippedNoId = 0;
 
@@ -214,6 +231,13 @@ export function datasetToData(table: DatasetTable, m: DatasetMapping, now = new 
         const text = (headerAt(textRow)[ci] ?? '').trim();
         if (text && text !== ids[k]) questionText.set(ids[k]!, text);
       });
+    vIdx.forEach((ci, k) => {
+      const col = table.columns[ci]!;
+      const label = table.labels?.[col];
+      if (label && !questionText.has(ids[k]!)) questionText.set(ids[k]!, label);
+      const vl = table.valueLabels?.[col];
+      if (vl?.length) valueLabels.set(ids[k]!, vl);
+    });
     for (const r of table.rows.slice(roles.length - 1)) {
       if (!r[pI]) {
         skippedNoId++;
@@ -232,7 +256,8 @@ export function datasetToData(table: DatasetTable, m: DatasetMapping, now = new 
   const dataRows = m.layout === 'wide' ? Math.max(0, table.rows.length - Math.max(0, (m.headerRows?.length ?? 1) - 1)) : table.rows.length;
   notes.unshift(`Read ${dataRows.toLocaleString()} rows: ${new Set(cols['Participant.ID']).size} participants, ${variables.length} variables, ${cols['Question.ID'].length.toLocaleString()} responses.`);
   if (questionText.size) notes.push(`Question text found for ${questionText.size} of ${variables.length} variables.`);
-  return { data: cols, variableSurveys, variables, questionText, notes };
+  if (valueLabels.size) notes.push(`Response options (value labels) found for ${valueLabels.size} variables.`);
+  return { data: cols, variableSurveys, variables, questionText, valueLabels, notes };
 }
 
 export interface AttachReport {
@@ -291,7 +316,23 @@ export function inferSpecFromData(result: DatasetResult, studyName: string): Stu
     'Survey.Name': survey,
     'Survey.LongName': survey === 'dataset' ? 'Dataset variables' : survey,
     questions: vars.map((name) => {
-      const q = inferQuestion(name, values.get(name) ?? []);
+      let q = inferQuestion(name, values.get(name) ?? []);
+      // Value labels make it a choice question, with the labels as its options.
+      const vl = result.valueLabels.get(name);
+      if (vl?.length) {
+        const labelled = new Map(vl.map((x) => [x.value, x.label]));
+        const seen = [...new Set(values.get(name) ?? [])].filter((x) => !labelled.has(x));
+        const all = [...vl.map((x) => x.value), ...seen];
+        const numeric = all.every((x) => x.trim() !== '' && Number.isFinite(Number(x)));
+        if (numeric) all.sort((a, b) => Number(a) - Number(b));
+        q = {
+          ...q,
+          'Question.Type.Display.Name': 'Multiple Choice',
+          'Data.Type': numeric ? (all.every((x) => Number.isInteger(Number(x))) ? 'integer' : 'numeric') : 'character',
+          responseKey: all.map((v) => ({ value: v, definition: labelled.get(v) ?? v })),
+          'Question.Description': "Response options from the file's value labels.",
+        };
+      }
       const text = result.questionText.get(name);
       return text ? { ...q, 'Question.Text': text } : q;
     }),
