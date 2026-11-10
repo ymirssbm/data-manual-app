@@ -186,7 +186,7 @@ export function App({ adapter }: { adapter: HostAdapter }) {
       {dialog === 'contact' && <ContactDialog onClose={() => setDialog(null)} />}
 
       <main className="dm-content">
-        {page === 'home' && <HomePage session={session} go={go} />}
+        {page === 'home' && <HomePage session={session} go={go} onLoaded={onLoaded} notify={notify} />}
         {page === 'datapull' && (
           <DataPullPage
             session={session}

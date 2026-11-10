@@ -12,6 +12,10 @@ export const APP_HEADER = { 'x-data-manual': '1' } as const;
 export interface KeyVault {
   /** Where secrets are kept, in words, e.g. "macOS Keychain". */
   storage: string;
+  /** The folder holding the key list (and, on Windows, the encrypted keys). */
+  folder?: string;
+  /** default: ~/.data-manual · chosen: picked in Settings · env: set by DATA_MANUAL_HOME */
+  source?: 'default' | 'chosen' | 'env';
   keys: KeyEntry[];
 }
 
@@ -44,6 +48,16 @@ export async function saveVaultKey(k: NewKey): Promise<KeyEntry> {
 
 export async function deleteVaultKey(id: string): Promise<void> {
   await check(await fetch(`/keys/${encodeURIComponent(id)}`, { method: 'DELETE', headers: APP_HEADER }));
+}
+
+/** Move saved keys to another folder on this computer (null = back to the default). */
+export async function setVaultFolder(dir: string | null): Promise<void> {
+  await check(await fetch('/keys/folder', { method: 'POST', headers: { ...APP_HEADER, 'content-type': 'application/json' }, body: JSON.stringify({ dir }) }));
+}
+
+/** Open the key folder in Explorer / Finder. */
+export async function openVaultFolder(): Promise<void> {
+  await check(await fetch('/keys/open-folder', { method: 'POST', headers: APP_HEADER }));
 }
 
 export const vaultRef = (k: KeyEntry) => `${VAULT_PREFIX}${k.id}`;

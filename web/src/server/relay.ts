@@ -13,7 +13,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 import type { Connect, Plugin } from 'vite';
-import { deleteKey, fillSecrets, listKeys, saveKey, storageName, VAULT_RE } from '../keystore/node';
+import { deleteKey, fillSecrets, keyFolder, listKeys, openKeyFolder, saveKey, setKeyFolder, storageName, VAULT_RE } from '../keystore/node';
 import type { KeyEntry, NewKey } from '../keystore/types';
 
 /**
@@ -71,7 +71,19 @@ const handler: Connect.NextHandleFunction = async (req, res, next) => {
   if (path === '/keys' || path.startsWith('/keys/')) {
     if (!sameOrigin(req)) return fail(res, 403, 'Not allowed.');
     try {
-      if (req.method === 'GET' && path === '/keys') return send(res, 200, { storage: storageName(), keys: listKeys() });
+      if (req.method === 'GET' && path === '/keys') return send(res, 200, { storage: storageName(), ...keyFolder(), keys: listKeys() });
+      if (req.method === 'POST' && path === '/keys/folder') {
+        const { dir } = JSON.parse((await readBody(req)).toString('utf8')) as { dir?: string | null };
+        try {
+          return send(res, 200, setKeyFolder(typeof dir === 'string' && dir.trim() ? dir : null));
+        } catch (e) {
+          return fail(res, 400, (e as Error).message);
+        }
+      }
+      if (req.method === 'POST' && path === '/keys/open-folder') {
+        await openKeyFolder();
+        return send(res, 200, { ok: true });
+      }
       if (req.method === 'POST' && path === '/keys') {
         const k = JSON.parse((await readBody(req)).toString('utf8')) as NewKey;
         if (!['wearit', 'redcap', 'qualtrics', 'anthropic', 'openai'].includes(k.kind) || typeof k.secret !== 'string') return fail(res, 400, 'Invalid key.');

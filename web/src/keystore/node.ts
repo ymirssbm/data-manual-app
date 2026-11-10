@@ -10,9 +10,9 @@
 // Windows/fallback, the encrypted blobs. It never holds a key in plain text.
 import { execFile } from 'node:child_process';
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from 'node:crypto';
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join, resolve } from 'node:path';
 import { keyAllowedFor, type KeyEntry, type KeyKind, type NewKey } from './types';
 
 export type { KeyEntry, KeyKind, NewKey };
@@ -22,8 +22,71 @@ interface Stored extends KeyEntry {
   blob?: string;
 }
 
-const DIR = process.env.DATA_MANUAL_HOME ?? join(homedir(), '.data-manual');
-const LIST = join(DIR, 'keys.json');
+// The folder: DATA_MANUAL_HOME if set; otherwise the one chosen in the app (remembered in
+// ~/.data-manual/location.json); otherwise ~/.data-manual.
+const HOME_DIR = join(homedir(), '.data-manual');
+const POINTER = join(HOME_DIR, 'location.json');
+const ENV_DIR = process.env.DATA_MANUAL_HOME;
+function chosenDir(): string | null {
+  try {
+    const d = (JSON.parse(readFileSync(POINTER, 'utf8')) as { dir?: string }).dir;
+    return d && isAbsolute(d) ? d : null;
+  } catch {
+    return null;
+  }
+}
+let DIR = ENV_DIR ?? chosenDir() ?? HOME_DIR;
+let LIST = join(DIR, 'keys.json');
+
+export interface KeyFolder {
+  folder: string;
+  /** Where the folder setting comes from: the default, a choice made in the app, or DATA_MANUAL_HOME. */
+  source: 'default' | 'chosen' | 'env';
+}
+export function keyFolder(): KeyFolder {
+  return { folder: DIR, source: ENV_DIR ? 'env' : DIR === HOME_DIR ? 'default' : 'chosen' };
+}
+
+/**
+ * Keep saved keys in another folder (null = back to the default). The list and any encrypted
+ * blobs move with it; keys already in the new folder are kept. Keychain/keyring entries don't move,
+ * since the OS keeps those itself; only their list entries do.
+ */
+export function setKeyFolder(dir: string | null): KeyFolder {
+  if (ENV_DIR) throw new Error('The key folder is set by DATA_MANUAL_HOME. Unset it to choose one here.');
+  const next = dir ? resolve(dir.trim()) : HOME_DIR;
+  if (dir && !isAbsolute(dir.trim())) throw new Error('Use a full path, for example D:\\Keys or /Volumes/Secure/keys.');
+  if (next === DIR) return keyFolder();
+  mkdirSync(next, { recursive: true, mode: 0o700 });
+  const moving = readList();
+  const oldMaster = join(DIR, 'master.key');
+  const newMaster = join(next, 'master.key');
+  if (moving.some((k) => k.method === 'file') && existsSync(oldMaster) && existsSync(newMaster) && readFileSync(oldMaster, 'utf8') !== readFileSync(newMaster, 'utf8'))
+    throw new Error('That folder already has keys encrypted with a different master key, so they cannot be merged.');
+  const prevDir = DIR;
+  const prevList = LIST;
+  DIR = next;
+  LIST = join(next, 'keys.json');
+  const there = readList();
+  const ids = new Set(there.map((k) => k.id));
+  writeList([...there, ...moving.filter((k) => !ids.has(k.id))]);
+  if (existsSync(oldMaster) && !existsSync(newMaster)) writeFileSync(newMaster, readFileSync(oldMaster), { mode: 0o600 });
+  // Clear the old copy only after the new one is written.
+  if (existsSync(prevList)) writeFileSync(prevList, '[]\n', { mode: 0o600 });
+  if (existsSync(oldMaster) && prevDir !== HOME_DIR) rmSync(oldMaster);
+  mkdirSync(HOME_DIR, { recursive: true, mode: 0o700 });
+  if (next === HOME_DIR) rmSync(POINTER, { force: true });
+  else writeFileSync(POINTER, `${JSON.stringify({ dir: next }, null, 2)}\n`, { mode: 0o600 });
+  return keyFolder();
+}
+
+/** Show the key folder in Explorer / Finder / the file manager. */
+export async function openKeyFolder(): Promise<void> {
+  if (!existsSync(DIR)) mkdirSync(DIR, { recursive: true, mode: 0o700 });
+  const cmd = process.platform === 'win32' ? 'explorer.exe' : process.platform === 'darwin' ? 'open' : 'xdg-open';
+  // explorer.exe exits with 1 even when it worked.
+  await run(cmd, [DIR]).catch(() => undefined);
+}
 const SERVICE = 'data-manual';
 const cache = new Map<string, string>();
 /** Tests only: forget decrypted secrets so the next read goes to the OS store. */

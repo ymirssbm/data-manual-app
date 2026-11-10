@@ -139,8 +139,28 @@ export function FlowchartPage({ spec, go, notify }: Props) {
 /** `fitKey` changes when a different survey/layout is shown (refit); folding keeps the current view. */
 function Canvas({ svg, fitKey, blocks, onToggleBlock }: { svg: string; fitKey: string; blocks: ReturnType<typeof flowchartBlocks>; onToggleBlock(itemId: string): void }) {
   const host = useRef<HTMLDivElement>(null);
-  const [view, setView] = useState<View>({ x: 0, y: 0, k: 1 });
-  const [size, setSize] = useState({ w: 800, h: 600, cw: 800, ch: 500 });
+  const [view, setViewRaw] = useState<View>({ x: 0, y: 0, k: 1 });
+  const [size, setSizeRaw] = useState({ w: 800, h: 600, cw: 800, ch: 500 });
+  const sizeRef = useRef(size);
+  const setSize = (s: typeof size) => {
+    sizeRef.current = s;
+    setSizeRaw(s);
+  };
+  // Keep the chart on screen: a wide/tall chart can't be pulled past its edges (plus a small margin),
+  // and one that fits can't be pushed out of the window.
+  const setView = useCallback((u: View | ((v: View) => View)) => {
+    setViewRaw((prev) => {
+      const v = typeof u === 'function' ? u(prev) : u;
+      const { w, h, cw, ch } = sizeRef.current;
+      const M = 40;
+      const clamp = (pos: number, len: number, win: number) => {
+        const a = M;
+        const b = win - len - M;
+        return Math.max(Math.min(a, b), Math.min(Math.max(a, b), pos));
+      };
+      return { k: v.k, x: clamp(v.x, w * v.k, cw), y: clamp(v.y, h * v.k, ch) };
+    });
+  }, []);
   const drag = useRef<{ x: number; y: number; vx: number; vy: number; moved: boolean } | null>(null);
   const lastKey = useRef<string | null>(null);
 
@@ -190,7 +210,6 @@ function Canvas({ svg, fitKey, blocks, onToggleBlock }: { svg: string; fitKey: s
     const el = host.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
-      if ((e.target as HTMLElement).closest('.dm-minimap')) return;
       e.preventDefault();
       const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? el.clientHeight : 1;
       const dx = e.deltaX * unit;
@@ -221,14 +240,36 @@ function Canvas({ svg, fitKey, blocks, onToggleBlock }: { svg: string; fitKey: s
     }
   };
 
-  // Minimap geometry.
-  const MW = 190;
-  const MH = 130;
-  const m = Math.min(MW / size.w, MH / size.h);
+  // Minimap geometry. Short charts fit whole; long ones keep a readable width and the map scrolls
+  // to follow the view (like an editor's code overview).
+  const MW = 240;
+  const MH = 300;
+  const MIN_W = 170;
+  let m = Math.min(MW / size.w, MH / size.h);
+  if (size.w * m < MIN_W) m = Math.min(MW, MIN_W) / size.w;
+  const miniW = size.w * m;
+  const fullH = size.h * m;
+  const boxH = Math.min(fullH, Math.max(140, Math.min(420, size.ch - 90)));
   const vp = { left: (-view.x / view.k) * m, top: (-view.y / view.k) * m, width: (size.cw / view.k) * m, height: (size.ch / view.k) * m };
-  const jump = (mx: number, my: number) => setView((v) => ({ ...v, x: size.cw / 2 - (mx / m) * v.k, y: size.ch / 2 - (my / m) * v.k }));
+  const off = Math.max(0, Math.min(fullH - boxH, vp.top + vp.height / 2 - boxH / 2));
+  const jump = (mx: number, my: number) => setView((v) => ({ ...v, x: size.cw / 2 - (mx / m) * v.k, y: size.ch / 2 - ((my + off) / m) * v.k }));
   const miniSrc = useMemo(() => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`, [svg]);
   const miniDrag = useRef(false);
+  const [miniOpen, setMiniOpenState] = useState(() => {
+    try {
+      return localStorage.getItem('dm.flowchart.minimap') !== 'closed';
+    } catch {
+      return true;
+    }
+  });
+  const setMiniOpen = (open: boolean) => {
+    setMiniOpenState(open);
+    try {
+      localStorage.setItem('dm.flowchart.minimap', open ? 'open' : 'closed');
+    } catch {
+      /* per-viewer convenience only */
+    }
+  };
 
   return (
     <div
@@ -255,26 +296,40 @@ function Canvas({ svg, fitKey, blocks, onToggleBlock }: { svg: string; fitKey: s
       }}
     >
       <div className="dm-canvas-inner" style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }} dangerouslySetInnerHTML={{ __html: svg }} />
-      <div
-        className="dm-minimap"
-        style={{ width: size.w * m + 12, height: size.h * m + 12 }}
-        onPointerDown={(e) => {
-          miniDrag.current = true;
-          e.currentTarget.setPointerCapture(e.pointerId);
-          const r = e.currentTarget.getBoundingClientRect();
-          jump(e.clientX - r.left - 6, e.clientY - r.top - 6);
-        }}
-        onPointerMove={(e) => {
-          if (!miniDrag.current) return;
-          const r = e.currentTarget.getBoundingClientRect();
-          jump(e.clientX - r.left - 6, e.clientY - r.top - 6);
-        }}
-        onPointerUp={() => (miniDrag.current = false)}
-        title="Click or drag to move around"
-      >
-        <img src={miniSrc} alt="" width={size.w * m} height={size.h * m} draggable={false} />
-        <span className="dm-minimap-view" style={{ left: vp.left + 6, top: vp.top + 6, width: vp.width, height: vp.height }} />
-      </div>
+      {miniOpen ? (
+        <div className="dm-minimap" style={{ width: miniW + 14 }}>
+          <div className="dm-minimap-head">
+            <span>Overview</span>
+            <button onClick={() => setMiniOpen(false)} aria-label="Hide overview" title="Hide overview">
+              −
+            </button>
+          </div>
+          <div
+            className="dm-minimap-body"
+            style={{ width: miniW, height: boxH }}
+            onPointerDown={(e) => {
+              miniDrag.current = true;
+              e.currentTarget.setPointerCapture(e.pointerId);
+              const r = e.currentTarget.getBoundingClientRect();
+              jump(e.clientX - r.left, e.clientY - r.top);
+            }}
+            onPointerMove={(e) => {
+              if (!miniDrag.current) return;
+              const r = e.currentTarget.getBoundingClientRect();
+              jump(e.clientX - r.left, e.clientY - r.top);
+            }}
+            onPointerUp={() => (miniDrag.current = false)}
+            title="Click or drag to move around"
+          >
+            <img src={miniSrc} alt="" width={miniW} height={fullH} draggable={false} style={{ transform: `translateY(${-off}px)` }} />
+            <span className="dm-minimap-view" style={{ left: vp.left, top: vp.top - off, width: vp.width, height: vp.height }} />
+          </div>
+        </div>
+      ) : (
+        <button className="dm-minimap-show" onClick={() => setMiniOpen(true)} title="Show overview">
+          Overview
+        </button>
+      )}
       <div className="dm-zoom">
         <button onClick={() => zoomAt(1.25, size.cw / 2, size.ch / 2)} aria-label="Zoom in">
           +

@@ -3,7 +3,7 @@
 // The value is either a saved-key reference ("vault:<id>") or, for one-off use, the key itself,
 // which then lives only in memory for this tab.
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { deleteVaultKey, isVaultRef, keyFromFile, KIND_LABELS, loadVault, saveVaultKey, vaultRef, type KeyEntry, type KeyKind, type KeyVault } from '../connectors/keys';
+import { deleteVaultKey, isVaultRef, keyFromFile, KIND_LABELS, loadVault, openVaultFolder, saveVaultKey, setVaultFolder, vaultRef, type KeyEntry, type KeyKind, type KeyVault } from '../connectors/keys';
 import { Icon } from './ui';
 
 // ---- One shared copy of the saved-key list for the whole app.
@@ -163,39 +163,119 @@ export function KeyField({ kind, value, onChange, meta = {}, suggestedLabel, lab
   );
 }
 
-/** Settings panel: every saved key, with delete. */
+/** Settings panel: every saved key, with delete, and the folder they're kept in. */
 export function SavedKeysList() {
   const vault = useVault();
   const [error, setError] = useState<string | null>(null);
   if (vault === undefined) return <p className="dm-hint">Loading…</p>;
   if (vault === null) return <p className="dm-hint">Saved keys need the app's local server (npm run dev / preview). Here, keys are entered per session.</p>;
-  if (!vault.keys.length) return <p className="dm-hint">No saved keys yet. Add one wherever a key is asked for (Data Import, AI Study Generator).</p>;
   return (
     <>
-      <ul className="dm-keys">
-        {vault.keys.map((k) => (
-          <li key={k.id}>
-            <span>
-              <strong>{k.label}</strong>
-              <span className="dm-hint">
-                {KIND_LABELS[k.kind]} · {k.hint}
-                {k.meta.url ? ` · ${new URL(k.meta.url).host}` : ''}
-                {k.meta.datacenter ? ` · ${k.meta.datacenter}` : ''}
+      {vault.keys.length ? (
+        <ul className="dm-keys">
+          {vault.keys.map((k) => (
+            <li key={k.id}>
+              <span>
+                <strong>{k.label}</strong>
+                <span className="dm-hint">
+                  {KIND_LABELS[k.kind]} · {k.hint}
+                  {k.meta.url ? ` · ${new URL(k.meta.url).host}` : ''}
+                  {k.meta.datacenter ? ` · ${k.meta.datacenter}` : ''}
+                </span>
               </span>
-            </span>
-            <button
-              className="dm-icon-btn"
-              aria-label={`Delete ${k.label}`}
-              title="Delete this key from this computer"
-              onClick={() => removeKey(k.id).catch((e: Error) => setError(e.message))}
-            >
-              ×
-            </button>
-          </li>
-        ))}
-      </ul>
+              <button
+                className="dm-icon-btn"
+                aria-label={`Delete ${k.label}`}
+                title="Delete this key from this computer"
+                onClick={() => removeKey(k.id).catch((e: Error) => setError(e.message))}
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="dm-hint">No saved keys yet. Add one wherever a key is asked for (Data Import, AI Study Generator).</p>
+      )}
       {error && <p className="dm-bad dm-hint">{error}</p>}
-      <p className="dm-hint">Stored by {vault.storage}.</p>
+      <KeyFolderSetting vault={vault} />
     </>
+  );
+}
+
+/** Where the key list and encrypted keys are kept, with a way to move them. */
+function KeyFolderSetting({ vault }: { vault: KeyVault }) {
+  const [editing, setEditing] = useState(false);
+  const [dir, setDir] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!vault.folder) return <p className="dm-hint">Encrypted by {vault.storage}.</p>;
+  const win = vault.storage.startsWith('Windows');
+  const what = win || vault.storage === 'your system keyring' ? 'The key list and the encrypted keys' : 'The key list (the keys themselves are in the ' + vault.storage + ')';
+  const move = async (to: string | null) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await setVaultFolder(to);
+      await refreshVault();
+      setEditing(false);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="dm-keyfolder">
+      <div className="dm-keyfolder-row">
+        <span className="dm-hint">Folder</span>
+        <code title={vault.folder}>{vault.folder}</code>
+      </div>
+      <p className="dm-hint">
+        {what} are kept here, encrypted by {vault.storage}.
+        {vault.source === 'env' ? ' This folder is set by the DATA_MANUAL_HOME environment variable.' : ''}
+      </p>
+      {editing ? (
+        <form
+          className="dm-keyfolder-edit"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void move(dir);
+          }}
+        >
+          <input className="dm-input" value={dir} onChange={(e) => setDir(e.target.value)} placeholder={win ? 'D:\Secure\data-manual-keys' : '/Volumes/Secure/data-manual-keys'} autoFocus spellCheck={false} />
+          <button className="dm-btn dm-btn-primary dm-btn-sm" disabled={busy || !dir.trim()}>
+            {busy ? 'Moving…' : 'Move keys here'}
+          </button>
+          <button type="button" className="dm-btn dm-btn-secondary dm-btn-sm" onClick={() => setEditing(false)}>
+            Cancel
+          </button>
+        </form>
+      ) : (
+        <div className="dm-keyfolder-actions">
+          <button className="dm-btn dm-btn-secondary dm-btn-sm" onClick={() => openVaultFolder().catch((e: Error) => setError(e.message))}>
+            Open folder
+          </button>
+          {vault.source !== 'env' && (
+            <button
+              className="dm-btn dm-btn-secondary dm-btn-sm"
+              onClick={() => {
+                setDir(vault.folder ?? '');
+                setEditing(true);
+              }}
+            >
+              Change folder…
+            </button>
+          )}
+          {vault.source === 'chosen' && (
+            <button className="dm-btn dm-btn-ghost dm-btn-sm" disabled={busy} onClick={() => void move(null)}>
+              Back to default
+            </button>
+          )}
+        </div>
+      )}
+      {editing && <p className="dm-hint">Any keys already saved move with it. The folder is created if it doesn't exist. Keys encrypted by Windows only open for your Windows account, wherever the folder is.</p>}
+      {error && <p className="dm-bad dm-hint">{error}</p>}
+    </div>
   );
 }

@@ -30,7 +30,9 @@ const FONTS: Record<AppSettings['font'], string> = {
   humanist: "'Segoe UI Variable', Calibri, 'Gill Sans', 'Trebuchet MS', 'Helvetica Neue', Arial, sans-serif",
   serif: "Charter, 'Sitka Text', Cambria, Georgia, serif",
 };
-const SIZES: Record<AppSettings['textSize'], string> = { small: '14px', default: '15px', large: '16.5px' };
+const SIZES: Record<AppSettings['textSize'], string> = { small: '19.5px', default: '21px', large: '22.5px' };
+/** Every font size in the app's CSS is multiplied by --ts. */
+const SCALES: Record<AppSettings['textSize'], number> = { small: 1.3, default: 1.4, large: 1.5 };
 
 const KEY = 'data-manual:app-settings:v1';
 
@@ -80,6 +82,7 @@ export function appStyle(s: AppSettings, mode: 'light' | 'dark' = 'light'): CSSP
     '--blue-dark': mode === 'dark' ? `color-mix(in srgb, ${a.bright} 55%, #fff)` : a.dark,
     fontFamily: FONTS[s.font],
     fontSize: SIZES[s.textSize],
+    '--ts': SCALES[s.textSize] ?? 1,
   } as CSSProperties;
 }
 
