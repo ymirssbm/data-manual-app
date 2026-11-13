@@ -1,15 +1,23 @@
-// Survey Editor: edit questions, blocks and skip logic of the loaded study, and try the survey in a
-// live SurveyJS form. Edits stay in a draft until "Apply changes", which validates them like any import.
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import { isBlock, isEndBlock, validateSpec, type Question, type StudySpec, type Survey, type ValidationResult } from '../../core';
+// Survey Editor: edit questions, blocks and logic of the loaded study, its schedule, and try the
+// survey in a live SurveyJS form. Edits save as you make them (undo with Ctrl+Z). Click selects an
+// item; Ctrl/Cmd-click and Shift-click select several (then "+ Block" puts them in a block, Delete
+// or the Delete key removes them).
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { isBlock, isEndBlock, type Question, type StudySpec, type Survey } from '../../core';
 import { QUESTION_TYPES } from '../../generators';
-import { addItem, deleteItem, descendants, getSkipRule, moveItem, possibleParents, setBlock, setSkipRule, updateItem, uniqueId, type SkipRule } from '../../editor/edit';
+import { addItem, descendants, getSkipRule, groupIntoBlock, moveItem, setBlock, updateItem, uniqueId } from '../../editor/edit';
+import { allQuestions } from '../../editor/search';
+import { ScheduleEditor } from './SurveyScheduleEditor';
 import { exportSurveyJs, surveyJsPageToSurvey, withSurveyReplaced } from '../../exporters';
-import type { Op } from '../../exporters/logic';
 import type { PageId } from '../App';
 import { Field, Icon, PageTitle } from '../ui';
 import { download } from '../util';
 import { NoStudy } from './common';
+import { LogicEditor } from '../LogicEditor';
+import { questionOption, SearchPicker } from '../SearchPicker';
+import { DeleteDialog } from '../StudyEditDialogs';
+import { deleteItems } from '../../editor/data';
+import { useLiveDraft, type CommitEdit } from '../useLiveDraft';
 
 const SurveyPreview = lazy(() => import('./SurveyPreview'));
 
@@ -19,79 +27,110 @@ const WITH_OPTIONS = new Set(['Multiple Choice', 'Multiple Select', 'Slider', 'M
 
 interface Props {
   spec: StudySpec | null;
+  /** Open on this survey (and tab), e.g. from the Study Schedule page. */
+  target?: { surveyName: string; tab: 'edit' | 'schedule' } | null;
+  onTargetUsed?(): void;
   go(id: PageId): void;
-  onApply(spec: StudySpec, result: ValidationResult): void;
+  onEdit: CommitEdit;
   notify(text: string, kind?: 'message' | 'error' | 'warning'): void;
 }
 
-export function SurveyEditorPage({ spec, go, onApply, notify }: Props) {
-  const [draft, setDraft] = useState<StudySpec | null>(spec);
-  const [si, setSi] = useState(0);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [dirty, setDirty] = useState(false);
-  const [view, setView] = useState<'edit' | 'preview'>('edit');
+/**
+ * Click-to-select with Ctrl/Cmd (toggle) and Shift (range), like a file list. Returns the new
+ * selection; `anchor` is where the next Shift-click range starts.
+ */
+export function clickSelect(order: string[], current: string[], anchor: string | null, id: string, e: { ctrlKey: boolean; metaKey: boolean; shiftKey: boolean }): string[] {
+  if (e.shiftKey && anchor && order.includes(anchor)) {
+    const i = order.indexOf(anchor);
+    const j = order.indexOf(id);
+    const range = order.slice(Math.min(i, j), Math.max(i, j) + 1);
+    return e.ctrlKey || e.metaKey ? [...new Set([...current, ...range])] : range;
+  }
+  if (e.ctrlKey || e.metaKey) return current.includes(id) ? current.filter((x) => x !== id) : [...current, id];
+  return [id];
+}
 
-  // A newly loaded study replaces the draft (unless there are unsaved edits).
+export function SurveyEditorPage({ spec, go, onEdit, notify, target, onTargetUsed }: Props) {
+  const { draft, change: changeSpec, problem } = useLiveDraft(spec, onEdit);
+  const [si, setSi] = useState(0);
+  /** Selected items; the last one clicked is edited on the right. */
+  const [sel, setSel] = useState<string[]>([]);
+  const [anchor, setAnchor] = useState<string | null>(null);
+  const [view, setView] = useState<'edit' | 'schedule' | 'preview'>('edit');
+  const [deleting, setDeleting] = useState<string[] | null>(null);
+
   useEffect(() => {
-    if (!dirty) {
-      setDraft(spec);
-      setSi((i) => Math.min(i, Math.max(0, (spec?.surveys.length ?? 1) - 1)));
-    }
-  }, [spec, dirty]);
+    if (!target || !spec) return;
+    const i = spec.surveys.findIndex((s) => s['Survey.Name'] === target.surveyName);
+    if (i >= 0) setSi(i);
+    setView(target.tab);
+    onTargetUsed?.();
+  }, [target, spec, onTargetUsed]);
+
+  useEffect(() => setSi((i) => Math.min(i, Math.max(0, (draft?.surveys.length ?? 1) - 1))), [draft]);
+
+  // The Delete key removes the selected items (their data stays; undo with Ctrl+Z).
+  const deleteSelected = useRef<() => void>(() => {});
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Delete' || e.defaultPrevented) return;
+      const t = e.target as HTMLElement | null;
+      if (t?.closest('input, textarea, select, [contenteditable="true"], .dm-modal')) return;
+      e.preventDefault();
+      deleteSelected.current();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const searchOptions = useMemo(() => (draft ? allQuestions(draft).map((h) => questionOption(h, true)) : []), [draft]);
 
   if (!spec || !draft) return <NoStudy go={go} what="a survey to edit" />;
   const survey = draft.surveys[si] ?? draft.surveys[0]!;
-  const change = (next: Survey) => {
-    setDraft(withSurveyReplaced(draft, si, next));
-    setDirty(true);
+  const selected = sel[sel.length - 1] ?? null;
+  const change = (next: Survey, label?: string) => changeSpec(withSurveyReplaced(draft, si, next), label, `survey:${si}:${selected}`);
+  const select = (ids: string[]) => {
+    setSel(ids);
+    setView('edit');
   };
-  const apply = () => {
-    const r = validateSpec(draft);
-    if (!r.spec) {
-      notify(`Not applied: ${r.issues.find((i) => i.severity === 'error')?.message ?? 'the study is not valid'}.`, 'error');
-      return;
-    }
-    onApply(r.spec, r);
-    setDirty(false);
-  };
-  const discard = () => {
-    setDraft(spec);
-    setDirty(false);
-    setSelected(null);
+  deleteSelected.current = () => {
+    if (!sel.length || view !== 'edit') return;
+    const names = sel.map((id) => survey.questions?.find((q) => q['Item.ID'] === id)?.['Question.ID'] ?? id);
+    changeSpec(deleteItems(draft, survey['Survey.Name'], sel, false), sel.length === 1 ? `Deleted ${names[0]}` : `Deleted ${sel.length} items`);
+    setSel([]);
   };
   const addSurvey = () => {
     const used = new Set(draft.surveys.map((s) => s['Survey.Name']));
     let name = 'new_survey';
     for (let k = 2; used.has(name); k++) name = `new_survey_${k}`;
-    setDraft({ ...draft, surveys: [...draft.surveys, { 'Survey.Name': name, 'Survey.LongName': 'New survey', questions: [] }] });
+    changeSpec({ ...draft, surveys: [...draft.surveys, { 'Survey.Name': name, 'Survey.LongName': 'New survey', questions: [] }] }, 'Added a survey');
     setSi(draft.surveys.length);
-    setDirty(true);
+    setSel([]);
   };
   const importSurveyJs = async (file: File) => {
     try {
       const json = JSON.parse(await file.text()) as { pages?: Array<Record<string, unknown>>; elements?: unknown[] };
       const page = json.pages?.[0] ?? (json.elements ? (json as Record<string, unknown>) : null);
       if (!page) throw new Error('No pages or elements found.');
-      change(surveyJsPageToSurvey(page, survey));
+      change(surveyJsPageToSurvey(page, survey), `Imported ${file.name}`);
       notify(`Replaced "${survey['Survey.LongName'] || survey['Survey.Name']}" with ${file.name}. Skip logic is kept for items that still exist.`);
     } catch (e) {
       notify(`Could not read ${file.name}: ${(e as Error).message}`, 'error');
     }
   };
+  const multi = sel.length > 1;
 
   return (
     <>
       <PageTitle
         actions={
-          <>
-            {dirty && <span className="dm-hint dm-dirty">Unapplied changes</span>}
-            <button className="dm-btn dm-btn-secondary" onClick={discard} disabled={!dirty}>
-              Discard
-            </button>
-            <button className="dm-btn dm-btn-primary" onClick={apply} disabled={!dirty}>
-              Apply changes
-            </button>
-          </>
+          problem ? (
+            <span className="dm-hint dm-dirty" title={problem}>
+              Not saved yet: {problem}
+            </span>
+          ) : (
+            <span className="dm-hint">Changes save as you go · Ctrl+Z undoes</span>
+          )
         }
       >
         Survey Editor
@@ -99,13 +138,25 @@ export function SurveyEditorPage({ spec, go, onApply, notify }: Props) {
 
       <div className="dm-editor-surveys">
         {draft.surveys.map((s, i) => (
-          <button key={s['Survey.Name'] + i} className={i === si ? 'is-active' : ''} onClick={() => (setSi(i), setSelected(null))}>
+          <button key={s['Survey.Name'] + i} className={i === si ? 'is-active' : ''} onClick={() => (setSi(i), setSel([]))}>
             {s['Survey.LongName'] || s['Survey.Name']}
           </button>
         ))}
         <button className="dm-editor-add-survey" onClick={addSurvey} title="Add a survey">
           + Survey
         </button>
+        <span className="dm-editor-search">
+          <SearchPicker
+            options={searchOptions}
+            placeholder="Find a question: ID, wording or type…"
+            onPick={(o) => {
+              const i = draft.surveys.findIndex((s) => s['Survey.Name'] === o.hit!.surveyName);
+              if (i >= 0) setSi(i);
+              select([o.hit!.itemId]);
+              setAnchor(o.hit!.itemId);
+            }}
+          />
+        </span>
       </div>
 
       <div className="dm-editor">
@@ -118,30 +169,60 @@ export function SurveyEditorPage({ spec, go, onApply, notify }: Props) {
               <input className="dm-input" value={survey['Survey.Name']} onChange={(e) => change({ ...survey, 'Survey.Name': e.target.value.replace(/\s+/g, '_') })} />
             </Field>
           </div>
-          <ItemList survey={survey} selected={selected} onSelect={(id) => (setSelected(id), setView('edit'))} />
+          <p className="dm-hint dm-editor-tip">Click to select · Ctrl-click or Shift-click to select several, then + Block, or press Delete.</p>
+          <ItemList
+            survey={survey}
+            selected={sel}
+            onClick={(id, e) => {
+              const order = (survey.questions ?? []).filter((q) => !isEndBlock(q)).map((q) => q['Item.ID']);
+              select(clickSelect(order, sel, anchor, id, e));
+              if (!e.shiftKey) setAnchor(id);
+            }}
+          />
           <div className="dm-editor-list-actions">
             <button
               className="dm-btn dm-btn-secondary dm-btn-sm"
               onClick={() => {
                 const r = addItem(survey, 'question', { afterId: selected });
-                change(r.survey);
-                setSelected(r.itemId);
+                change(r.survey, 'Added a question');
+                select([r.itemId]);
               }}
             >
               + Question
             </button>
             <button
               className="dm-btn dm-btn-secondary dm-btn-sm"
+              title={multi ? `Put the ${sel.length} selected items in a new block` : 'Add an empty block after the selected item'}
               onClick={() => {
+                if (multi) {
+                  const r = groupIntoBlock(survey, sel, 'New block');
+                  if (r.blockId) {
+                    change(r.survey, `Put ${sel.length} items in a block`);
+                    select([r.blockId]);
+                    notify(`Put ${sel.length} items in a new block. Name it on the right.`);
+                  }
+                  return;
+                }
                 const r = addItem(survey, 'block', { afterId: selected });
-                change(r.survey);
-                setSelected(r.itemId);
+                change(r.survey, 'Added a block');
+                select([r.itemId]);
               }}
             >
-              + Block
+              + Block{multi ? ` (${sel.length})` : ''}
             </button>
+            {sel.length > 0 && (
+              <button className="dm-btn dm-btn-secondary dm-btn-sm" onClick={() => setDeleting(sel)}>
+                Delete{multi ? ` (${sel.length})` : ''}
+              </button>
+            )}
             <span className="dm-push-right dm-inline dm-inline-tight">
-              <button className="dm-link-btn" onClick={() => { const f = exportSurveyJs(draft, survey['Survey.Name']); download(f.fileName, f.text, f.mime); }}>
+              <button
+                className="dm-link-btn"
+                onClick={() => {
+                  const f = exportSurveyJs(draft, survey['Survey.Name']);
+                  download(f.fileName, f.text, f.mime);
+                }}
+              >
                 SurveyJS JSON
               </button>
               <label className="dm-link-btn">
@@ -157,6 +238,9 @@ export function SurveyEditorPage({ spec, go, onApply, notify }: Props) {
             <button className={view === 'edit' ? 'is-active' : ''} onClick={() => setView('edit')}>
               Edit item
             </button>
+            <button className={view === 'schedule' ? 'is-active' : ''} onClick={() => setView('schedule')}>
+              Schedule
+            </button>
             <button className={view === 'preview' ? 'is-active' : ''} onClick={() => setView('preview')}>
               Try the survey
             </button>
@@ -165,27 +249,39 @@ export function SurveyEditorPage({ spec, go, onApply, notify }: Props) {
             <Suspense fallback={<p className="dm-empty">Loading the form…</p>}>
               <SurveyPreview survey={survey} />
             </Suspense>
+          ) : view === 'schedule' ? (
+            <ScheduleEditor spec={draft} survey={survey} onSpecChange={(next, label) => changeSpec(next, label, `schedule:${si}`)} />
+          ) : multi ? (
+            <div className="dm-editor-form">
+              <p>
+                <strong>{sel.length} items selected.</strong> Use <strong>+ Block</strong> to put them in a block, or press <strong>Delete</strong>. Click one item to edit it.
+              </p>
+            </div>
           ) : selected && survey.questions?.some((q) => q['Item.ID'] === selected) ? (
-            <ItemForm
-              key={selected}
-              survey={survey}
-              itemId={selected}
-              onChange={change}
-              onDelete={() => {
-                change(deleteItem(survey, selected));
-                setSelected(null);
-              }}
-            />
+            <ItemForm key={selected} spec={draft} surveyName={survey['Survey.Name']} itemId={selected} onSpecChange={(next, label) => changeSpec(next, label, `item:${selected}`)} onDelete={() => setDeleting([selected])} />
           ) : (
             <p className="dm-empty">Pick a question or block on the left to edit it, or add one.</p>
           )}
         </section>
       </div>
+      {deleting && (
+        <DeleteDialog
+          spec={draft}
+          surveyName={survey['Survey.Name']}
+          itemIds={deleting}
+          onClose={() => setDeleting(null)}
+          onDelete={(next, label) => {
+            changeSpec(next, label);
+            setDeleting(null);
+            setSel([]);
+          }}
+        />
+      )}
     </>
   );
 }
 
-function ItemList({ survey, selected, onSelect }: { survey: Survey; selected: string | null; onSelect(id: string): void }) {
+function ItemList({ survey, selected, onClick }: { survey: Survey; selected: string[]; onClick(id: string, e: MouseEvent): void }) {
   const byId = useMemo(() => new Map((survey.questions ?? []).map((q) => [q['Item.ID'], q])), [survey]);
   const depth = (q: Question) => {
     let d = 0;
@@ -195,12 +291,17 @@ function ItemList({ survey, selected, onSelect }: { survey: Survey; selected: st
   const items = (survey.questions ?? []).filter((q) => !isEndBlock(q));
   if (!items.length) return <p className="dm-empty">This survey has no questions yet.</p>;
   return (
-    <ul className="dm-editor-items">
+    <ul className="dm-editor-items" role="listbox" aria-multiselectable="true">
       {items.map((q) => {
         const rule = getSkipRule(survey, q['Item.ID']);
+        const on = selected.includes(q['Item.ID']);
         return (
-          <li key={q['Item.ID']} style={{ paddingLeft: `${depth(q) * 16}px` }}>
-            <button className={`${selected === q['Item.ID'] ? 'is-active' : ''}${isBlock(q) ? ' is-block' : ''}`} onClick={() => onSelect(q['Item.ID'])}>
+          <li key={q['Item.ID']} style={{ paddingLeft: `${depth(q) * 16}px` }} role="option" aria-selected={on}>
+            <button
+              className={`${on ? 'is-active' : ''}${isBlock(q) ? ' is-block' : ''}`}
+              onClick={(e) => onClick(q['Item.ID'], e)}
+              onMouseDown={(e) => e.shiftKey && e.preventDefault() /* no text selection on Shift-click */}
+            >
               <span className="dm-editor-item-text">{isBlock(q) ? `▸ ${q['Question.Long.Name'] || q['Question.ID']}` : q['Question.Text'] || q['Question.ID']}</span>
               <span className="dm-editor-item-meta">
                 <code>{q['Question.ID']}</code>
@@ -215,7 +316,24 @@ function ItemList({ survey, selected, onSelect }: { survey: Survey; selected: st
   );
 }
 
-function ItemForm({ survey, itemId, onChange, onDelete }: { survey: Survey; itemId: string; onChange(s: Survey): void; onDelete(): void }) {
+/** A question's or block's fields and logic. Works on the whole study (logic can reach other surveys). */
+export function ItemForm({
+  spec,
+  surveyName,
+  itemId,
+  onSpecChange,
+  onDelete,
+}: {
+  spec: StudySpec;
+  surveyName: string;
+  itemId: string;
+  /** `label` marks a distinct action (its own undo step); without one it's typing. */
+  onSpecChange(s: StudySpec, label?: string): void;
+  onDelete(): void;
+}) {
+  const si = spec.surveys.findIndex((s) => s['Survey.Name'] === surveyName);
+  const survey = spec.surveys[si]!;
+  const onChange = (s: Survey, label?: string) => onSpecChange(withSurveyReplaced(spec, si, s), label);
   const q = survey.questions!.find((x) => x['Item.ID'] === itemId)!;
   const block = isBlock(q);
   const set = (patch: Partial<Question>) => onChange(updateItem(survey, itemId, patch));
@@ -248,7 +366,7 @@ function ItemForm({ survey, itemId, onChange, onDelete }: { survey: Survey; item
           />
         </Field>
         <Field label="In block">
-          <select className="dm-input" value={q.Parent && blocks.some((b) => b['Item.ID'] === q.Parent) ? q.Parent : ''} onChange={(e) => onChange(setBlock(survey, itemId, e.target.value || null))}>
+          <select className="dm-input" value={q.Parent && blocks.some((b) => b['Item.ID'] === q.Parent) ? q.Parent : ''} onChange={(e) => onChange(setBlock(survey, itemId, e.target.value || null), `Moved ${q['Question.ID']} to another block`)}>
             <option value="">(not in a block)</option>
             {blocks.map((b) => (
               <option key={b['Item.ID']} value={b['Item.ID']}>
@@ -320,12 +438,12 @@ function ItemForm({ survey, itemId, onChange, onDelete }: { survey: Survey; item
           </Field>
         </>
       )}
-      <SkipEditor survey={survey} itemId={itemId} onChange={onChange} />
+      <LogicEditor spec={spec} surveyName={surveyName} itemId={itemId} onSpecChange={(next) => onSpecChange(next)} />
       <div className="dm-editor-form-actions">
-        <button className="dm-btn dm-btn-secondary dm-btn-sm" onClick={() => onChange(moveItem(survey, itemId, -1))}>
+        <button className="dm-btn dm-btn-secondary dm-btn-sm" onClick={() => onChange(moveItem(survey, itemId, -1), `Moved ${q['Question.ID']} up`)}>
           ↑ Move up
         </button>
-        <button className="dm-btn dm-btn-secondary dm-btn-sm" onClick={() => onChange(moveItem(survey, itemId, 1))}>
+        <button className="dm-btn dm-btn-secondary dm-btn-sm" onClick={() => onChange(moveItem(survey, itemId, 1), `Moved ${q['Question.ID']} down`)}>
           ↓ Move down
         </button>
         <button className="dm-btn dm-btn-danger dm-btn-sm dm-push-right" onClick={onDelete}>
@@ -333,84 +451,5 @@ function ItemForm({ survey, itemId, onChange, onDelete }: { survey: Survey; item
         </button>
       </div>
     </div>
-  );
-}
-
-const OPS: Array<[Op, string]> = [
-  ['=', 'equals'],
-  ['!=', 'is not'],
-  ['>=', 'is at least'],
-  ['<=', 'is at most'],
-  ['>', 'is more than'],
-  ['<', 'is less than'],
-];
-
-function SkipEditor({ survey, itemId, onChange }: { survey: Survey; itemId: string; onChange(s: Survey): void }) {
-  const rule = getSkipRule(survey, itemId);
-  const parents = possibleParents(survey, itemId);
-  const parent = rule ? survey.questions!.find((q) => q['Item.ID'] === rule.parentId) : undefined;
-  const hasOptions = !!parent && (parent['Question.Type.Display.Name'] === 'Multiple Choice' || parent['Question.Type.Display.Name'] === 'Multiple Select');
-  const update = (r: SkipRule | null) => onChange(setSkipRule(survey, itemId, r));
-  const pickParent = (id: string) => {
-    if (!id) return update(null);
-    const p = parents.find((x) => x['Item.ID'] === id)!;
-    const opts = p.responseKey ?? [];
-    const choice = p['Question.Type.Display.Name'] === 'Multiple Choice' || p['Question.Type.Display.Name'] === 'Multiple Select';
-    update(choice ? { parentId: id, kind: 'in', values: opts.length ? [String(opts[0]!.value)] : [] } : { parentId: id, kind: 'cmp', op: '>=', value: '1' });
-  };
-  return (
-    <fieldset className="dm-skip">
-      <legend>Show {isBlock(survey.questions!.find((q) => q['Item.ID'] === itemId)!) ? 'this block' : 'this question'}</legend>
-      <div className="dm-skip-row">
-        <select className="dm-input dm-input-sm" value={rule?.parentId ?? ''} onChange={(e) => pickParent(e.target.value)}>
-          <option value="">Always</option>
-          {parents.map((p) => (
-            <option key={p['Item.ID']} value={p['Item.ID']}>
-              Only if {p['Question.ID']}: {(p['Question.Text'] ?? '').slice(0, 50)}
-            </option>
-          ))}
-        </select>
-      </div>
-      {rule && parent && hasOptions && (
-        <div className="dm-skip-values">
-          <span className="dm-hint">{parent['Question.Type.Display.Name'] === 'Multiple Select' ? 'includes any of' : 'is any of'}</span>
-          {(parent.responseKey ?? []).map((o) => {
-            const v = String(o.value);
-            const on = rule.kind === 'in' && rule.values.includes(v);
-            return (
-              <label key={v} className="dm-check">
-                <input
-                  type="checkbox"
-                  checked={on}
-                  onChange={() => {
-                    const values = rule.kind === 'in' ? rule.values : [];
-                    const next = on ? values.filter((x) => x !== v) : [...values, v];
-                    update(next.length ? { parentId: rule.parentId, kind: 'in', values: next } : null);
-                  }}
-                />
-                {o.definition}
-              </label>
-            );
-          })}
-        </div>
-      )}
-      {rule && parent && !hasOptions && (
-        <div className="dm-skip-row">
-          <select className="dm-input dm-input-sm" value={rule.kind === 'cmp' ? rule.op : '='} onChange={(e) => update({ parentId: rule.parentId, kind: 'cmp', op: e.target.value as Op, value: rule.kind === 'cmp' ? rule.value : '' })}>
-            {OPS.map(([op, label]) => (
-              <option key={op} value={op}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <input
-            className="dm-input dm-input-sm"
-            value={rule.kind === 'cmp' ? rule.value : (rule.values[0] ?? '')}
-            onChange={(e) => update({ parentId: rule.parentId, kind: 'cmp', op: rule.kind === 'cmp' ? rule.op : '=', value: e.target.value })}
-            aria-label="Value"
-          />
-        </div>
-      )}
-    </fieldset>
   );
 }

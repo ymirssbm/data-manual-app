@@ -1,15 +1,15 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 import type { StudySpec } from '../../core';
-import { addDays, buildStudySchedule, dayIndex, formatDate, formatMinutes, type ScheduledEvent } from '../../generators';
+import { addDays, buildStudySchedule, dayIndex, formatMinutes, type ScheduledEvent } from '../../generators';
 import type { PageId } from '../App';
 import { Box, PageTitle } from '../ui';
 import { NoStudy } from './common';
+import { ScheduleEditPanel } from './ScheduleEditPanel';
+import type { CommitEdit } from '../useLiveDraft';
 
 const PALETTE = ['#3c8dbc', '#f39c12', '#00a65a', '#605ca8', '#dd4b39', '#39cccc', '#d81b60', '#3d9970'];
 const HOUR_PX = 52;
-const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const weekdayOf = (date: string) => new Date(`${date}T00:00:00Z`).getUTCDay();
-const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const mondayOf = (date: string) => addDays(date, -((weekdayOf(date) + 6) % 7));
 /** The first day of the month `n` months from `date`'s month. */
 function monthStart(date: string, n = 0): string {
@@ -63,7 +63,7 @@ function layout(items: Placed[]): Placed[] {
   return items;
 }
 
-export function SchedulePage({ spec, go }: { spec: StudySpec | null; go(id: PageId): void }) {
+export function SchedulePage({ spec, go, onEditSchedule, onChange }: { spec: StudySpec | null; go(id: PageId): void; onEditSchedule?(surveyName: string): void; onChange?: CommitEdit }) {
   const schedule = useMemo(() => (spec ? buildStudySchedule(spec) : null), [spec]);
   if (!spec || !schedule) return (<><PageTitle>Study Schedule</PageTitle><NoStudy go={go} what="a schedule" /></>);
   if (schedule.events.length === 0) {
@@ -71,15 +71,35 @@ export function SchedulePage({ spec, go }: { spec: StudySpec | null; go(id: Page
       <>
         <PageTitle>Study Schedule</PageTitle>
         <Box title="No Schedule">
-          <p>This study has no schedules. Imported Qualtrics, REDCap and Wear-IT data files don't include delivery timing, so add schedules to the study spec to see them here.</p>
+          <p>This study has no schedules. Imported Qualtrics, REDCap and Wear-IT data files don't include delivery timing. Add delivery windows on a survey's Schedule tab in the Survey Editor to see them here.</p>
+          {onEditSchedule && spec.surveys[0] && (
+            <button className="dm-btn dm-btn-primary dm-btn-sm" onClick={() => onEditSchedule(spec.surveys[0]!['Survey.Name'])}>
+              Add a schedule
+            </button>
+          )}
         </Box>
       </>
     );
   }
-  return <Calendar spec={spec} events={schedule.events} first={schedule.firstDate!} last={schedule.lastDate!} />;
+  return <Calendar spec={spec} events={schedule.events} first={schedule.firstDate!} last={schedule.lastDate!} onEditSchedule={onEditSchedule} onChange={onChange} />;
 }
 
-function Calendar({ spec, events, first, last }: { spec: StudySpec; events: ScheduledEvent[]; first: string; last: string }) {
+function Calendar({
+  spec,
+  events,
+  first,
+  last,
+  onEditSchedule,
+  onChange,
+}: {
+  spec: StudySpec;
+  events: ScheduledEvent[];
+  first: string;
+  last: string;
+  onEditSchedule?(surveyName: string): void;
+  onChange?: CommitEdit;
+}) {
+  const [editMode, setEditMode] = useState(false);
   const surveyLabel = (name: string | null) => (name ? (spec.surveys.find((s) => s['Survey.Name'] === name)?.['Survey.LongName'] ?? name) : null);
 
   // One colour per survey (or per event when it has no survey), so every morning check-in looks alike.
@@ -112,6 +132,8 @@ function Calendar({ spec, events, first, last }: { spec: StudySpec; events: Sche
   const [date, setDate] = useState(busiest);
   const [view, setView] = useState<'day' | 'week' | 'month'>('day');
   const [skipEmpty, setSkipEmpty] = useState(true);
+  /** Month view laid out by study day, one burst after another, with the gaps between bursts left out. */
+  const [byBurst, setByBurst] = useState(false);
   const [selected, setSelected] = useState<number | null>(null);
   const [focusSurvey, setFocusSurvey] = useState<string | null>(null);
 
@@ -140,6 +162,17 @@ function Calendar({ spec, events, first, last }: { spec: StudySpec; events: Sche
   const monthDays = Array.from({ length: dayIndex(mStart, mEnd) + 1 }, (_, i) => addDays(mStart, i));
   const gridStart = mondayOf(mStart);
   const weeks = Array.from({ length: Math.ceil((dayIndex(gridStart, mEnd) + 1) / 7) }, (_, w) => Array.from({ length: 7 }, (_, i) => addDays(gridStart, w * 7 + i)));
+  // Bursts: runs of study days where no gap without surveys is longer than a week.
+  const bursts = useMemo(() => {
+    const out: Array<{ start: string; end: string }> = [];
+    for (const d of activeDates) {
+      const cur = out[out.length - 1];
+      if (cur && dayIndex(cur.end, d) <= 7) cur.end = d;
+      else out.push({ start: d, end: d });
+    }
+    return out;
+  }, [activeDates]);
+  const burstMode = view === 'month' && byBurst;
   const placedFor = (d: string): Placed[] =>
     layout(
       (byDate.get(d) ?? []).map((w, i) => ({
@@ -158,6 +191,7 @@ function Calendar({ spec, events, first, last }: { spec: StudySpec; events: Sche
   const untimed = days.some((d) => d.items.some((p) => p.start == null));
 
   const step = (dir: 1 | -1) => {
+    if (burstMode) return;
     if (view === 'month') return setDate(monthStart(date, dir));
     if (view === 'week') return setDate(addDays(date, dir * 7));
     if (!skipEmpty) return setDate(addDays(date, dir));
@@ -166,20 +200,30 @@ function Calendar({ spec, events, first, last }: { spec: StudySpec; events: Sche
   };
   const dayNo = (d: string) => dayIndex(first, d) + 1;
   const activeInMonth = monthDays.filter((d) => byDate.has(d)).length;
+  const inStudy = monthDays.map(dayNo).filter((n) => n >= 1 && n <= totalDays);
+  const monthStudyDays = inStudy.length ? `Study days ${inStudy[0]}–${inStudy[inStudy.length - 1]}` : 'Outside the study period';
+  const inStudyDay = (d: string) => dayNo(d) >= 1 && dayNo(d) <= totalDays;
+  const weekDays = columns.filter(inStudyDay).map(dayNo);
   const heading =
     view === 'day'
-      ? `${WEEKDAYS[weekdayOf(date)]}, ${formatDate(date)}`
-      : view === 'week'
-        ? `${formatDate(columns[0]!, false)} – ${formatDate(columns[6]!)}`
-        : `${MONTHS[+date.slice(5, 7) - 1]} ${date.slice(0, 4)}`;
-  const sub =
-    view === 'day'
-      ? dayNo(date) >= 1 && dayNo(date) <= totalDays
-        ? `Study day ${dayNo(date)} of ${totalDays}`
+      ? inStudyDay(date)
+        ? `Day ${dayNo(date)}`
         : 'Outside the study period'
       : view === 'week'
-        ? `Study days ${Math.max(1, dayNo(columns[0]!))}–${Math.min(totalDays, dayNo(columns[6]!))}`
-        : `${activeInMonth} day${activeInMonth === 1 ? '' : 's'} with surveys this month`;
+        ? weekDays.length
+          ? `Study days ${weekDays[0]}–${weekDays[weekDays.length - 1]}`
+          : 'Outside the study period'
+        : burstMode
+          ? 'Study days by burst'
+          : monthStudyDays;
+  const sub =
+    view === 'day'
+      ? `of ${totalDays} study days · ${(byDate.get(date) ?? []).length} survey window${(byDate.get(date) ?? []).length === 1 ? '' : 's'}`
+      : view === 'week'
+        ? `${columns.filter((d) => byDate.has(d)).length} of 7 days with surveys`
+        : burstMode
+          ? `${bursts.length} burst${bursts.length === 1 ? '' : 's'}, ${activeDates.length} days with surveys; the gaps between bursts are left out`
+          : `${activeInMonth} day${activeInMonth === 1 ? '' : 's'} with surveys this month`;
 
   const surveys = [...colors.entries()].map(([key, color]) => {
     const evs = events.filter((e) => colorKey(e) === key);
@@ -196,10 +240,10 @@ function Calendar({ spec, events, first, last }: { spec: StudySpec; events: Sche
       <PageTitle>Study Schedule</PageTitle>
       <div className="dm-cal-bar">
         <div className="dm-cal-nav">
-          <button className="dm-icon-btn" onClick={() => step(-1)} aria-label={`Previous ${view}`}>
+          <button className="dm-icon-btn" onClick={() => step(-1)} aria-label={`Previous ${view}`} disabled={burstMode}>
             ‹
           </button>
-          <button className="dm-icon-btn" onClick={() => step(1)} aria-label={`Next ${view}`}>
+          <button className="dm-icon-btn" onClick={() => step(1)} aria-label={`Next ${view}`} disabled={burstMode}>
             ›
           </button>
           <div className="dm-cal-title">
@@ -212,6 +256,16 @@ function Calendar({ spec, events, first, last }: { spec: StudySpec; events: Sche
             <label className="dm-check">
               <input type="checkbox" checked={skipEmpty} onChange={(e) => setSkipEmpty(e.target.checked)} /> Skip days without surveys
             </label>
+          )}
+          {view === 'month' && bursts.length > 0 && (
+            <label className="dm-check" title="Lay the month out by study day: burst 1 from day 1, then burst 2 from its first day, without the weeks in between.">
+              <input type="checkbox" checked={byBurst} onChange={(e) => setByBurst(e.target.checked)} /> By burst
+            </label>
+          )}
+          {onChange && (
+            <button className={`dm-btn dm-btn-sm dm-edit-toggle ${editMode ? 'is-on' : ''}`} aria-pressed={editMode} onClick={() => setEditMode((m) => !m)}>
+              {editMode ? '✎ Editing: done' : '✎ Edit'}
+            </button>
           )}
           <button className="dm-btn dm-btn-secondary dm-btn-sm" onClick={() => setDate(busiest)}>
             Busiest day
@@ -230,13 +284,44 @@ function Calendar({ spec, events, first, last }: { spec: StudySpec; events: Sche
         first={first}
         totalDays={totalDays}
         byDate={byDate}
-        selected={view === 'month' ? monthDays : columns}
+        selected={burstMode ? activeDates : view === 'month' ? monthDays : columns}
         onPick={setDate}
         focus={focusSurvey ? { has: (d) => (byDate.get(d) ?? []).some((w) => colorKey(w.event) === focusSurvey), color: colors.get(focusSurvey)! } : null}
       />
 
-      <div className={`dm-cal-layout ${view === 'month' ? 'is-month' : ''}`}>
-        {view === 'month' ? (
+      <div className={`dm-cal-layout ${view === 'month' ? 'is-month' : ''} ${editMode && onChange ? 'is-editing' : ''}`}>
+        {burstMode ? (
+          <div className="dm-burst-months">
+            {bursts.map((b, i) => {
+              const n = dayIndex(b.start, b.end) + 1;
+              const rows = Array.from({ length: Math.ceil(n / 7) }, (_, r) => Array.from({ length: 7 }, (_, c) => addDays(b.start, r * 7 + c)));
+              return (
+                <section key={b.start} className="dm-burst-month">
+                  <h3>
+                    Burst {i + 1}
+                    <span>
+                      Days {dayNo(b.start)}–{dayNo(b.end)}
+                    </span>
+                  </h3>
+                  <MonthGrid
+                    weeks={rows}
+                    month=""
+                    today={date}
+                    byDate={byDate}
+                    colorKey={colorKey}
+                    colors={colors}
+                    surveyLabel={surveyLabel}
+                    dayNo={(d) => (d <= b.end ? dayNo(d) : null)}
+                    focus={focusSurvey}
+                    onPick={(d) => (setDate(d), setView('day'))}
+                    burst
+                    lastDay={b.end}
+                  />
+                </section>
+              );
+            })}
+          </div>
+        ) : view === 'month' ? (
           <MonthGrid
             weeks={weeks}
             month={date.slice(0, 7)}
@@ -255,9 +340,7 @@ function Calendar({ spec, events, first, last }: { spec: StudySpec; events: Sche
             <span />
             {days.map(({ date: d }) => (
               <button key={d} className={`dm-cal-dayhead ${d === date ? 'is-current' : ''}`} onClick={() => (setDate(d), setView('day'))} disabled={view === 'day'}>
-                <span>{WEEKDAYS[weekdayOf(d)]}</span>
-                <strong>{Number(d.slice(8, 10))}</strong>
-                {dayNo(d) >= 1 && dayNo(d) <= totalDays && <em>Day {dayNo(d)}</em>}
+                <strong>{inStudyDay(d) ? `Day ${dayNo(d)}` : ''}</strong>
               </button>
             ))}
           </div>
@@ -311,7 +394,8 @@ function Calendar({ spec, events, first, last }: { spec: StudySpec; events: Sche
         )}
 
         <aside className="dm-cal-side">
-          {sel ? (
+          {editMode && onChange && <ScheduleEditPanel spec={spec} onCommit={onChange} eventId={sel?.id ?? null} onDeselect={() => setSelected(null)} />}
+          {editMode && onChange ? null : sel ? (
             <div className="dm-cal-detail">
               <div className="dm-cal-detail-head">
                 <span className="dm-cal-dot" style={{ background: colors.get(colorKey(sel)) }} />
@@ -352,6 +436,11 @@ function Calendar({ spec, events, first, last }: { spec: StudySpec; events: Sche
                   </>
                 )}
               </dl>
+              {onEditSchedule && sel.surveyName && (
+                <button className="dm-btn dm-btn-secondary dm-btn-sm" onClick={() => onEditSchedule(sel.surveyName!)}>
+                  Edit this schedule
+                </button>
+              )}
             </div>
           ) : (
             <p className="dm-hint">Click a survey on the calendar for its details.</p>
@@ -379,7 +468,7 @@ function Calendar({ spec, events, first, last }: { spec: StudySpec; events: Sche
               </button>
             ))}
             <p className="dm-hint">
-              {activeDates.length} of {totalDays} days have surveys · {formatDate(first)} to {formatDate(last)}
+              {activeDates.length} of {totalDays} days have surveys
             </p>
           </div>
         </aside>
@@ -464,8 +553,8 @@ function StudyStrip({
               style={inFocus ? ({ '--fc': focus!.color } as CSSProperties) : n ? ({ '--n': 0.3 + 0.7 * (n / max) } as CSSProperties) : undefined}
               data-empty={n ? undefined : ''}
               onClick={() => onPick(d)}
-              title={`Day ${i + 1} · ${WEEKDAYS[weekdayOf(d)]}, ${formatDate(d)}: ${n ? `${n} survey${n === 1 ? '' : 's'}` : 'no surveys'}`}
-              aria-label={`Day ${i + 1}, ${formatDate(d)}`}
+              title={`Day ${i + 1}: ${n ? `${n} survey${n === 1 ? '' : 's'}` : 'no surveys'}`}
+              aria-label={`Day ${i + 1}`}
             />
           );
         })}
@@ -486,7 +575,13 @@ function MonthGrid({
   dayNo,
   focus,
   onPick,
+  burst = false,
+  lastDay,
 }: {
+  /** Burst layout: rows are runs of 7 study days (not calendar weeks), each cell names its weekday. */
+  burst?: boolean;
+  /** In burst layout, days after this are padding and drawn empty. */
+  lastDay?: string;
   weeks: string[][];
   month: string;
   today: string;
@@ -501,11 +596,13 @@ function MonthGrid({
   const MAX = 5;
   return (
     <div className="dm-month">
-      <div className="dm-month-head">
-        {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((w) => (
-          <span key={w}>{w}</span>
-        ))}
-      </div>
+      {!burst && (
+        <div className="dm-month-head">
+          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((w) => (
+            <span key={w}>{w}</span>
+          ))}
+        </div>
+      )}
       {weeks.map((week) => (
         <div key={week[0]} className="dm-month-week">
           {week.map((d) => {
@@ -520,11 +617,12 @@ function MonthGrid({
             }
             const list = [...groups.entries()].sort((a, b) => a[1].first - b[1].first);
             const n = dayNo(d);
+            if (burst && lastDay && d > lastDay) return <span key={d} className="dm-month-day is-pad" aria-hidden="true" />;
             return (
-              <button key={d} className={`dm-month-day ${d.slice(0, 7) === month ? '' : 'is-other'} ${d === today ? 'is-current' : ''} ${list.length ? '' : 'is-empty'}`} onClick={() => onPick(d)} title="Open this day">
+              <button key={d} className={`dm-month-day ${burst || d.slice(0, 7) === month ? '' : 'is-other'} ${d === today ? 'is-current' : ''} ${list.length ? '' : 'is-empty'}`} onClick={() => onPick(d)} title="Open this day">
                 <span className="dm-month-date">
-                  <strong>{Number(d.slice(8, 10))}</strong>
-                  {n && <em>Day {n}</em>}
+                  {burst ? <strong>{n ? `Day ${n}` : ''}</strong> : <strong>{Number(d.slice(8, 10))}</strong>}
+                  {!burst && n && <em>Day {n}</em>}
                 </span>
                 {list.slice(0, list.length > MAX ? MAX - 1 : MAX).map(([k, g]) => (
                   <span

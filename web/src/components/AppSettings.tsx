@@ -171,7 +171,7 @@ export function SettingsDialog({ value, onChange, onClose }: { value: AppSetting
         <SavedKeysList />
       </div>
       <div className="dm-modal-foot">
-        <span className="dm-hint">Saved in this browser. Codebook colors are set in the Codebook Generator.</span>
+        <span className="dm-hint">Saved in this browser. Codebook colors are set on the Codebook page.</span>
         <button className="dm-btn dm-btn-secondary dm-btn-sm" onClick={() => onChange(DEFAULT_APP_SETTINGS)}>
           Reset
         </button>

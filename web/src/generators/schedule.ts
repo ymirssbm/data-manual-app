@@ -127,8 +127,14 @@ export function expandDates(startDate: string, rule: Recurrence | undefined): { 
   return { dates, truncated: dates.length >= MAX_OCCURRENCES };
 }
 
-export function describeRecurrence(rule: Recurrence | undefined, dates: string[]): string {
-  if (!rule) return dates[0] ? `Once, ${formatDate(dates[0])}` : 'Once';
+/**
+ * "Every day, 7 times (study days 29–35)". A schedule's dates are only an example (each participant
+ * starts on their own day), so with `day1` (the first day any survey is sent) the days are given as
+ * study days; without it, as the dates in the file.
+ */
+export function describeRecurrence(rule: Recurrence | undefined, dates: string[], day1?: string): string {
+  const day = (d: string) => (day1 ? `study day ${toDays(d) - toDays(day1) + 1}` : formatDate(d));
+  if (!rule) return dates[0] ? `Once, ${day(dates[0])}` : 'Once';
   const n = rule.interval ?? 1;
   const unit = { DAILY: 'day', WEEKLY: 'week', MONTHLY: 'month', YEARLY: 'year' }[rule.frequency];
   let text = n === 1 ? `Every ${unit}` : `Every ${n} ${unit}s`;
@@ -138,7 +144,7 @@ export function describeRecurrence(rule: Recurrence | undefined, dates: string[]
     text += `, ${dates.length} time${dates.length === 1 ? '' : 's'}`;
     const first = dates[0]!;
     const last = dates[dates.length - 1]!;
-    text += first === last ? ` (${formatDate(first)})` : ` (${formatDate(first)} – ${formatDate(last)})`;
+    text += first === last ? ` (${day(first)})` : day1 ? ` (study days ${toDays(first) - toDays(day1) + 1}–${toDays(last) - toDays(day1) + 1})` : ` (${formatDate(first)} – ${formatDate(last)})`;
   }
   return text;
 }
@@ -169,6 +175,7 @@ function eventOccurrences(ev: ScheduleEvent): { occ: Occurrence[]; truncated: bo
 
 export function buildStudySchedule(spec: StudySpec): StudySchedule {
   const events: ScheduledEvent[] = [];
+  const recurrences: Array<{ rule: Recurrence | undefined; dates: string[] }> = [];
   const visit = (schedule: Schedule, depth: number) => {
     const scheduleName = schedule.name ?? 'Schedule';
     for (const ev of schedule.events) {
@@ -177,6 +184,7 @@ export function buildStudySchedule(spec: StudySpec): StudySchedule {
       const e = parseWall(ev.end);
       const x = ev.extensions;
       const trig = x?.['Trigger.Info'];
+      recurrences.push({ rule: ev.recurrence, dates });
       events.push({
         id: ev.id,
         scheduleName,
@@ -194,7 +202,7 @@ export function buildStudySchedule(spec: StudySpec): StudySchedule {
           s.minutes == null || e.minutes == null
             ? 'All day'
             : `${formatMinutes(s.minutes)} – ${formatMinutes(e.minutes)}${e.date > s.date ? ' (next day)' : ''}`,
-        recurrenceText: describeRecurrence(ev.recurrence, dates),
+        recurrenceText: '', // filled in below, once day 1 is known
         occurrences: occ,
         truncated,
         depth,
@@ -206,6 +214,7 @@ export function buildStudySchedule(spec: StudySpec): StudySchedule {
   spec.schedules.forEach((s) => visit(s, 0));
 
   const all = events.flatMap((e) => e.occurrences.map((o) => o.date)).sort();
+  events.forEach((e, i) => (e.recurrenceText = describeRecurrence(recurrences[i]!.rule, recurrences[i]!.dates, all[0])));
   return { events, firstDate: all[0] ?? null, lastDate: all[all.length - 1] ?? null };
 }
 

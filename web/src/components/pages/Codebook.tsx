@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { LiveEditOptions } from '../useLiveDraft';
 import { isQuestion, itemLabel, stripHtml, surveyModels, type StudySpec } from '../../core';
 import {
   CODEBOOK_FONTS,
@@ -19,6 +20,8 @@ import { capturePreviewState, highlightOptions, restorePreviewState, revealItem 
 import { Box, Field, Icon, PageTitle } from '../ui';
 import { download, safeFileName } from '../util';
 import { NoStudy } from './common';
+import { CodebookMedia } from './CodebookMedia';
+import { ConfirmDialog, DeleteDialog, Modal, QuestionDialog } from '../StudyEditDialogs';
 
 /** The codebook last built for a given spec + settings; shared by the generator preview and the viewer. */
 export interface GeneratedCodebook {
@@ -38,6 +41,7 @@ interface TreeNode {
 
 // The prior tool's option tree, plus the two new pages.
 const TREE: TreeNode[] = [
+  { label: 'Logo', key: 'logo' },
   { label: 'Table of Contents', key: 'toc' },
   {
     label: 'Title Page',
@@ -45,19 +49,22 @@ const TREE: TreeNode[] = [
       { label: 'Name of Study', key: 'nameOfStudy' },
       { label: 'Authors', key: 'authors' },
       { label: 'Study Metadata', key: 'studyMetadata' },
-      { label: 'Funding', key: 'funding' },
     ],
   },
   { label: 'Abstract', key: 'abstract' },
   { label: 'Executive Summary', key: 'executiveSummary' },
+  { label: 'Funding', key: 'funding' },
+  { label: 'Contact', key: 'contact' },
+  { label: 'Your sections', key: 'customSections' },
   { label: 'Study Schedule', key: 'studySchedule' },
   {
-    label: 'Participation Plots',
+    label: 'Study Adherence',
     key: 'participationPlots',
     needsData: true,
     children: [
       { label: 'Enrollment over time', key: 'partEnrollment', needsData: true },
       { label: 'Surveys by day since first survey', key: 'partTimeline', needsData: true },
+      { label: 'Surveys by day of each burst', key: 'partBurstDensity', needsData: true },
     ],
   },
   { label: 'Survey Flowcharts', key: 'flowcharts' },
@@ -131,6 +138,11 @@ function useCodebook(spec: StudySpec | null, settings: CodebookSettings, cached:
 }
 
 interface GenProps {
+  /** Save a change to the study (here: the Study details written into its metadata). */
+  onSpecEdit?(spec: StudySpec, label?: string, opts?: LiveEditOptions): string | null;
+  /** A variable to scroll to once the codebook is showing (codebookItemKey), e.g. from the flowchart. */
+  focus?: string | null;
+  onFocused?(): void;
   spec: StudySpec | null;
   settings: CodebookSettings;
   setSettings(s: CodebookSettings): void;
@@ -140,21 +152,44 @@ interface GenProps {
   notify(text: string, kind?: 'message' | 'error' | 'warning', ms?: number): number;
 }
 
-export function CodebookGeneratorPage({ spec, settings, setSettings, codebook, onBuilt, go, notify }: GenProps) {
-  const [panel, setPanel] = useState<'look' | 'content' | 'variables' | 'details'>('look');
-  const [controlsOpen, setControlsOpen] = useState(true);
+/** The codebook: options on the left (folded away at first), the live codebook on the right, and its downloads. */
+export function CodebookGeneratorPage({ spec, settings, setSettings, codebook, onBuilt, go, notify, focus, onFocused, onSpecEdit }: GenProps) {
+  const [panel, setPanel] = useState<'look' | 'content' | 'variables' | 'media' | 'details'>('look');
+  // Options start folded away so the preview gets the room; the rail on the left opens them.
+  const [controlsOpen, setControlsOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(true);
   const hasData = useMemo(() => (spec ? hasResponseData(spec) : false), [spec]);
   const { building, error } = useCodebook(spec, settings, codebook, onBuilt);
   const previewRef = useRef<HTMLIFrameElement>(null);
   const [hoverNote, setHoverNote] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  // Editing the study from the codebook: off until confirmed, since it changes the study itself.
+  const [editOn, setEditOn] = useState(false);
+  const [askUnlock, setAskUnlock] = useState(false);
+  const [editing, setEditing] = useState<{ survey: string; item: string } | null>(null);
+  const [deleting, setDeleting] = useState<{ survey: string; item: string } | null>(null);
+  const [details, setDetails] = useState<string | null>(null);
+  const actRef = useRef<(act: string, key: string) => void>(() => {});
+  actRef.current = (act, key) => {
+    if (act === 'details') return setDetails(key);
+    const cut = key.indexOf('/');
+    const target = { survey: key.slice(0, cut), item: key.slice(cut + 1) };
+    if (act === 'edit') setEditing(target);
+    else setDeleting(target);
+  };
+  useEffect(() => {
+    const doc = previewRef.current?.contentDocument;
+    if (doc?.body) injectEditControls(doc, editOn, actRef);
+  }, [editOn, codebook]);
   // Rebuilds keep what was open in the preview, unless "show visuals expanded" itself was switched.
   const preserve = useMemo(
     () => ({ capture: capturePreviewState, restore: restorePreviewState, key: String(settings.theme.expandVisuals) }),
     [settings.theme.expandVisuals],
   );
 
-  if (!spec) return (<><PageTitle>Codebook Generator</PageTitle><NoStudy go={go} what="a codebook" /></>);
+  if (!spec) return (<><PageTitle>Codebook</PageTitle><NoStudy go={go} what="a codebook" /></>);
+  const current = codebook && codebook.spec === spec ? codebook : null;
+  const fileName = `${safeFileName(settings.text.title || spec['Study.Metadata']['Study.Name'])}_Codebook.html`;
   const { options: opts, theme, text } = settings;
   const setOpts = (o: CodebookOptions) => setSettings({ ...settings, options: o });
   const setTheme = (t: Partial<CodebookTheme>) => setSettings({ ...settings, theme: { ...theme, ...t } });
@@ -225,19 +260,36 @@ export function CodebookGeneratorPage({ spec, settings, setSettings, codebook, o
     <>
       <PageTitle
         actions={
-          <button
-            className="dm-btn dm-btn-primary"
-            disabled={building}
-            onClick={() => {
-              notify('Codebook Generation Complete!');
-              go('codebook_view');
-            }}
-          >
-            <Icon name="file" /> {building ? 'Building…' : 'Generate Codebook'}
-          </button>
+          <>
+            <button className="dm-btn dm-btn-secondary" disabled={!current} onClick={() => previewRef.current?.contentWindow?.print()} title="Opens the print dialog: choose “Save as PDF” as the printer. All visuals print expanded.">
+              <Icon name="print" /> Save as PDF
+            </button>
+            <button
+              className="dm-btn dm-btn-secondary"
+              disabled={!current || exporting}
+              onClick={async () => {
+                if (!current) return;
+                setExporting(true);
+                try {
+                  const { codebookDocx } = await import('../codebookDocx');
+                  const title = settings.text.title || spec['Study.Metadata']['Study.Name'];
+                  download(fileName.replace(/\.html$/, '.docx'), await codebookDocx(current.html, current.settings.theme, title));
+                } catch (e) {
+                  notify(`Word export failed: ${(e as Error).message}`, 'error');
+                } finally {
+                  setExporting(false);
+                }
+              }}
+            >
+              <Icon name="file" /> {exporting ? 'Making Word file…' : 'Download Word'}
+            </button>
+            <button className="dm-btn dm-btn-primary" disabled={!current} onClick={() => current && download(fileName, current.html, 'text/html')}>
+              <Icon name="download" /> Download HTML
+            </button>
+          </>
         }
       >
-        Codebook Generator
+        Codebook
       </PageTitle>
       <div className={`dm-gen-layout ${controlsOpen ? '' : 'is-controls-collapsed'} ${previewOpen ? '' : 'is-preview-collapsed'}`}>
         {!controlsOpen && (
@@ -259,6 +311,7 @@ export function CodebookGeneratorPage({ spec, settings, setSettings, codebook, o
                 ['look', 'Appearance'],
                 ['content', 'Content'],
                 ['variables', 'Variables'],
+                ['media', 'Media'],
                 ['details', 'Study details'],
               ] as const
             ).map(([id, label]) => (
@@ -288,8 +341,8 @@ export function CodebookGeneratorPage({ spec, settings, setSettings, codebook, o
               <span className="dm-label">Colors</span>
               <div className="dm-colors">
                 {colorField('Accent', 'accent')}
-                {colorField('Page background', 'background')}
-                {colorField('Content card', 'surface')}
+                {colorField('Behind the page', 'background')}
+                {colorField('Page', 'surface')}
                 {colorField('Question header', 'headerBg')}
                 {colorField('Text', 'text')}
               </div>
@@ -344,8 +397,11 @@ export function CodebookGeneratorPage({ spec, settings, setSettings, codebook, o
             />
           )}
 
+          {panel === 'media' && <CodebookMedia spec={spec} extras={settings.extras} setExtras={(extras) => setSettings({ ...settings, extras })} notify={notify} />}
+
           {panel === 'details' && (
             <Box title="Study Metadata">
+              <p className="dm-hint">What you type here is saved in this browser for this study, so it’s still here next time you load it.</p>
               <Field label="Title">
                 <input className="dm-input" value={text.title} onChange={setText('title')} placeholder="Enter title" />
               </Field>
@@ -355,12 +411,38 @@ export function CodebookGeneratorPage({ spec, settings, setSettings, codebook, o
               <Field label="Funding">
                 <textarea className="dm-input" rows={3} value={text.funding} onChange={setText('funding')} placeholder="Enter funding information" />
               </Field>
+              <Field label="Contact" hint="Who to contact about the study or the data: names, emails, a lab website.">
+                <textarea className="dm-input" rows={3} value={text.contact ?? ''} onChange={setText('contact')} placeholder="e.g. Jane Smith, jane@university.edu" />
+              </Field>
               <Field label="Abstract">
                 <textarea className="dm-input" rows={4} value={text.abstract} onChange={setText('abstract')} placeholder="Enter abstract" />
               </Field>
               <Field label="Summary" hint="Leave blank for an automatic summary of surveys and variables.">
                 <textarea className="dm-input" rows={4} value={text.summary} onChange={setText('summary')} placeholder="Enter summary" />
               </Field>
+              {onSpecEdit && (
+                <>
+                  <button
+                    className="dm-btn dm-btn-secondary dm-btn-sm"
+                    onClick={() => {
+                      const md = { ...spec['Study.Metadata'] } as Record<string, unknown>;
+                      const put = (k: string, v: string | undefined) => {
+                        if (v?.trim()) md[k] = v.trim();
+                      };
+                      put('authors', text.authors);
+                      put('funding', text.funding);
+                      put('abstract', text.abstract);
+                      const access = md['Data.Access'] as Record<string, unknown> | undefined;
+                      if (text.contact?.trim() && access) md['Data.Access'] = { ...access, Contact: text.contact.trim() };
+                      onSpecEdit({ ...spec, 'Study.Metadata': md as StudySpec['Study.Metadata'] });
+                      notify('Saved the authors, funding and abstract into the study. Export it from Data Export to keep them with the study file.');
+                    }}
+                  >
+                    Save into the study file
+                  </button>
+                  <p className="dm-hint">Writes the authors, funding and abstract into the study itself, so they go wherever the study file goes.</p>
+                </>
+              )}
             </Box>
           )}
         </div>
@@ -368,95 +450,177 @@ export function CodebookGeneratorPage({ spec, settings, setSettings, codebook, o
         <section className={`dm-gen-preview ${previewOpen ? '' : 'is-collapsed'}`}>
           <div className="dm-preview-bar">
             <button className="dm-preview-toggle" onClick={() => setPreviewOpen((o) => !o)} aria-expanded={previewOpen}>
-              <span className="dm-caret">{previewOpen ? '▾' : '▸'}</span> Live preview
+              <span className="dm-caret">{previewOpen ? '▾' : '▸'}</span> Codebook
             </button>
             <span className="dm-hint">{error ? `Error: ${error}` : hoverNote ?? (building ? 'Updating…' : 'Up to date')}</span>
+            {onSpecEdit && (
+              <button
+                className={`dm-btn dm-btn-sm dm-edit-toggle ${editOn ? 'is-on' : ''}`}
+                aria-pressed={editOn}
+                onClick={() => (editOn ? setEditOn(false) : setAskUnlock(true))}
+                title={editOn ? 'Stop editing the study from the codebook' : 'Edit or delete questions right here in the codebook'}
+              >
+                {editOn ? '✎ Editing: done' : '✎ Edit'}
+              </button>
+            )}
           </div>
           {previewOpen &&
-            (codebook && codebook.spec === spec ? <HtmlFrame ref={previewRef} html={codebook.html} title="Codebook preview" className="dm-preview-frame" preserve={preserve} /> : <p className="dm-empty">Building preview…</p>)}
+            (codebook && codebook.spec === spec ? <HtmlFrame
+                ref={previewRef}
+                html={codebook.html}
+                title="Codebook"
+                className="dm-preview-frame"
+                preserve={preserve}
+                onDocLoad={(doc) => {
+                  injectEditControls(doc, editOn, actRef);
+                  if (!focus) return;
+                  if (!revealItem(doc, focus)) notify('That question isn’t in the codebook: it’s left out in the Variables or Content options.', 'warning', 8000);
+                  onFocused?.();
+                }}
+              /> : <p className="dm-empty">Building preview…</p>)}
         </section>
       </div>
+      {askUnlock && (
+        <ConfirmDialog
+          title="Edit the study from the codebook?"
+          confirm="I understand, turn on editing"
+          onClose={() => setAskUnlock(false)}
+          onConfirm={() => {
+            setEditOn(true);
+            setAskUnlock(false);
+          }}
+        >
+          <p>
+            <strong>Be careful changing what the codebook describes</strong>, such as question text, response options or skip logic. A codebook documents the study <em>as it was
+            actually run</em>. If the wording here no longer matches what participants saw, the codebook misdescribes the data.
+          </p>
+          <p>Edits change the study itself, so they also carry into the data dictionary, flowcharts, schedule and the exported study file.</p>
+          <p className="dm-hint">Each question gets Edit and Delete buttons. Every change can be undone (Ctrl+Z or Undo at the top).</p>
+        </ConfirmDialog>
+      )}
+      {editing && (
+        <QuestionDialog
+          spec={spec}
+          surveyName={editing.survey}
+          itemId={editing.item}
+          onClose={() => setEditing(null)}
+          onCommit={(next, label, opts) => onSpecEdit?.(next, label, opts) ?? null}
+          onDelete={() => (setDeleting(editing), setEditing(null))}
+        />
+      )}
+      {deleting && (
+        <DeleteDialog
+          spec={spec}
+          surveyName={deleting.survey}
+          itemIds={[deleting.item]}
+          codebook
+          onClose={() => setDeleting(null)}
+          onLeaveOut={() => {
+            const key = codebookItemKey(deleting.survey, deleting.item);
+            setSettings({ ...settings, exclude: [...new Set([...settings.exclude, key])] });
+            notify('Left out of this codebook. Bring it back on the Variables tab.');
+          }}
+          onDelete={(next, label) => {
+            onSpecEdit?.(next, label);
+            setDeleting(null);
+          }}
+        />
+      )}
+      {details && (
+        <StudyDetailsDialog
+          spec={spec}
+          text={text}
+          focus={details}
+          onClose={() => setDetails(null)}
+          onSave={(nextText, nextSpec) => {
+            setSettings({ ...settings, text: nextText });
+            if (nextSpec) onSpecEdit?.(nextSpec, 'Edited the study details');
+            setDetails(null);
+          }}
+        />
+      )}
     </>
   );
 }
 
-interface ViewProps {
-  /** A variable to scroll to once the codebook is showing (codebookItemKey), e.g. from the flowchart. */
-  focus?: string | null;
-  onFocused?(): void;
-  spec: StudySpec | null;
-  settings: CodebookSettings;
-  codebook: GeneratedCodebook | null;
-  onBuilt(c: GeneratedCodebook): void;
-  go(id: PageId): void;
-  notify(text: string, kind?: 'message' | 'error' | 'warning', ms?: number): number;
-}
+const EDIT_STYLE = `.dm-cb-edit{display:inline-flex;gap:6px;margin-left:10px;vertical-align:middle;font-family:system-ui,-apple-system,Segoe UI,sans-serif}
+.dm-cb-edit button{font:600 12px system-ui,-apple-system,Segoe UI,sans-serif;border:1px solid var(--cb-accent);background:var(--cb-surface);color:var(--cb-accent);border-radius:5px;padding:2px 9px;cursor:pointer}
+.dm-cb-edit button[data-dm-act="delete"]{border-color:#dc2626;color:#dc2626}
+.dm-cb-edit button:hover{background:var(--cb-accent);color:var(--cb-surface)}
+.dm-cb-edit button[data-dm-act="delete"]:hover{background:#dc2626;color:#fff}
+@media print{.dm-cb-edit{display:none}}`;
 
-export function CodebookViewerPage({ spec, settings, codebook, onBuilt, go, notify, focus, onFocused }: ViewProps) {
-  const frame = useRef<HTMLIFrameElement>(null);
-  const [exporting, setExporting] = useState(false);
-  // The viewer builds the codebook itself if there isn't a current one, so it's never blank.
-  const { building } = useCodebook(spec, settings, codebook, onBuilt, 0);
-  if (!spec) return (<><PageTitle>Codebook Viewer</PageTitle><NoStudy go={go} what="a codebook" /></>);
-  const current = codebook && codebook.spec === spec ? codebook : null;
-  const fileName = `${safeFileName(settings.text.title || spec['Study.Metadata']['Study.Name'])}_Codebook.html`;
-
-  return (
-    <>
-      <PageTitle
-        actions={
-          <>
-            <button className="dm-btn dm-btn-secondary" onClick={() => go('codebook_gen')}>
-              <Icon name="cog" /> Customize
-            </button>
-            <button className="dm-btn dm-btn-secondary" disabled={!current} onClick={() => frame.current?.contentWindow?.print()}>
-              <Icon name="print" /> Save as PDF
-            </button>
-            <button
-              className="dm-btn dm-btn-secondary"
-              disabled={!current || exporting}
-              onClick={async () => {
-                if (!current) return;
-                setExporting(true);
-                try {
-                  const { codebookDocx } = await import('../codebookDocx');
-                  const title = settings.text.title || spec['Study.Metadata']['Study.Name'];
-                  download(fileName.replace(/\.html$/, '.docx'), await codebookDocx(current.html, current.settings.theme, title));
-                } catch (e) {
-                  notify(`Word export failed: ${(e as Error).message}`, 'error');
-                } finally {
-                  setExporting(false);
-                }
-              }}
-            >
-              <Icon name="file" /> {exporting ? 'Making Word file…' : 'Download Word'}
-            </button>
-            <button className="dm-btn dm-btn-primary" disabled={!current} onClick={() => current && download(fileName, current.html, 'text/html')}>
-              <Icon name="download" /> Download HTML
-            </button>
-          </>
-        }
-      >
-        Codebook Viewer
-      </PageTitle>
-      <section className="dm-viewer">
-        {current ? (
-          <HtmlFrame
-            ref={frame}
-            html={current.html}
-            title="Codebook"
-            className="dm-viewer-frame"
-            onDocLoad={(doc) => {
-              if (!focus) return;
-              if (!revealItem(doc, focus)) notify('That question isn’t in the codebook: it’s left out in the Codebook Generator’s Variables or Content options.', 'warning', 8000);
-              onFocused?.();
-            }}
-          />
-        ) : <p className="dm-empty">{building ? 'Building codebook…' : 'Preparing…'}</p>}
-      </section>
-      <p className="dm-hint dm-viewer-hint">Save as PDF opens the print dialog: choose "Save as PDF" as the printer. All visuals print expanded.</p>
-    </>
-  );
+/**
+ * Edit and Delete buttons on each question of the live codebook (the app's view only; downloads never
+ * have them). Clicks go to `act` with the question's codebook key.
+ */
+function injectEditControls(doc: Document, on: boolean, act: { current: (act: string, key: string) => void }) {
+  doc.querySelectorAll('.dm-cb-edit').forEach((el) => el.remove());
+  if (!doc.getElementById('dm-cb-edit-style')) {
+    const st = doc.createElement('style');
+    st.id = 'dm-cb-edit-style';
+    st.textContent = EDIT_STYLE;
+    doc.head.appendChild(st);
+  }
+  const marked = doc as Document & { __dmEdit?: boolean };
+  if (!marked.__dmEdit) {
+    marked.__dmEdit = true;
+    // Capture phase, so the click doesn't also open or close the question.
+    doc.addEventListener(
+      'click',
+      (e) => {
+        const b = (e.target as Element | null)?.closest?.('[data-dm-act]');
+        if (!b) return;
+        e.preventDefault();
+        e.stopPropagation();
+        act.current(b.getAttribute('data-dm-act')!, b.getAttribute('data-key')!);
+      },
+      true,
+    );
+  }
+  if (!on) return;
+  const detailsButton = (field: string, label = 'Edit') => {
+    const box = doc.createElement('span');
+    box.className = 'dm-cb-edit';
+    const b = doc.createElement('button');
+    b.type = 'button';
+    b.textContent = label;
+    b.setAttribute('data-dm-act', 'details');
+    b.setAttribute('data-key', field);
+    box.appendChild(b);
+    return box;
+  };
+  doc.querySelector('#header .title')?.appendChild(detailsButton('title', 'Edit study details'));
+  for (const [opt, field] of [
+    ['nameOfStudy', 'authors'],
+    ['abstract', 'abstract'],
+    ['executiveSummary', 'summary'],
+    ['funding', 'funding'],
+    ['contact', 'contact'],
+  ] as const) {
+    const h = doc.querySelector(`section.cb-page[data-cb-opt~="${opt}"] > h1`);
+    if (h) h.insertBefore(detailsButton(field), h.querySelector('.cb-sec-toggle'));
+  }
+  doc.querySelectorAll('.cb-var[data-cb-opt]').forEach((v) => {
+    const token = (v.getAttribute('data-cb-opt') ?? '').split(' ').find((t) => t.startsWith('item:'));
+    const head = v.querySelector('.header-shading h4');
+    if (!token || !head) return;
+    const key = decodeURIComponent(token.slice(5));
+    const box = doc.createElement('span');
+    box.className = 'dm-cb-edit';
+    for (const [a, label] of [
+      ['edit', 'Edit'],
+      ['delete', 'Delete'],
+    ]) {
+      const b = doc.createElement('button');
+      b.type = 'button';
+      b.textContent = label!;
+      b.setAttribute('data-dm-act', a!);
+      b.setAttribute('data-key', key);
+      box.appendChild(b);
+    }
+    head.querySelector('.cb-q-sub')?.appendChild(box);
+  });
 }
 
 /** Choose which variables go in the codebook: every survey's questions, with search and select all/none. */
@@ -545,5 +709,61 @@ function VariablePicker({ spec, exclude, setExclude, onHover }: { spec: StudySpe
         })}
       </ul>
     </Box>
+  );
+}
+
+const DETAIL_FIELDS: Array<{ key: keyof CodebookText; label: string; rows: number; hint?: string }> = [
+  { key: 'title', label: 'Title', rows: 1 },
+  { key: 'authors', label: 'Authors', rows: 1 },
+  { key: 'abstract', label: 'Abstract', rows: 5 },
+  { key: 'summary', label: 'Executive summary', rows: 4, hint: 'Leave blank for the automatic summary of surveys and variables.' },
+  { key: 'funding', label: 'Funding', rows: 3 },
+  { key: 'contact', label: 'Contact', rows: 3 },
+];
+
+/** The codebook's study details, edited from the codebook itself; optionally saved into the study too. */
+function StudyDetailsDialog({ spec, text, focus, onSave, onClose }: { spec: StudySpec; text: CodebookText; focus: string; onSave(text: CodebookText, spec: StudySpec | null): void; onClose(): void }) {
+  const [draft, setDraft] = useState<CodebookText>(text);
+  const [intoStudy, setIntoStudy] = useState(true);
+  return (
+    <Modal title="Study details" onClose={onClose} wide>
+      {DETAIL_FIELDS.map((f) => (
+        <Field key={f.key} label={f.label} hint={f.hint}>
+          {f.rows > 1 ? (
+            <textarea className="dm-input" rows={f.rows} autoFocus={f.key === focus} value={draft[f.key] ?? ''} onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })} />
+          ) : (
+            <input className="dm-input" autoFocus={f.key === focus} value={draft[f.key] ?? ''} onChange={(e) => setDraft({ ...draft, [f.key]: e.target.value })} />
+          )}
+        </Field>
+      ))}
+      <label className="dm-check">
+        <input type="checkbox" checked={intoStudy} onChange={(e) => setIntoStudy(e.target.checked)} /> Also save the authors, abstract, funding and contact into the study file
+      </label>
+      <div className="dm-modal-foot">
+        <button className="dm-btn dm-btn-secondary" onClick={onClose}>
+          Cancel
+        </button>
+        <button
+          className="dm-btn dm-btn-primary"
+          onClick={() => {
+            let next: StudySpec | null = null;
+            if (intoStudy) {
+              const md = { ...spec['Study.Metadata'] } as Record<string, unknown>;
+              for (const k of ['authors', 'funding', 'abstract'] as const) {
+                const v = draft[k]?.trim();
+                if (v) md[k] = v;
+                else delete md[k];
+              }
+              const access = md['Data.Access'] as Record<string, unknown> | undefined;
+              if (access && draft.contact !== undefined) md['Data.Access'] = { ...access, Contact: draft.contact.trim() };
+              if (JSON.stringify(md) !== JSON.stringify(spec['Study.Metadata'])) next = { ...spec, 'Study.Metadata': md as StudySpec['Study.Metadata'] };
+            }
+            onSave(draft, next);
+          }}
+        >
+          Save
+        </button>
+      </div>
+    </Modal>
   );
 }

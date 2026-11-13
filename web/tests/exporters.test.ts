@@ -67,9 +67,9 @@ describe('exporters round-trip through the importers', () => {
 describe('MCP codebook options', () => {
   it('maps include/exclude section names onto generator options', () => {
     const o = codebookOptions(['Title Page'], ['Variable Pages', 'Slider']);
-    expect(o.nameOfStudy && o.funding).toBe(true);
+    expect(o.nameOfStudy && o.authors).toBe(true);
     expect(o.histograms || o.skipLogic).toBe(false);
     expect(o.dataTypes).not.toContain('Slider');
-    expect(codebookOptions().nameOfStudy).toBe(false);
+    expect(codebookOptions([], ['Title Page']).nameOfStudy).toBe(false);
   });
 });

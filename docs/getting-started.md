@@ -28,8 +28,8 @@ The study name appears in the top bar once it's loaded. Every page then works on
 | **Data → Data Import** | Pull from Wear-IT, REDCap or Qualtrics; open a `.qsf`, REDCap dictionary, Wear-IT export or spec file; or bring your own CSV of responses ("Your dataset" tab). |
 | **Data → Data Export** | Download the study for REDCap, Qualtrics or SurveyJS, or the responses as long or wide CSV. |
 | **Survey Editor** | Edit questions, blocks and skip logic, and click through the survey as a live form. |
-| **Codebook → Generator / Viewer** | Choose sections and a look, preview live, then download HTML or save as PDF. |
-| **Data Dictionary → Generator / Viewer** | One row per variable; search and download as CSV. |
+| **Codebook** | Choose sections and a look, see the codebook update live, then download HTML or Word, or save as PDF. |
+| **Data Dictionary** | One row per variable; search and download as CSV. |
 | **Study Flowchart** | See each survey's flow and skip logic. Fold blocks, use the minimap, export SVG/PNG, or show a text outline. |
 | **Study Schedule** | When each survey is delivered, as event cards, a typical day and a study timeline. |
 | **AI Study Generator** | Describe a study in plain language and get a valid spec, or ask for changes to the loaded one. |

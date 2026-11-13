@@ -9,7 +9,9 @@ In both, response data never goes to the model, every result is validated agains
 
 ## AI Study Generator
 
-Open **AI Study Generator**, choose a provider (Claude via the Anthropic API, or any OpenAI-compatible endpoint), pick or save your API key (kept in your computer's secure storage, see [Privacy](privacy.md#api-keys)), and chat. Replies that contain a study are validated; if validation fails, the model is shown the errors and asked to fix them, automatically. "New chat" starts over; the loaded study is the starting point for changes.
+Open **AI Study Generator**, choose a provider (Claude via the Anthropic API, or any OpenAI-compatible endpoint), pick or save your API key (kept in your computer's secure storage, see [Privacy](privacy.md#api-keys)), and chat. Replies that contain a study are validated; if validation fails, the model is shown the errors and asked to fix them, automatically. When the reply changes the loaded study, it lists each change (added, changed or removed surveys, questions, blocks, schedule windows and study details) with the old and new values highlighted; **Before** and **After** flip the list to the study as it was or as it would be. **Apply these changes** applies them as an edit you can undo (Ctrl+Z). "New chat" starts over; the loaded study is the starting point for changes.
+
+Documents attached on the Codebook page's **Media** tab (an IRB protocol, a consent form, a study manual) can go with each request: tick **Let the AI read the attached documents** under the chat box. Claude receives PDFs whole (text and pages); Word and text files are sent as their text to any provider. Other providers can't take PDFs, so the request says which ones were left out.
 
 ## MCP server
 

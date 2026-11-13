@@ -101,7 +101,7 @@ export function addItem(survey: Survey, kind: 'question' | 'block', opts: { afte
   }
   const q: Question =
     kind === 'block'
-      ? ({ 'Item.ID': itemId, 'Question.ID': itemId, 'Item.Type': 'Block', 'Question.Type.Display.Name': 'Block', 'Question.Long.Name': 'New block', 'Question.Text': '', Parent: parent, 'Data.Type': null, responseKey: [] } as unknown as Question)
+      ? ({ 'Item.ID': itemId, 'Question.ID': itemId, 'Item.Type': 'Block', 'Question.Type.Display.Name': 'Block', 'Question.Long.Name': 'New block', Parent: parent } as unknown as Question)
       : ({ 'Item.ID': itemId, 'Question.ID': itemId, 'Item.Type': 'Question', 'Question.Type.Display.Name': 'Multiple Choice', 'Question.Text': 'New question', Parent: parent, 'Data.Type': 'integer', responseKey: [{ value: '1', definition: 'Yes' }, { value: '0', definition: 'No' }] } as unknown as Question);
   list.splice(index, 0, { q, kids: [] });
   return { survey: withQuestions(survey, flatten(roots)), itemId };
@@ -203,4 +203,56 @@ export function possibleParents(survey: Survey, itemId: string): Question[] {
   const at = qs.findIndex((q) => q['Item.ID'] === itemId);
   const inside = descendants(survey, itemId);
   return qs.slice(0, at < 0 ? qs.length : at).filter((q) => !isBlock(q) && !isEndBlock(q) && !inside.has(q['Item.ID']) && q['Question.Type.Display.Name'] !== 'Informational Fullscreen');
+}
+
+/**
+ * Put the chosen items into a new block, placed where the first of them was. Items inside another
+ * chosen block move with it. Returns the new block's Item.ID (null when nothing was chosen).
+ */
+export function groupIntoBlock(survey: Survey, itemIds: string[], name: string): { survey: Survey; blockId: string | null } {
+  const chosen = new Set(itemIds);
+  const inOrder = (survey.questions ?? []).map((q) => q['Item.ID']).filter((id) => chosen.has(id));
+  const keep = inOrder.filter((id) => !inOrder.some((other) => other !== id && descendants(survey, other).has(id)));
+  if (!keep.length) return { survey, blockId: null };
+  const roots = tree(survey);
+  const first = find(roots, keep[0]!)!;
+  const firstQ = first.list[first.index]!.q;
+  const parentQ = firstQ.Parent ? (survey.questions ?? []).find((q) => q['Item.ID'] === firstQ.Parent) : undefined;
+  const parent = parentQ && isBlock(parentQ) ? parentQ['Item.ID'] : null;
+  const blockId = uniqueId(survey, `${name.trim() || 'block'}`.toLowerCase().replace(/\s+/g, '_').slice(0, 30));
+  const block = {
+    // The schema keeps question-only fields (text, data type, options) off blocks.
+    q: { 'Item.ID': blockId, 'Question.ID': blockId, 'Item.Type': 'Block', 'Question.Type.Display.Name': 'Block', 'Question.Long.Name': name.trim() || 'New block', Parent: parent } as unknown as Question,
+    kids: [] as Node[],
+  };
+  first.list.splice(first.index, 0, block);
+  for (const id of keep) {
+    const hit = find(roots, id);
+    if (!hit) continue;
+    const [node] = hit.list.splice(hit.index, 1);
+    node!.q = { ...node!.q, Parent: blockId };
+    block.kids.push(node!);
+  }
+  return { survey: withQuestions(survey, flatten(roots)), blockId };
+}
+
+/**
+ * Copy a question (from this or another survey) into `survey` with fresh IDs: after `afterId`, at
+ * the end of `intoBlock`, or at the end of the survey. Skip logic isn't copied, since the questions
+ * it pointed at belong to the original survey.
+ */
+export function copyQuestion(survey: Survey, q: Question, at: { afterId?: string | null; intoBlock?: string | null } = {}): { survey: Survey; itemId: string } {
+  // Make room with a placeholder in the right place, then put the copy there.
+  const placed = addItem(survey, 'question', at);
+  const holder = placed.survey.questions!.find((x) => x['Item.ID'] === placed.itemId)!;
+  const itemId = uniqueId(survey, q['Question.ID'] || q['Item.ID']);
+  const ci = q['Conditional.Info'];
+  const copy = {
+    ...q,
+    'Item.ID': itemId,
+    'Question.ID': itemId,
+    Parent: holder.Parent ?? null,
+    ...(ci ? { 'Conditional.Info': { ...ci, 'Conditional.Master.Item.ID': null, 'Conditional.Type': null, 'Conditional.Threshold': null, 'Conditional.Child.Mappings': null } } : {}),
+  } as Question;
+  return { survey: withQuestions(placed.survey, placed.survey.questions!.map((x) => (x === holder ? copy : x))), itemId };
 }

@@ -526,11 +526,14 @@ class Walker {
     try {
       const res = await fetch(img.src, { mode: 'cors' });
       if (!res.ok) throw new Error(String(res.status));
-      const bmp = await createImageBitmap(await res.blob());
+      const blob = await res.blob();
+      // createImageBitmap can't decode SVG; draw it through an image element instead.
+      const bmp = blob.type.includes('svg') ? await loadImage(img.src) : await createImageBitmap(blob);
       const s = Math.min(1, 320 / bmp.width);
       const png = await toPng(bmp, { sy: 0, sh: bmp.height, sw: bmp.width }, bmp.width * s, bmp.height * s);
       return this.imagePara(png, bmp.width * s, bmp.height * s, ctx, alt);
     } catch {
+      if (img.src.startsWith('data:')) return this.para([{ text: `[${alt} could not be included]`, italics: true, color: LIGHT.muted }], ctx);
       return this.para([{ text: 'Screenshot: ', italics: true, color: LIGHT.muted }, { text: img.src, link: img.src }], ctx);
     }
   }

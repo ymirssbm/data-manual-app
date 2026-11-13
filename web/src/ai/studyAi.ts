@@ -2,7 +2,7 @@
 // with automatic repair, and AI provenance. Provider calls live in providers.ts.
 import schema from '../../../schema/study.schema.json';
 import { buildBlockMap, validateSpec, type StudySpec, type Survey, type ValidationResult } from '../core';
-import { callModel, type AiConfig, type ChatTurn } from './providers';
+import { callModel, type AiConfig, type ChatDocument, type ChatTurn } from './providers';
 
 const SCHEMA_TEXT = JSON.stringify(schema);
 
@@ -77,13 +77,16 @@ export interface RunOptions {
   onStatus?(status: string): void;
   signal?: AbortSignal;
   maxRepairs?: number;
+  /** Documents for the model to read with the request (IRB protocol, consent form...). */
+  documents?: ChatDocument[];
 }
 
-export async function runStudyAi({ config, history, prompt, base, onText, onStatus, signal, maxRepairs = 2 }: RunOptions): Promise<AiResult> {
+export async function runStudyAi({ config, history, prompt, base, onText, onStatus, signal, maxRepairs = 2, documents }: RunOptions): Promise<AiResult> {
   const userTurn = base
     ? `Current study spec:\n\`\`\`json\n${specForPrompt(base)}\n\`\`\`\n\nRequest: ${prompt}`
     : `There is no study yet; create a new one.\n\nRequest: ${prompt}`;
-  const turns: ChatTurn[] = [...history, { role: 'user', content: userTurn }];
+  const docNote = documents?.length ? `\n\nThe researcher attached ${documents.length === 1 ? 'a document' : `${documents.length} documents`} above (${documents.map((d) => d.name).join(', ')}). Use ${documents.length === 1 ? 'it' : 'them'} where they bear on the request, for example to build surveys and schedules a protocol describes.` : '';
+  const turns: ChatTurn[] = [...history, { role: 'user', content: userTurn + docNote, documents }];
 
   onStatus?.('Thinking…');
   let reply = await callModel(config, SYSTEM_PROMPT, turns, { onText, signal });

@@ -4,6 +4,8 @@ import {
   buildStudySchedule,
   dataDictionaryCsv,
   describeItem,
+  enrollment,
+  surveyTimeline,
   expandDates,
   codebookItemKey,
   flowchartQuestionNodes,
@@ -108,6 +110,35 @@ describe('descriptives', () => {
     const stress = s.surveys[0]!.questions!.find((q) => q['Question.ID'] === 'stress')!;
     expect(describeItem(stress, idx.get('stress'))!.numeric!.n).toBeGreaterThan(50);
   });
+  it('gives each participant a first-to-last span with compliance, and counts each burst from its own day 1', () => {
+    // P1: answers on Jan 1, misses Jan 2, answers Jan 3, then a second burst from Jan 20 (answered twice).
+    // P2: answers both of its prompts.
+    const rows: Array<[string, string, string]> = [
+      ['P1', '2026-01-01', '3'], ['P1', '2026-01-02', ''], ['P1', '2026-01-03', '4'],
+      ['P1', '2026-01-20', '2'], ['P1', '2026-01-21', '5'],
+      ['P2', '2026-01-05', '1'], ['P2', '2026-01-06', '2'],
+    ];
+    const s = { ...spec(), data: {
+      'Participant.ID': rows.map((r) => r[0]),
+      'Session.ID': rows.map((_, i) => `s${i}`),
+      'Survey.Date.Completed': rows.map((r) => `${r[1]}T09:00:00Z`),
+      'Question.ID': rows.map(() => 'mood'),
+      'User.Response': rows.map((r) => r[2]),
+    } } as unknown as StudySpec;
+    const e = enrollment(s);
+    expect(e.map((p) => [p.participant, p.date, p.last])).toEqual([['P1', '2026-01-01', '2026-01-21'], ['P2', '2026-01-05', '2026-01-06']]);
+    expect(e[0]!.compliance).toBeCloseTo(4 / 5);
+    expect(e[1]!.compliance).toBe(1);
+    const tl = surveyTimeline(s)!;
+    expect(tl.bursts).toBe(2);
+    // Burst 1: P1 on its days 0 and 2, P2 on days 0 and 1. Burst 2: P1 on days 0 and 1.
+    expect(tl.perBurstDay[0]).toEqual([2, 1, 1]);
+    expect(tl.perBurstDay[1]).toEqual([1, 1]);
+    const html = generateCodebookHtml(s);
+    expect(html).toContain('class="cb-span"');
+    expect(html).toContain('Surveys by day of each burst');
+    expect(html).toContain('class="cb-burst-key"');
+  });
 });
 
 describe('codebook', () => {
@@ -154,7 +185,7 @@ describe('codebook', () => {
   it('keeps the prior codebook structure', () => {
     const html = generateCodebookHtml(spec(), TITLE_PAGE, { generatedAt: new Date('2026-01-01') });
     expect(html.startsWith('<!doctype html>')).toBe(true);
-    for (const s of ['Title Page', 'Name of study', 'Abstract Page', 'Executive Summary', 'Study Schedule', 'Variable List', 'Codebook Generated 2026-01-01',
+    for (const s of ['Title Page', 'cb-study-name', '>Abstract<', 'Executive Summary', 'Study Schedule', 'Variable List', 'Codebook Generated 2026-01-01',
       'header-shading', '[item_stress]', 'cb-q-head', 'cb-q-meta', 'Frequency Table', 'Barplot', 'Missingness Descriptives',
       'Answered / Delivered', 'Shown only if', 'cb-numstats', 'cb-block-head', 'Data Collection Period:', 'id="backToTopBtn"']) {
       expect(html, s).toContain(s);
@@ -194,14 +225,72 @@ describe('codebook', () => {
     const toc = html.slice(html.indexOf('id="cb-toc-body"'), html.indexOf('</nav>', html.indexOf('id="cb-toc-body"')));
     expect((toc.match(/<ul[ >]/g) ?? []).length).toBe((toc.match(/<\/ul>/g) ?? []).length);
     expect((toc.match(/<li[ >]/g) ?? []).length).toBe((toc.match(/<\/li>/g) ?? []).length);
-    expect(toc.indexOf('Title Page')).toBeLessThan(toc.indexOf('Name of study'));
+    expect(toc.indexOf('Title Page')).toBeLessThan(toc.indexOf('Study Metadata'));
+  });
+});
+
+describe('codebook extras', () => {
+  const PNG = 'data:image/png;base64,iVBORw0KGgo=';
+  it('adds the logo, the researcher’s sections where asked, and attached documents', () => {
+    const html = generateCodebookHtml(spec(), {}, {
+      logo: PNG,
+      customSections: [
+        { id: 'a', title: 'Study setup', text: 'Phones were\nhanded out.', after: 'titlePage', media: [{ kind: 'image', src: PNG, name: 'setup.png', caption: 'The kit' }] },
+        { id: 'b', title: 'Training video', text: '', after: 'variableList', media: [{ kind: 'video', src: 'https://youtu.be/abcdefgh123', name: 'v', caption: 'Training' }] },
+        // After another of the researcher's sections, and after a section that isn't shown (no funding text).
+        { id: 'c', title: 'Kit checklist', text: 'Charger, case.', after: 'section:a', media: [] },
+        { id: 'd', title: 'Budget notes', text: 'Notes.', after: 'funding', media: [] },
+      ],
+      attachments: [{ name: 'protocol.txt', mediaType: 'text/plain', size: 2048, href: 'data:text/plain;base64,aGk=', text: 'Protocol text here' }],
+    });
+    expect(html).toContain('class="cb-logo"');
+    const order = ['>Title Page<', '>Study setup<', '>Kit checklist<', '>Abstract<', '>Executive Summary<', '>Budget notes<', '>Variable List<', '>Training video<', '>Attached Documents<'].map((h) => html.indexOf(h));
+    expect(order.every((x) => x > 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(html).toContain('Phones were<br>handed out.');
+    expect(html).toContain('youtube-nocookie.com/embed/abcdefgh123');
+    expect(html).toContain('download="protocol.txt"');
+    expect(html).toContain('Protocol text here');
+    // Only data: and https sources are used.
+    const bad = generateCodebookHtml(spec(), {}, { logo: 'javascript:alert(1)', customSections: [{ id: 'x', title: 'X', text: '', after: 'variableList', media: [{ kind: 'image', src: 'javascript:x', name: '', caption: '' }] }] });
+    expect(bad).not.toContain('javascript:');
+  });
+
+  it('shows only uploaded screenshots, and marks made-up ones as a demonstration', () => {
+    const sp = spec();
+    const q = sp.surveys[0]!.questions!.find((x) => x['Item.Type'] === 'Question')!;
+    const key = codebookItemKey(sp.surveys[0]!['Survey.Name'], q['Item.ID']);
+    const html = generateCodebookHtml(sp, {}, { screenshots: { [key]: PNG } });
+    expect(html).toContain(`src="${PNG}"`);
+    expect(html.match(/class="cb-screenshot"/g)?.length).toBe(1);
+    expect(html).not.toContain('made-up screenshot');
+    expect(generateCodebookHtml(sp)).not.toContain('class="cb-screenshot"');
+    const demo = generateCodebookHtml(sp, {}, { screenshots: { [key]: PNG }, demoScreenshots: [key] });
+    expect(demo).toContain('This is a made-up screenshot, shown as a demonstration.');
   });
 });
 
 describe('codebook defaults', () => {
-  it('leaves out the title page and never prints authors under the title', () => {
+  it('starts with the study name and authors, without a "Name of study" heading', () => {
     const html = generateCodebookHtml(spec());
-    expect(html).not.toContain('Title Page');
+    expect(html).toContain('Title Page');
+    expect(html).toContain('class="cb-study-name"');
+    expect(html).not.toContain('Name of study');
     expect(html).not.toContain('class="author"');
+  });
+
+  it('gives funding and contact their own sections, and links the summary to each survey', () => {
+    const sp = spec();
+    const html = generateCodebookHtml(sp, { funding: true, contact: true }, {}, { funding: 'NIH R01', contact: 'Jane Smith\njane@uni.edu' });
+    expect(html).toMatch(/<h1 id="[^"]+">Funding/);
+    expect(html).toContain('jane@uni.edu');
+    expect(html).toMatch(/<h1 id="[^"]+">Contact/);
+    expect(html).toContain('Jane Smith<br>jane@uni.edu');
+    const first = sp.surveys[0]!['Survey.Name'];
+    const anchor = html.match(new RegExp(`<a href="#(survey-[^"]+)">`))?.[1];
+    expect(anchor).toBeTruthy();
+    expect(html).toContain(`<section class="cb-survey" id="${anchor}">`);
+    expect(first).toBeTruthy();
+    expect(html).toMatch(/<h1 id="[^"]+">Study Adherence/);
   });
 });

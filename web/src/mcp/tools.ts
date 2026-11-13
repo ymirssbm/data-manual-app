@@ -47,15 +47,21 @@ const fail = (t: string) => ({ content: [{ type: 'text' as const, text: t }], is
 
 /** Codebook sections an assistant can include or exclude, mapped to the generator's options. */
 const SECTION_KEYS: Record<string, keyof CodebookOptions | Array<keyof CodebookOptions>> = {
-  'Title Page': ['nameOfStudy', 'authors', 'studyMetadata', 'funding'],
+  'Title Page': ['nameOfStudy', 'authors', 'studyMetadata'],
   'Name of Study': 'nameOfStudy',
   Authors: 'authors',
   'Study Metadata': 'studyMetadata',
   Funding: 'funding',
+  Contact: 'contact',
+  Logo: 'logo',
+  'Your sections': 'customSections',
+  'Attached documents': 'attachments',
   Abstract: 'abstract',
   'Executive Summary': 'executiveSummary',
   'Study Schedule': 'studySchedule',
-  'Participation Plots': ['participationPlots', 'partEnrollment', 'partTimeline'],
+  'Study Adherence': ['participationPlots', 'partEnrollment', 'partTimeline', 'partBurstDensity'],
+  'Participation Plots': ['participationPlots', 'partEnrollment', 'partTimeline', 'partBurstDensity'],
+  'Surveys by day of each burst': 'partBurstDensity',
   'Enrollment over time': 'partEnrollment',
   'Surveys by day since first survey': 'partTimeline',
   'Survey Flowcharts': 'flowcharts',

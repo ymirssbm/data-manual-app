@@ -1,6 +1,6 @@
 // Spec -> self-contained codebook HTML, laid out like the prior R Markdown
 // codebook: title block, table of contents, then <hr>-ruled pages (Title Page,
-// Abstract Page, Executive Summary, Variable List) and, per survey, a shaded
+// Abstract, Executive Summary, Variable List) and, per survey, a shaded
 // header per variable with indented field lines and a "Click to view visuals"
 // panel (Frequency Table / Barplot / Missingness / Screenshots tabs).
 // Additions: a sticky "Sections" menu, a collapsible TOC (every node folds),
@@ -39,10 +39,19 @@ export const QUESTION_TYPES = [
 export interface CodebookOptions {
   /** The table of contents after the title. */
   toc: boolean;
+  /** The study logo above the title (when one was added). */
+  logo: boolean;
+  /** Sections the researcher wrote (text, images, video). */
+  customSections: boolean;
+  /** Attached documents (IRB protocol, consent form...) at the end. */
+  attachments: boolean;
+
   nameOfStudy: boolean;
   authors: boolean;
   studyMetadata: boolean;
   funding: boolean;
+  /** Contact section (who to ask about the study or data). */
+  contact: boolean;
   abstract: boolean;
   executiveSummary: boolean;
   studySchedule: boolean;
@@ -51,6 +60,8 @@ export interface CodebookOptions {
   /** Parts of the participation page. */
   partEnrollment: boolean;
   partTimeline: boolean;
+  /** Overlapping survey density for each burst, by day within the burst. */
+  partBurstDensity: boolean;
   flowcharts: boolean;
   /** Question types to include on variable pages ("Block" controls block headings). */
   dataTypes: string[];
@@ -82,17 +93,22 @@ export interface CodebookOptions {
 
 export const DEFAULT_CODEBOOK_OPTIONS: CodebookOptions = {
   toc: true,
+  logo: true,
+  customSections: true,
+  attachments: true,
   // Title page off by default; switch it on in the generator's Content tab.
-  nameOfStudy: false,
-  authors: false,
+  nameOfStudy: true,
+  authors: true,
   studyMetadata: false,
-  funding: false,
+  funding: true,
+  contact: true,
   abstract: true,
   executiveSummary: true,
   studySchedule: true,
   participationPlots: true,
   partEnrollment: true,
   partTimeline: true,
+  partBurstDensity: true,
   flowcharts: true,
   dataTypes: [...QUESTION_TYPES],
   deliveryType: true,
@@ -215,6 +231,7 @@ export interface CodebookText {
   title?: string;
   authors?: string;
   funding?: string;
+  contact?: string;
   abstract?: string;
   summary?: string;
 }
@@ -231,7 +248,37 @@ export interface CodebookExtras {
   theme?: Partial<CodebookTheme>;
   /** Variables to leave out, as codebookItemKey(survey, item) keys. */
   excludeItems?: string[];
+  /** Image src (data: URL or https) for the study logo. */
+  logo?: string;
+  /** The researcher's own sections, each placed after a built-in section (CODEBOOK_ANCHORS) or `section:<id>`. */
+  customSections?: Array<{
+    id: string;
+    title: string;
+    text: string;
+    after: string;
+    media: Array<{ kind: 'image' | 'video'; src: string; name: string; caption: string }>;
+  }>;
+  /** Documents carried inside the codebook; `href` is a data: URL. `text` is shown for text documents. */
+  attachments?: Array<{ name: string; mediaType: string; size: number; href: string; text: string }>;
+  /** Uploaded screenshots by codebookItemKey (data: URLs). */
+  screenshots?: Record<string, string>;
+  /** Screenshot keys that are made-up demonstrations (the example study's), captioned as such. */
+  demoScreenshots?: string[];
 }
+
+/** The codebook's own sections, in order: what a researcher's section can be placed after. */
+export const CODEBOOK_ANCHORS: Array<{ key: string; label: string }> = [
+  { key: 'title', label: 'Title' },
+  { key: 'titlePage', label: 'Title Page' },
+  { key: 'abstract', label: 'Abstract' },
+  { key: 'executiveSummary', label: 'Executive Summary' },
+  { key: 'funding', label: 'Funding' },
+  { key: 'contact', label: 'Contact' },
+  { key: 'studySchedule', label: 'Study Schedule' },
+  { key: 'studyAdherence', label: 'Study Adherence' },
+  { key: 'variableList', label: 'Variable List' },
+  { key: 'attachments', label: 'Attached Documents' },
+];
 
 /** Identifies one variable of one survey, for choosing which variables go in a codebook. */
 export const codebookItemKey = (surveyName: string, itemId: string) => `${surveyName}/${itemId}`;
@@ -269,6 +316,7 @@ export function generateCodebookHtml(
   const title = text.title?.trim() || meta['Study.Name'];
   const authors = text.authors?.trim() || meta.authors || '';
   const funding = text.funding?.trim() || meta.funding || '';
+  const contact = text.contact?.trim() || String((meta as { 'Data.Access'?: { Contact?: string } })['Data.Access']?.Contact ?? '');
   const abstract = text.abstract?.trim() || meta.abstract || '';
   const models = surveyModels(spec);
   const generated = (extras.generatedAt ?? new Date()).toISOString().slice(0, 10);
@@ -295,6 +343,33 @@ export function generateCodebookHtml(
   };
   const out: string[] = [];
 
+  // Surveys that will appear in the Variable List (a survey whose variables were all left out is
+  // dropped), so the executive summary only links to sections that exist.
+  const shownTypes = new Set(o.dataTypes);
+  const leftOut = new Set(extras.excludeItems ?? []);
+  const shownSurveys = new Set(
+    models
+      .filter((m) => {
+        const qs = (m.survey.questions ?? []).filter((q) => isQuestion(q) && !isBlock(q) && shownTypes.has(q['Question.Type.Display.Name']));
+        return !qs.length || qs.some((q) => !leftOut.has(codebookItemKey(m.name, q['Item.ID'])));
+      })
+      .map((m) => m.name),
+  );
+  const surveyAnchor = (m: SurveyModel) => (shownSurveys.has(m.name) ? `survey-${slug(m.name)}` : null);
+
+  // The researcher's own sections: each goes after the anchor it names, and others can follow it.
+  const ownSections = o.customSections ? (extras.customSections ?? []).filter((s) => s.title.trim() || s.text.trim() || s.media.length) : [];
+  const placed = new Set<string>();
+  const emitSection = (s: (typeof ownSections)[number]) => {
+    placed.add(s.id);
+    out.push(page(s.title.trim() || 'Untitled section', `${s.text.trim() ? multiline(s.text) : ''}${s.media.map(mediaHtml).join('')}`, ['customSections']));
+    custom(`section:${s.id}`);
+  };
+  function custom(anchor: string) {
+    for (const s of ownSections) if (!placed.has(s.id) && s.after === anchor) emitSection(s);
+  }
+  custom('title');
+
   // ---- Title page (heading registered first so its subsections nest under it in the TOC)
   const overview = dataOverview(spec);
   const tocMark = toc.length;
@@ -302,30 +377,39 @@ export function generateCodebookHtml(
   const titleParts: string[] = [];
   const h2 = (label: string) => `<h2 id="${entry(label, 2)}">${esc(label)}</h2>`;
   const part = (key: string, html: string) => `<div${optAttr(key)}>${html}</div>`;
-  if (o.nameOfStudy) titleParts.push(part('nameOfStudy', `${h2('Name of study')}<p>${esc(meta['Study.Name'])}</p>`));
+  if (o.nameOfStudy) titleParts.push(part('nameOfStudy', `<p class="cb-study-name">${esc(meta['Study.Name'])}</p>`));
   if (o.authors && authors) titleParts.push(part('authors', `${h2('Authors')}<p>${esc(authors)}</p>`));
   if (o.studyMetadata) {
     const block = studyMetadataHtml(spec, overview);
     if (block) titleParts.push(part('studyMetadata', `${h2('Study Metadata')}${block}`));
   }
-  if (o.funding && funding) titleParts.push(part('funding', `${h2('Funding source')}<p>${esc(funding)}</p>`));
   if (titleParts.length) {
-    out.push(`<section class="cb-page"${optAttr('nameOfStudy', 'authors', 'studyMetadata', 'funding')}><hr><h1 id="${titleId}">Title Page${caret('Title Page')}</h1><hr><div class="cb-sec-body">${titleParts.join('\n')}</div></section>`);
+    out.push(`<section class="cb-page"${optAttr('nameOfStudy', 'authors', 'studyMetadata')}><hr><h1 id="${titleId}">Title Page${caret('Title Page')}</h1><hr><div class="cb-sec-body">${titleParts.join('\n')}</div></section>`);
   } else toc.splice(tocMark, 1);
 
-  if (o.abstract && abstract) out.push(page('Abstract Page', `<p class="cb-prose">${esc(abstract)}</p>`, ['abstract']));
+  custom('titlePage');
+  if (o.abstract && abstract) out.push(page('Abstract', `<p class="cb-prose">${esc(abstract)}</p>`, ['abstract']));
+  custom('abstract');
   if (o.executiveSummary) {
     const summary = text.summary?.trim();
-    out.push(page('Executive Summary', summary ? `<p class="cb-prose">${esc(summary)}</p>` : autoSummary(models, overview), ['executiveSummary']));
+    out.push(page('Executive Summary', summary ? `<p class="cb-prose">${esc(summary)}</p>` : autoSummary(models, overview, surveyAnchor), ['executiveSummary']));
   }
+  custom('executiveSummary');
+  if (o.funding && funding) out.push(page('Funding', multiline(funding), ['funding']));
+  custom('funding');
+  if (o.contact && contact) out.push(page('Contact', multiline(contact), ['contact']));
+  custom('contact');
   if (o.studySchedule && spec.schedules.length) out.push(page('Study Schedule', scheduleHtml(spec, models), ['studySchedule']));
+  custom('studySchedule');
   if (o.participationPlots && hasResponseData(spec)) {
     const enrolled = enrollment(spec);
     const tl = surveyTimeline(spec);
     const parts: string[] = [];
     if (o.partEnrollment && enrolled.length)
       parts.push(
-        `<div${optAttr('partEnrollment')}><h4 class="cb-chart-h">Enrollment over time</h4>${enrollmentSvg(enrolled)}<p class="cb-small">Cumulative participants by the date of their first completed survey (${enrolled.length} participants, ${esc(enrolled[0]!.date)} to ${esc(enrolled[enrolled.length - 1]!.date)}).</p></div>`,
+        `<div${optAttr('partEnrollment')}><h4 class="cb-chart-h">Enrollment over time</h4>${enrollmentSvg(enrolled)}<p class="cb-small">Cumulative participants by the date of their first completed survey (${enrolled.length} participants, ${esc(enrolled[0]!.date)} to ${esc(enrolled[enrolled.length - 1]!.date)}). Each bar runs from a participant’s first to last completed survey${
+          enrolled[0]!.compliance != null ? ', colored by compliance: the share of their delivered prompts they answered' : ''
+        }.</p></div>`,
       );
     if (o.partTimeline && tl)
       parts.push(
@@ -333,12 +417,19 @@ export function generateCodebookHtml(
           tl.bursts > 1 ? ' Colors mark measurement bursts: a gap of more than a week starts a new burst.' : ''
         }</p></div>`,
       );
-    if (parts.length) out.push(page('Participation', parts.join(''), ['participationPlots', 'partEnrollment', 'partTimeline']));
+    if (o.partBurstDensity && tl && tl.bursts > 1)
+      parts.push(
+        `<div${optAttr('partBurstDensity')}><h4 class="cb-chart-h">Surveys by day of each burst</h4>${burstDensitySvg(tl)}<p class="cb-small">Completed surveys on each day since the start of a burst, one curve per burst, so the bursts can be compared directly. Hover over a burst in the legend to pick it out.</p></div>`,
+      );
+    if (parts.length) out.push(page('Study Adherence', parts.join(''), ['participationPlots', 'partEnrollment', 'partTimeline', 'partBurstDensity']));
   }
+
+  custom('studyAdherence');
 
   // ---- Variable list: survey > block > variable, each level collapsible
   const included = new Set(o.dataTypes);
   const excluded = new Set(extras.excludeItems ?? []);
+  const demoShotSet = new Set(extras.demoScreenshots ?? []);
   const responses = hasResponseData(spec) ? indexResponses(spec) : null;
   const varTocMark = toc.length;
   const varId = entry('Variable List', 1);
@@ -384,7 +475,7 @@ export function generateCodebookHtml(
         }
       }
       const stats = responses ? describeItem(q, responses.get(q['Question.ID']), overview?.participants ?? 0) : null;
-      const html = variablePage(m, q, o, t, stats, itemKey, entry(stripHtml(q['Question.Text'] ?? '') || itemLabel(q), path ? 4 : 3, `${m.name} ${q['Item.ID']}`), spec.screenshotsURL);
+      const html = variablePage(m, q, o, t, stats, itemKey, extras.screenshots?.[itemKey], demoShotSet, entry(stripHtml(q['Question.Text'] ?? '') || itemLabel(q), path ? 4 : 3, `${m.name} ${q['Item.ID']}`), spec.screenshotsURL);
       const ob = current();
       if (ob) ob.items.push(html);
       else parts.push(html);
@@ -395,15 +486,19 @@ export function generateCodebookHtml(
       toc.splice(surveyMark);
       continue;
     }
-    surveysHtml.push(`<section class="cb-survey"><h2 id="${sid}" class="cb-survey-name">${esc(m.label)}${caret(m.label)}</h2><div class="cb-sec-body">${parts.join('\n')}</div></section>`);
+    surveysHtml.push(`<section class="cb-survey" id="survey-${slug(m.name)}"><h2 id="${sid}" class="cb-survey-name">${esc(m.label)}${caret(m.label)}</h2><div class="cb-sec-body">${parts.join('\n')}</div></section>`);
   }
   if (surveysHtml.length) out.push(`<section class="cb-page"><hr><h1 id="${varId}">Variable List${caret('Variable List')}</h1><hr><div class="cb-sec-body">${surveysHtml.join('\n')}</div></section>`);
   else toc.splice(varTocMark, 1);
+  custom('variableList');
+  const docs = (extras.attachments ?? []).filter((a) => /^data:/.test(a.href));
+  if (o.attachments && docs.length) out.push(page('Attached Documents', attachmentsHtml(docs), ['attachments']));
+  custom('attachments');
+  // Sections placed after a section that no longer exists (or in a loop) go at the end.
+  for (const s of ownSections) if (!placed.has(s.id)) emitSection(s);
 
-  const menu = toc
-    .filter((n) => n.level <= 2)
-    .map((n) => `<a class="cb-menu-l${n.level}" href="#${n.id}">${esc(n.label)}</a>`)
-    .join('');
+  // The Sections menu holds the whole contents tree, down to each question, folded below the top level.
+  const menu = `<div class="cb-menu-tree">${renderToc(toc, 0)}</div>`;
 
   return `<!doctype html>
 <html lang="en">
@@ -423,6 +518,7 @@ ${fontLinks(t)}<style>${themeCss(t)}${CODEBOOK_CSS}${printPageCss(title)}</style
 </header>
 <div class="content" id="top">
 <div id="header">
+${o.logo && extras.logo && /^(data:image\/|https:\/\/)/.test(extras.logo) ? `<img class="cb-logo" src="${esc(extras.logo)}" alt="Study logo">` : ''}
 <h1 class="title">${esc(title)}</h1>
 <h4 class="date">Codebook Generated ${esc(generated)}</h4>
 </div>
@@ -479,7 +575,18 @@ function skipNote(m: SurveyModel, itemId: string): string {
   return `<p class="cb-cond"${optAttr('skipLogic')}><span class="cb-cond-tag">Skip logic</span> Shown only if ${parts.join('; or ')}</p>`;
 }
 
-function variablePage(m: SurveyModel, q: Question, o: CodebookOptions, t: CodebookTheme, stats: ItemDescriptives | null, itemKey: string, id: string, screenshotsURL: string | undefined): string {
+function variablePage(
+  m: SurveyModel,
+  q: Question,
+  o: CodebookOptions,
+  t: CodebookTheme,
+  stats: ItemDescriptives | null,
+  itemKey: string,
+  uploadedShot: string | undefined,
+  demoShots: Set<string>,
+  id: string,
+  screenshotsURL: string | undefined,
+): string {
   const text = stripHtml(q['Question.Text'] ?? '') || itemLabel(q);
   const lines: string[] = [];
   const cond = o.skipLogic ? skipNote(m, q['Item.ID']) : '';
@@ -511,13 +618,24 @@ function variablePage(m: SurveyModel, q: Question, o: CodebookOptions, t: Codebo
   if (stats?.numeric && o.histograms) add('Histogram', histogramHtml(stats, o), 'histograms', 'histStats', 'histChart');
   if (stats && o.missingness) add('Missingness', missingnessHtml(q, stats, m, o), 'missingness', 'missAnswered', 'missMissing', 'missParticipants', 'missIcc', 'missPerPerson', 'missNote');
   if (stats?.outliers && o.outlierPlots) add('Outliers', outliersHtml(stats, o), 'outlierPlots', 'outlierSummary', 'outlierPlot');
-  if (o.screenshots && screenshotsURL) {
-    const base = screenshotsURL.replace(/\/+$/, '');
-    tabs.push({
-      name: 'Screenshots',
-      keys: ['screenshots'],
-      html: `<img class="cb-screenshot" alt="Screenshot of ${esc(q['Item.ID'])}" src="${esc(`${base}/${encodeURIComponent(q['Item.ID'])}.png`)}" onerror="this.replaceWith(Object.assign(document.createElement('p'),{textContent:'No screenshot available.'}))">`,
-    });
+  // Screenshot: an uploaded one, else one at the study's screenshot URL, else (optionally) a drawing.
+  if (o.screenshots) {
+    const shot = uploadedShot && /^data:image\//.test(uploadedShot) ? uploadedShot : null;
+    if (shot) {
+      const demo = demoShots.has(itemKey);
+      tabs.push({
+        name: 'Screenshot',
+        keys: ['screenshots'],
+        html: `<img class="cb-screenshot" alt="${demo ? 'Made-up screenshot' : 'Screenshot'} of ${esc(q['Item.ID'])}" src="${esc(shot)}">${demo ? '<p class="cb-small">This is a made-up screenshot, shown as a demonstration.</p>' : ''}`,
+      });
+    } else if (screenshotsURL) {
+      const base = screenshotsURL.replace(/\/+$/, '');
+      tabs.push({
+        name: 'Screenshot',
+        keys: ['screenshots'],
+        html: `<img class="cb-screenshot" alt="Screenshot of ${esc(q['Item.ID'])}" src="${esc(`${base}/${encodeURIComponent(q['Item.ID'])}.png`)}" onerror="this.replaceWith(Object.assign(document.createElement('p'),{textContent:'No screenshot available.'}))">`,
+      });
+    }
   }
   const vid = `vis-${id}`;
   if (tabs.length) {
@@ -746,8 +864,22 @@ ${months
   .filter((_, i) => i % every === 0)
   .map((m) => `<line class="cb-grid" x1="${x(m.d)}" x2="${x(m.d)}" y1="${T}" y2="${T + plotH}"/><text class="cb-axis" x="${x(m.d)}" y="${T + plotH + 16}" text-anchor="middle">${m.label}</text>`)
   .join('')}
+${(() => {
+    // One bar per participant, from first to last completed survey, at their place in the enrollment order.
+    const bh = Math.max(1.5, Math.min(6, (plotH / top) * 0.7));
+    return points
+      .map((pt) => {
+        const x0 = x(dayNum(pt.date));
+        const w = Math.max(2, x(dayNum(pt.last)) - x0);
+        const fill = pt.compliance == null ? 'var(--cb-accent)' : complianceColor(pt.compliance);
+        const tip = `${pt.participant}: ${pt.date} to ${pt.last}${pt.compliance == null ? '' : `, ${Math.round(pt.compliance * 100)}% of prompts answered`}`;
+        return `<rect class="cb-span" x="${x0.toFixed(1)}" y="${(y(pt.n) - bh / 2).toFixed(1)}" width="${w.toFixed(1)}" height="${bh.toFixed(1)}" fill="${fill}"><title>${esc(tip)}</title></rect>`;
+      })
+      .join('');
+  })()}
 ${points.map((pt) => `<circle class="cb-dot-in" cx="${x(dayNum(pt.date)).toFixed(1)}" cy="${y(pt.n).toFixed(1)}" r="3"></circle>`).join('')}
 <path class="cb-line" d="${path}"/>
+${points[0]?.compliance != null ? complianceLegend(L + 12, T + 12) : ''}
 <text class="cb-axis-title" x="${L + plotW / 2}" y="${H - 6}" text-anchor="middle">enrollment date (first survey)</text>
 <text class="cb-axis-title" transform="translate(13 ${T + plotH / 2}) rotate(-90)" text-anchor="middle"># of participants</text>
 </svg>`;
@@ -783,17 +915,89 @@ function timelineSvg(tl: SurveyTimeline): string {
   const color = (b: number) => BURST_COLORS[(b - 1) % BURST_COLORS.length];
   const legend =
     tl.bursts > 1
-      ? `<text class="cb-axis-title" x="${W - R + 14}" y="${T + 12}">Burst</text>${Array.from({ length: tl.bursts }, (_, i) => `<circle cx="${W - R + 20}" cy="${T + 30 + i * 18}" r="5" fill="${color(i + 1)}"></circle><text class="cb-axis" x="${W - R + 32}" y="${T + 34 + i * 18}">${i + 1}</text>`).join('')}`
+      ? `<text class="cb-axis-title" x="${W - R + 14}" y="${T + 12}">Burst</text>${burstKeys(tl.bursts, W - R + 14, T + 22)}`
       : '';
   return `<svg class="cb-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Surveys by day since first survey">
 <rect class="cb-panel" x="${L}" y="${T}" width="${plotW}" height="${plotH}"/>
 ${dTicks.map((d) => `<line class="cb-grid" x1="${x(d)}" x2="${x(d)}" y1="${T}" y2="${T + plotH}"/><text class="cb-axis" x="${x(d)}" y="${T + plotH + 16}" text-anchor="middle">${d}</text>`).join('')}
 ${rTicks.map((r) => `<text class="cb-axis" x="${L - 6}" y="${(T + plotH - r * rowH + 4).toFixed(1)}" text-anchor="end">${r}</text>`).join('')}
 <path class="cb-density" d="${area}"/>
-${tl.points.map((pt) => `<circle class="${tl.bursts > 1 ? 'cb-dot-burst' : 'cb-dot-in'}" cx="${x(pt.day).toFixed(1)}" cy="${y(pt.row).toFixed(1)}" r="${rDot.toFixed(1)}"${tl.bursts > 1 ? ` fill="${color(pt.burst)}"` : ''}></circle>`).join('')}
+${tl.points.map((pt) => `<circle class="${tl.bursts > 1 ? 'cb-dot-burst' : 'cb-dot-in'}" cx="${x(pt.day).toFixed(1)}" cy="${y(pt.row).toFixed(1)}" r="${rDot.toFixed(1)}"${tl.bursts > 1 ? ` fill="${color(pt.burst)}" data-burst="${pt.burst}"` : ''}></circle>`).join('')}
 ${legend}
 <text class="cb-axis-title" x="${L + plotW / 2}" y="${H - 6}" text-anchor="middle">day since first survey</text>
 <text class="cb-axis-title" transform="translate(12 ${T + plotH / 2}) rotate(-90)" text-anchor="middle">participant</text>
+</svg>`;
+}
+
+/** Compliance (0–1) to a color: orange-red at 0, amber at 50%, blue at 100% (color-blind safe ends). */
+function complianceColor(v: number): string {
+  const stops: Array<[number, [number, number, number]]> = [
+    [0, [213, 94, 0]],
+    [0.5, [230, 159, 0]],
+    [1, [0, 114, 178]],
+  ];
+  const t = Math.max(0, Math.min(1, v));
+  const i = t <= 0.5 ? 0 : 1;
+  const [a, ca] = stops[i]!;
+  const [b, cb] = stops[i + 1]!;
+  const f = (t - a) / (b - a);
+  const c = ca.map((x, k) => Math.round(x + (cb[k]! - x) * f));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+
+function complianceLegend(x: number, y: number): string {
+  const w = 120;
+  const id = `cbcomp${Math.round(x)}${Math.round(y)}`;
+  return `<g class="cb-comp-key"><defs><linearGradient id="${id}"><stop offset="0" stop-color="${complianceColor(0)}"/><stop offset=".5" stop-color="${complianceColor(0.5)}"/><stop offset="1" stop-color="${complianceColor(1)}"/></linearGradient></defs>
+<text class="cb-axis-title" x="${x}" y="${y + 4}">Compliance</text>
+<rect x="${x}" y="${y + 10}" width="${w}" height="8" rx="2" fill="url(#${id})"/>
+<text class="cb-axis" x="${x}" y="${y + 32}">0%</text><text class="cb-axis" x="${x + w}" y="${y + 32}" text-anchor="end">100%</text></g>`;
+}
+
+/** Burst legend entries; hovering or focusing one highlights that burst in the chart (see CODEBOOK_JS). */
+function burstKeys(n: number, x: number, y: number): string {
+  return Array.from(
+    { length: n },
+    (_, i) =>
+      `<g class="cb-burst-key" data-key="${i + 1}" tabindex="0" role="button" aria-label="Highlight burst ${i + 1}"><rect x="${x - 4}" y="${y + i * 20 - 2}" width="70" height="18" fill="transparent"/><circle cx="${x + 6}" cy="${y + 7 + i * 20}" r="5" fill="${BURST_COLORS[i % BURST_COLORS.length]}"></circle><text class="cb-axis" x="${x + 18}" y="${y + 11 + i * 20}">Burst ${i + 1}</text></g>`,
+  ).join('');
+}
+
+/** Each burst's surveys per day since the burst began, as overlapping smoothed curves. */
+function burstDensitySvg(tl: SurveyTimeline): string {
+  const W = 760;
+  const L = 44;
+  const R = 104;
+  const T = 14;
+  const B = 44;
+  const plotH = 240;
+  const H = T + plotH + B;
+  const plotW = W - L - R;
+  const maxDay = Math.max(1, ...tl.perBurstDay.map((a) => a.length - 1));
+  const sd = 1.2;
+  const curves = tl.perBurstDay.map((counts) =>
+    Array.from({ length: maxDay + 1 }, (_, d) => counts.reduce((acc, c, k) => acc + c * Math.exp(-((k - d) ** 2) / (2 * sd * sd)), 0)),
+  );
+  const peak = Math.max(1, ...curves.flat());
+  const x = (d: number) => L + (d / maxDay) * plotW;
+  const y = (v: number) => T + plotH - (v / peak) * plotH * 0.92;
+  const dStep = niceStep(maxDay);
+  const dTicks: number[] = [];
+  for (let d = 0; d <= maxDay; d += dStep) dTicks.push(d);
+  const paths = curves
+    .map((c, i) => {
+      const color = BURST_COLORS[i % BURST_COLORS.length];
+      const line = c.map((v, d) => `${d ? 'L' : 'M'}${x(d).toFixed(1)},${y(v).toFixed(1)}`).join('');
+      return `<g data-burst="${i + 1}"><path d="${line}L${x(maxDay)},${T + plotH}L${x(0)},${T + plotH}Z" fill="${color}" fill-opacity=".14"/><path d="${line}" fill="none" stroke="${color}" stroke-width="2.2"/></g>`;
+    })
+    .join('');
+  return `<svg class="cb-chart cb-burst-density" viewBox="0 0 ${W} ${H}" role="img" aria-label="Surveys by day of each burst">
+<rect class="cb-panel" x="${L}" y="${T}" width="${plotW}" height="${plotH}"/>
+${dTicks.map((d) => `<line class="cb-grid" x1="${x(d)}" x2="${x(d)}" y1="${T}" y2="${T + plotH}"/><text class="cb-axis" x="${x(d)}" y="${T + plotH + 16}" text-anchor="middle">${d + 1}</text>`).join('')}
+${paths}
+<text class="cb-axis-title" x="${W - R + 14}" y="${T + 12}">Burst</text>${burstKeys(tl.bursts, W - R + 14, T + 22)}
+<text class="cb-axis-title" x="${L + plotW / 2}" y="${H - 6}" text-anchor="middle">day of burst</text>
+<text class="cb-axis-title" transform="translate(14 ${T + plotH / 2}) rotate(-90)" text-anchor="middle">surveys (smoothed)</text>
 </svg>`;
 }
 
@@ -823,13 +1027,61 @@ function studyMetadataHtml(spec: StudySpec, overview: ReturnType<typeof dataOver
   return parts.join('\n');
 }
 
-function autoSummary(models: SurveyModel[], overview: ReturnType<typeof dataOverview>): string {
+/** An image or video in a researcher's section. Videos also get a plain line for print and Word. */
+function mediaHtml(md: { kind: 'image' | 'video'; src: string; name: string; caption: string }): string {
+  const cap = md.caption.trim() ? `<p class="cb-small">${esc(md.caption)}</p>` : '';
+  const src = md.src.trim();
+  if (md.kind === 'image') {
+    if (!/^(data:image\/|https:\/\/)/.test(src)) return '';
+    return `<div class="cb-figure"><img class="cb-figure-img" src="${esc(src)}" alt="${esc(md.caption || md.name)}">${cap}</div>`;
+  }
+  const yt = src.match(/^https:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{6,})/);
+  const vimeo = src.match(/^https:\/\/(?:www\.)?vimeo\.com\/(\d+)/);
+  const label = md.caption.trim() || md.name || 'Video';
+  const printLine = /^https:/.test(src)
+    ? `<p class="cb-print-line cb-small">Video: ${esc(label)} (<a href="${esc(src)}">${esc(src)}</a>)</p>`
+    : `<p class="cb-print-line cb-small">Video: ${esc(label)} (plays in the HTML codebook)</p>`;
+  let player = '';
+  if (yt) player = `<iframe class="cb-video" src="https://www.youtube-nocookie.com/embed/${esc(yt[1]!)}" title="${esc(label)}" allow="encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
+  else if (vimeo) player = `<iframe class="cb-video" src="https://player.vimeo.com/video/${esc(vimeo[1]!)}" title="${esc(label)}" allow="picture-in-picture" allowfullscreen></iframe>`;
+  else if (/^(data:video\/|https:\/\/)/.test(src)) player = `<video class="cb-video" controls preload="metadata" src="${esc(src)}"></video>`;
+  if (!player) return '';
+  return `<div class="cb-figure"><div class="cb-screen-only">${player}</div>${printLine}${cap}</div>`;
+}
+
+/** Attached documents: each one downloadable from the HTML codebook; text documents shown in full. */
+function attachmentsHtml(docs: NonNullable<CodebookExtras['attachments']>): string {
+  const size = (b: number) => (b < 1024 * 1024 ? `${Math.max(1, Math.round(b / 1024))} KB` : `${(b / 1024 / 1024).toFixed(1)} MB`);
+  const kind = (d: { name: string; mediaType: string }) => (d.name.match(/\.([a-z0-9]+)$/i)?.[1] ?? d.mediaType.split('/').pop() ?? 'file').toUpperCase();
+  const MAX = 60000;
+  return `<p>These documents travel inside this codebook file. Download one to open it.</p>${docs
+    .map(
+      (d) => `<div class="cb-attach"><p><strong>${esc(d.name)}</strong> <span class="cb-small">(${esc(kind(d))}, ${size(d.size)})</span> <a class="cb-screen-only cb-attach-dl" href="${esc(d.href)}" download="${esc(d.name)}">Download</a></p>${
+        d.text.trim() ? `<pre class="cb-attach-text">${esc(d.text.length > MAX ? `${d.text.slice(0, MAX)}\n…` : d.text)}</pre>` : ''
+      }</div>`,
+    )
+    .join('')}`;
+}
+
+/** Multi-line text as paragraphs (blank lines) and line breaks. */
+function multiline(text: string): string {
+  return text
+    .trim()
+    .split(/\n\s*\n/)
+    .map((para) => `<p class="cb-prose">${esc(para).replace(/\n/g, '<br>')}</p>`)
+    .join('');
+}
+
+function autoSummary(models: SurveyModel[], overview: ReturnType<typeof dataOverview>, anchor: (m: SurveyModel) => string | null = () => null): string {
   const n = models.reduce((a, m) => a + m.items.filter(isQuestion).length, 0);
   return `<p class="cb-prose">This codebook documents ${models.length} survey${models.length === 1 ? '' : 's'} with ${n} variable${n === 1 ? '' : 's'}${
     overview ? `, answered by ${overview.participants} participant${overview.participants === 1 ? '' : 's'}` : ''
   }.</p>
 <table class="cb-table"><thead><tr><th>Survey</th><th>Questions</th><th>Blocks</th><th>Skip-logic branches</th></tr></thead><tbody>${models
-    .map((m) => `<tr><td>${esc(m.label)}</td><td>${m.items.filter(isQuestion).length}</td><td>${m.items.filter(isBlock).length}</td><td>${m.branches.length}</td></tr>`)
+    .map((m) => {
+      const id = anchor(m);
+      return `<tr><td>${id ? `<a href="#${id}">${esc(m.label)}</a>` : esc(m.label)}</td><td>${m.items.filter(isQuestion).length}</td><td>${m.items.filter(isBlock).length}</td><td>${m.branches.length}</td></tr>`;
+    })
     .join('')}</tbody></table>`;
 }
 
@@ -848,7 +1100,8 @@ function scheduleHtml(spec: StudySpec, models: SurveyModel[]): string {
 }
 
 /** Nested TOC: every node with children folds; surveys and blocks start folded and show how many entries they hold. */
-function renderToc(nodes: TocNode[]): string {
+/** `openDepth`: levels shallower than this start unfolded (the table of contents shows two; the Sections menu none). */
+function renderToc(nodes: TocNode[], openDepth = 2): string {
   interface T {
     node: TocNode;
     children: T[];
@@ -867,7 +1120,7 @@ function renderToc(nodes: TocNode[]): string {
       ? `<ul class="cb-toc-d${depth}">${ts
           .map((t) => {
             const kids = t.children.length > 0;
-            const open = !kids || depth < 2;
+            const open = !kids || depth < openDepth;
             const count = kids && depth >= 2 ? `<span class="cb-toc-count">(${leaves(t)})</span>` : '';
             return `<li class="${kids ? 'has-children' : ''}${open ? '' : ' is-collapsed'}"><div class="cb-toc-row"><a href="#${t.node.id}">${esc(t.node.label)}</a>${count}${
               kids ? `<button class="cb-twisty" type="button" aria-expanded="${open}" aria-label="Show or hide ${esc(t.node.label)}">${open ? '▲' : '▼'}</button>` : ''
@@ -1023,6 +1276,19 @@ const CODEBOOK_JS = `
     var qh = (e.key === 'Enter' || e.key === ' ') && e.target.closest && e.target.closest('.cb-q-head');
     if (qh) { e.preventDefault(); qh.click(); }
   });
+  function focusBurst(key, on) {
+    var svg = key.closest('svg');
+    if (!svg) return;
+    var k = on ? key.getAttribute('data-key') : null;
+    svg.querySelectorAll('[data-burst]').forEach(function (el) { el.classList.toggle('is-dim', !!k && el.getAttribute('data-burst') !== k); });
+    svg.querySelectorAll('.cb-burst-key').forEach(function (el) { el.classList.toggle('is-on', !!k && el === key); });
+  }
+  ['mouseover', 'focusin'].forEach(function (type) {
+    document.addEventListener(type, function (e) { var key = e.target.closest && e.target.closest('.cb-burst-key'); if (key) focusBurst(key, true); });
+  });
+  ['mouseout', 'focusout'].forEach(function (type) {
+    document.addEventListener(type, function (e) { var key = e.target.closest && e.target.closest('.cb-burst-key'); if (key && !key.contains(e.relatedTarget)) focusBurst(key, false); });
+  });
   var top = document.getElementById('backToTopBtn');
   function onScroll() { top.classList.toggle('is-visible', window.scrollY > 400); }
   window.addEventListener('scroll', onScroll, { passive: true }); onScroll();
@@ -1049,8 +1315,14 @@ code{font-size:.9em}
 .cb-menu-list[hidden]{display:none}
 .cb-menu-list a{display:block;padding:7px 10px;border-radius:5px;color:var(--cb-text)}
 .cb-menu-list a:hover{background:var(--cb-accent-soft);text-decoration:none}
-.cb-menu-l1{font-weight:600}
-.cb-menu-l2{padding-left:24px!important;color:var(--cb-muted)!important}
+.cb-menu-tree ul{list-style:none;margin:0;padding:0}
+.cb-menu-tree ul ul{padding-left:1em;margin:0 0 .2em;border-left:1px solid var(--cb-border);margin-left:.7em}
+.cb-menu-tree li.is-collapsed > ul{display:none}
+.cb-menu-tree .cb-toc-row{display:flex;align-items:center;gap:.2em}
+.cb-menu-tree .cb-toc-row a{flex:1;min-width:0;padding:5px 8px}
+.cb-menu-tree .cb-toc-d1 > li > .cb-toc-row a{font-weight:600}
+.cb-menu-tree .cb-toc-count{flex:none}
+.cb-menu-tree .cb-twisty{padding:4px 8px}
 
 /* Content box */
 .content{background:var(--cb-surface);max-width:960px;margin:24px auto 40px;padding:28px 44px 48px;border-radius:6px;box-shadow:0 2px 10px rgba(0,0,0,.15)}
@@ -1093,6 +1365,16 @@ section.is-collapsed > .cb-sec-body{display:none}
 
 .cb-survey-name{padding-bottom:6px;border-bottom:2px solid var(--cb-accent)}
 .cb-prose{max-width:72ch}
+.cb-logo{display:block;max-height:96px;max-width:260px;margin:0 auto 10px;object-fit:contain}
+.cb-figure{margin:14px 0 18px}
+.cb-figure-img{display:block;max-width:100%;height:auto;border-radius:6px;border:1px solid var(--cb-border)}
+.cb-video{display:block;width:100%;max-width:760px;aspect-ratio:16/9;border:0;border-radius:6px;background:#000}
+.cb-attach{margin:10px 0 18px}
+.cb-attach-dl{margin-left:8px;font-size:.85em}
+.cb-attach-text{white-space:pre-wrap;max-height:420px;overflow:auto;font-size:.82em;background:var(--cb-header);border:1px solid var(--cb-border);border-radius:6px;padding:10px 12px}
+.cb-mock-wrap{display:flex;justify-content:center;padding:6px 0}
+.cb-mock-wrap svg{width:min(300px,100%);height:auto}
+.cb-study-name{font-family:var(--cb-heading-font);font-size:1.7em;font-weight:700;line-height:1.2;margin:.3em 0 .5em}
 .cb-small{font-size:.82em;color:var(--cb-muted)}
 
 /* Variable pages */
@@ -1146,6 +1428,7 @@ section.is-collapsed > .cb-sec-body{display:none}
 .cb-pane{display:none}
 .cb-pane.is-active{display:block}
 .cb-print-only{display:none}
+.cb-print-line{display:none}
 
 /* Tables */
 .cb-table{width:100%;border-collapse:collapse;margin:4px 0 16px;font-size:.92em}
@@ -1172,6 +1455,12 @@ section.is-collapsed > .cb-sec-body{display:none}
 .cb-chart .cb-dot-in{fill:var(--cb-bar);opacity:.45}
 .cb-chart .cb-dot-out{fill:#c0392b}
 .cb-chart .cb-dot-burst{opacity:.85}
+.cb-chart .cb-span{opacity:.85}
+.cb-chart [data-burst]{transition:opacity .15s}
+.cb-chart [data-burst].is-dim{opacity:.08}
+.cb-burst-key{cursor:pointer;outline:none}
+.cb-burst-key.is-on text{font-weight:700}
+.cb-burst-key:focus-visible circle{stroke:var(--cb-text);stroke-width:2}
 .cb-chart .cb-density{fill:var(--cb-accent);opacity:.14;stroke:var(--cb-accent);stroke-opacity:.5}
 .cb-chart-h{font-size:.95em;margin:16px 0 6px}
 /* Missingness summary tiles */
@@ -1232,6 +1521,7 @@ section.is-collapsed > .cb-sec-body{display:none}
   .header-shading h4{font-size:11pt}
   .cb-anchor{margin-left:10pt}
   .cb-q-body{margin-top:2pt}
+  .cb-print-line{display:block}
   .cb-print-only{display:block;font-size:9.5pt;text-transform:uppercase;letter-spacing:.05em;color:var(--cb-muted);margin:8pt 0 3pt;break-after:avoid}
   .cb-cond{margin:0 0 4pt}
   /* Charts and tables at a readable size, never split across pages. */

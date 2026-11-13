@@ -3,11 +3,13 @@ import { loadSettings, saveSettings, textAfterEdit, textFromSpec, type CodebookS
 import { validateSpec, type DatasetTable, type StudySpec, type ValidationResult } from '../core';
 import { codebookItemKey } from '../generators';
 import type { HostAdapter } from '../adapters/types';
+import { demoScreenshots, EMPTY_EXTRAS, EXAMPLE_STUDY_NAME, loadStudyExtras, saveStudyExtras } from './studyExtras';
 import { Icon, Toasts, useToasts } from './ui';
+import type { LiveEditOptions } from './useLiveDraft';
 import { HomePage } from './pages/Home';
 import { StandardPage } from './pages/Standard';
 import { DataPullPage, type ImportTab, type LoadedSource } from './pages/DataPull';
-import { CodebookGeneratorPage, CodebookViewerPage, type GeneratedCodebook } from './pages/Codebook';
+import { CodebookGeneratorPage, type GeneratedCodebook } from './pages/Codebook';
 import { DictionaryPage } from './pages/Dictionary';
 import { FlowchartPage } from './pages/Flowchart';
 import { SchedulePage } from './pages/Schedule';
@@ -36,14 +38,7 @@ const MENU: MenuItem[] = [
     ],
   },
   { id: 'editor', label: 'Survey Editor', icon: 'edit' },
-  {
-    label: 'Codebook',
-    icon: 'book',
-    children: [
-      { id: 'codebook_gen', label: 'Codebook Generator', icon: 'cog' },
-      { id: 'codebook_view', label: 'Codebook Viewer', icon: 'eye' },
-    ],
-  },
+  { id: 'codebook_gen', label: 'Codebook', icon: 'book' },
   { id: 'datadict', label: 'Data Dictionary', icon: 'table' },
   { id: 'flowchart', label: 'Study Flowchart', icon: 'diagram' },
   { id: 'schedule', label: 'Study Schedule', icon: 'calendar' },
@@ -82,7 +77,10 @@ export function App({ adapter }: { adapter: HostAdapter }) {
   const [datasetFile, setDatasetFile] = useState<{ name: string; text?: string; table?: DatasetTable } | null>(null);
   const [importTab, setImportTab] = useState<ImportTab>('api');
   const spec: StudySpec | null = session?.result.spec ?? null;
-  /** A variable the Codebook Viewer should scroll to when it opens. */
+  /** The Survey Editor opens on this survey and tab (e.g. from the Study Schedule page). */
+  const [editorTarget, setEditorTarget] = useState<{ surveyName: string; tab: 'edit' | 'schedule' } | null>(null);
+  const clearEditorTarget = useCallback(() => setEditorTarget(null), []);
+  /** A variable the Codebook page should scroll to when it opens. */
   const [codebookFocus, setCodebookFocus] = useState<string | null>(null);
   const [cbSettings, setCbSettingsState] = useState<CodebookSettings>(() => loadSettings(spec));
   const setCbSettings = useCallback((s: CodebookSettings) => {
@@ -100,20 +98,145 @@ export function App({ adapter }: { adapter: HostAdapter }) {
     }
   }, [adapter, session, spec]);
 
+  /** Bumped on every fresh load, so the study's saved extras are read again (even for the same study). */
+  const [loadTick, setLoadTick] = useState(0);
+  const loadedFor = useRef<string | null>(null);
   const specRef = useRef(spec);
   specRef.current = spec;
   /** A new study resets the codebook's study details and variable choices; an edit of the same study keeps them. */
   const onLoaded = useCallback(
     (source: LoadedSource, result: ValidationResult, how: { edit?: boolean } = {}) => {
       const before = specRef.current;
+      if (!how.edit) {
+        loadedFor.current = null;
+        setLoadTick((n) => n + 1);
+        setHistory({ past: [], future: [] });
+      }
       setSession({ source, result });
       setCodebook(null);
-      setCbSettingsState((s) => (how.edit ? { ...s, text: textAfterEdit(s.text, before, result.spec) } : { ...s, text: textFromSpec(result.spec), exclude: [] }));
+      setCbSettingsState((s) =>
+        how.edit ? { ...s, text: textAfterEdit(s.text, before, result.spec) } : { ...s, text: textFromSpec(result.spec), exclude: [], extras: EMPTY_EXTRAS },
+      );
+      if (how.edit) return;
       if (result.spec) notify(`Loaded "${result.spec['Study.Metadata']['Study.Name']}".`);
       else notify('The study was read, but it has problems. See the details below.', 'warning', 8000);
     },
     [notify],
   );
+
+  // ---- Undo / redo of edits to the loaded study (from any page). A newly loaded study starts fresh.
+  const [history, setHistory] = useState<{ past: Array<{ spec: StudySpec; label: string }>; future: Array<{ spec: StudySpec; label: string }> }>({ past: [], future: [] });
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+  const historyRef = useRef(history);
+  historyRef.current = history;
+  /** The last edit's merge key: typing in one field is one undo step. */
+  const lastMerge = useRef<{ key: string; at: number } | null>(null);
+  /**
+   * Change the loaded study, keeping the previous version for undo. Live edits (`opts.merge` or
+   * `opts.quiet`) are only applied when the study stays valid; the reason is returned otherwise.
+   */
+  const editStudy = useCallback(
+    (next: StudySpec, label: string, opts: string | LiveEditOptions = {}): string | null => {
+      const o: LiveEditOptions & { message?: string } = typeof opts === 'string' ? { message: opts } : opts;
+      const prev = specRef.current;
+      const s = sessionRef.current;
+      if (!prev || !s) return 'No study is loaded.';
+      // Editing a survey's questions defines its flow: it no longer needs "order unknown".
+      const before = new Map(prev.surveys.map((x) => [x['Survey.Name'], JSON.stringify(x.questions)]));
+      next = {
+        ...next,
+        surveys: next.surveys.map((x) => {
+          if (x['Survey.Flow.Known'] !== false || before.get(x['Survey.Name']) === JSON.stringify(x.questions)) return x;
+          const { 'Survey.Flow.Known': _drop, ...rest } = x;
+          return rest;
+        }),
+      };
+      const r = validateSpec(next);
+      const live = !!(o.merge || o.quiet);
+      if (live && !r.spec) return r.issues.find((i) => i.severity === 'error')?.message ?? 'The study is not valid.';
+      const now = Date.now();
+      const m = lastMerge.current;
+      const merging = !!o.merge && m?.key === o.merge && now - m.at < 5000;
+      lastMerge.current = o.merge ? { key: o.merge, at: now } : null;
+      setHistory((h) => (merging && h.past.length ? { ...h, future: [] } : { past: [...h.past, { spec: prev, label }].slice(-50), future: [] }));
+      onLoaded(s.source, r, { edit: true });
+      if (!o.quiet) notify(o.message ?? `${label}. Undo with Ctrl+Z.`);
+      return null;
+    },
+    [onLoaded, notify],
+  );
+  const undo = useCallback(() => {
+    const h = historyRef.current;
+    const last = h.past[h.past.length - 1];
+    const cur = specRef.current;
+    const s = sessionRef.current;
+    if (!last || !cur || !s) return;
+    lastMerge.current = null;
+    setHistory({ past: h.past.slice(0, -1), future: [{ spec: cur, label: last.label }, ...h.future] });
+    onLoaded(s.source, validateSpec(last.spec), { edit: true });
+    notify(`Undid: ${last.label}.`);
+  }, [onLoaded, notify]);
+  const redo = useCallback(() => {
+    const h = historyRef.current;
+    const next = h.future[0];
+    const cur = specRef.current;
+    const s = sessionRef.current;
+    if (!next || !cur || !s) return;
+    lastMerge.current = null;
+    setHistory({ past: [...h.past, { spec: cur, label: next.label }], future: h.future.slice(1) });
+    onLoaded(s.source, validateSpec(next.spec), { edit: true });
+    notify(`Redid: ${next.label}.`);
+  }, [onLoaded, notify]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || !(e.ctrlKey || e.metaKey) || e.altKey) return;
+      // Text boxes keep their own undo.
+      const t = e.target as HTMLElement | null;
+      if (t && (t.closest('input, textarea, select, [contenteditable="true"]') || t.isContentEditable)) return;
+      const k = e.key.toLowerCase();
+      if (k === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if (k === 'y' || (k === 'z' && e.shiftKey)) {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [undo, redo]);
+
+  // Each study's codebook details, media, documents and variable choices are kept in this browser
+  // (IndexedDB) by study name: restored when the study is loaded, saved as they change.
+  const studyName = spec?.['Study.Metadata']['Study.Name'] ?? null;
+  useEffect(() => {
+    if (!studyName) return;
+    let cancelled = false;
+    loadedFor.current = null;
+    const example = studyName === EXAMPLE_STUDY_NAME ? specRef.current : null;
+    void loadStudyExtras(studyName).then((saved) => {
+      if (cancelled) return;
+      if (saved)
+        setCbSettingsState((s) => ({
+          ...s,
+          text: Object.fromEntries(Object.entries({ ...s.text, ...saved.text }).map(([k, v]) => [k, v || (s.text as Record<string, string | undefined>)[k] || ''])),
+          extras: { ...EMPTY_EXTRAS, ...saved.extras },
+          exclude: saved.exclude ?? s.exclude,
+        }));
+      // The example study shows what screenshots look like, with made-up ones.
+      if (example && !Object.keys(saved?.extras.screenshots ?? {}).length) setCbSettingsState((s) => ({ ...s, extras: { ...s.extras, ...demoScreenshots(example) } }));
+      loadedFor.current = studyName;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [studyName, loadTick]);
+  useEffect(() => {
+    if (!studyName || loadedFor.current !== studyName) return;
+    const t = setTimeout(() => void saveStudyExtras(studyName, { extras: cbSettings.extras, text: cbSettings.text, exclude: cbSettings.exclude }), 400);
+    return () => clearTimeout(t);
+  }, [studyName, cbSettings.extras, cbSettings.text, cbSettings.exclude]);
 
   const [look, setLook] = useState<AppSettings>(loadAppSettings);
   const [dialog, setDialog] = useState<'settings' | 'contact' | null>(null);
@@ -125,6 +248,8 @@ export function App({ adapter }: { adapter: HostAdapter }) {
 
   const go = (id: PageId) => {
     // "Your dataset" is a tab of Data Import.
+    // The codebook generator and viewer are one page now.
+    if (id === 'codebook_view') id = 'codebook_gen';
     if (id === 'dataset') {
       setImportTab('file');
       id = 'datapull';
@@ -147,6 +272,22 @@ export function App({ adapter }: { adapter: HostAdapter }) {
             <Icon name="bars" size={18} />
           </button>
           {spec && <span className="dm-navbar-study">{spec['Study.Metadata']['Study.Name']}</span>}
+          {spec && (
+            <span className="dm-undo">
+              <button
+                type="button"
+                onClick={undo}
+                disabled={!history.past.length}
+                title={history.past.length ? `Undo: ${history.past[history.past.length - 1]!.label} (Ctrl+Z)` : 'Nothing to undo'}
+                aria-label="Undo"
+              >
+                ↶ Undo
+              </button>
+              <button type="button" onClick={redo} disabled={!history.future.length} title={history.future.length ? `Redo: ${history.future[0]!.label} (Ctrl+Y)` : 'Nothing to redo'} aria-label="Redo">
+                ↷ Redo
+              </button>
+            </span>
+          )}
         </nav>
       </header>
 
@@ -215,27 +356,26 @@ export function App({ adapter }: { adapter: HostAdapter }) {
         {page === 'editor' && (
           <SurveyEditorPage
             spec={spec}
+            target={editorTarget}
+            onTargetUsed={clearEditorTarget}
             go={go}
             notify={notify}
-            onApply={(_s, r) => {
-              // Editing a survey defines its flow: it no longer needs "order unknown".
-              const before = new Map((spec?.surveys ?? []).map((x) => [x['Survey.Name'], JSON.stringify(x.questions)]));
-              if (r.spec) {
-                r.spec.surveys = r.spec.surveys.map((x) => {
-                  if (x['Survey.Flow.Known'] !== false || before.get(x['Survey.Name']) === JSON.stringify(x.questions)) return x;
-                  const { 'Survey.Flow.Known': _drop, ...rest } = x;
-                  return rest;
-                });
-              }
-              onLoaded({ fileName: 'Edited in the Survey Editor', translatorLabel: 'Study spec (JSON)', notes: [] }, r, { edit: true });
-            }}
+            onEdit={editStudy}
           />
         )}
         {page === 'codebook_gen' && (
-          <CodebookGeneratorPage spec={spec} settings={cbSettings} setSettings={setCbSettings} codebook={codebook} onBuilt={setCodebook} go={go} notify={notify} />
-        )}
-        {page === 'codebook_view' && (
-          <CodebookViewerPage spec={spec} settings={cbSettings} codebook={codebook} onBuilt={setCodebook} go={go} notify={notify} focus={codebookFocus} onFocused={() => setCodebookFocus(null)} />
+          <CodebookGeneratorPage
+            spec={spec}
+            settings={cbSettings}
+            setSettings={setCbSettings}
+            codebook={codebook}
+            onBuilt={setCodebook}
+            go={go}
+            notify={notify}
+            focus={codebookFocus}
+            onFocused={() => setCodebookFocus(null)}
+            onSpecEdit={(s, label, opts) => editStudy(s, label ?? 'Edited the study', opts)}
+          />
         )}
         {page === 'datadict' && <DictionaryPage spec={spec} go={go} />}
         {page === 'flowchart' && (
@@ -243,16 +383,26 @@ export function App({ adapter }: { adapter: HostAdapter }) {
             spec={spec}
             go={go}
             notify={notify}
-            onChange={(s) => session && setSession({ source: session.source, result: validateSpec(s) })}
+            onChange={(s, label, opts) => editStudy(s, label ?? 'Edited the study', opts)}
             openInCodebook={(surveyName, itemId) => {
               setCodebookFocus(codebookItemKey(surveyName, itemId));
               go('codebook_view');
             }}
           />
         )}
-        {page === 'schedule' && <SchedulePage spec={spec} go={go} />}
+        {page === 'schedule' && (
+          <SchedulePage
+            spec={spec}
+            go={go}
+            onEditSchedule={(surveyName) => {
+              setEditorTarget({ surveyName, tab: 'schedule' });
+              go('editor');
+            }}
+            onChange={(s, label, opts) => editStudy(s, label, opts)}
+          />
+        )}
         {page === 'standard' && <StandardPage />}
-        {page === 'ai' && <AiPage spec={spec} onLoaded={onLoaded} notify={notify} />}
+        {page === 'ai' && <AiPage spec={spec} onLoaded={onLoaded} onEdit={(s) => editStudy(s, 'AI changes')} notify={notify} documents={cbSettings.extras.attachments} />}
       </main>
 
       <Toasts toasts={toasts} dismiss={dismiss} />

@@ -265,6 +265,30 @@ interface Sitting {
   date: string;
 }
 
+/**
+ * Every delivered sitting (participant + session, or + date without sessions) and whether anything
+ * in it was answered. A prompt that was delivered but not answered still has rows, with missing responses.
+ */
+function sittings(spec: StudySpec): Array<Sitting & { completed: boolean }> {
+  const d = spec.data;
+  if (!d?.['Question.ID']) return [];
+  const pids = d['Participant.ID'] ?? [];
+  const sess = d['Session.ID'] ?? [];
+  const dates = d['Survey.Date.Completed'] ?? [];
+  const resp = d['User.Response'] ?? [];
+  const seen = new Map<string, Sitting & { completed: boolean }>();
+  for (let i = 0; i < d['Question.ID'].length; i++) {
+    const p = pids[i];
+    const date = dates[i] ? String(dates[i]).slice(0, 10) : '';
+    if (!p || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+    const key = `${p}\u0000${sess[i] ?? date}`;
+    const s = seen.get(key) ?? { participant: String(p), date, completed: false };
+    if (!isMissing(resp[i])) s.completed = true;
+    seen.set(key, s);
+  }
+  return [...seen.values()];
+}
+
 function completedSittings(spec: StudySpec): Sitting[] {
   const d = spec.data;
   if (!d?.['Question.ID']) return [];
@@ -289,31 +313,46 @@ export interface EnrollmentPoint {
   participant: string;
   /** Date of the participant's first completed survey. */
   date: string;
+  /** Date of their last completed survey. */
+  last: string;
   /** Participants enrolled up to and including this one. */
   n: number;
+  /** Completed ÷ delivered sittings (0–1), or null when deliveries can't be told apart from completions. */
+  compliance: number | null;
 }
 
 /** Cumulative enrollment, using each participant's first completed survey as their start date. */
 export function enrollment(spec: StudySpec): EnrollmentPoint[] {
-  const first = new Map<string, string>();
-  for (const s of completedSittings(spec)) {
-    const f = first.get(s.participant);
-    if (!f || s.date < f) first.set(s.participant, s.date);
+  const span = new Map<string, { first: string; last: string; delivered: number; completed: number }>();
+  for (const s of sittings(spec)) {
+    const p = span.get(s.participant) ?? { first: '', last: '', delivered: 0, completed: 0 };
+    p.delivered++;
+    if (s.completed) {
+      p.completed++;
+      if (!p.first || s.date < p.first) p.first = s.date;
+      if (!p.last || s.date > p.last) p.last = s.date;
+    }
+    span.set(s.participant, p);
   }
-  return [...first.entries()]
-    .sort((a, b) => a[1].localeCompare(b[1]) || a[0].localeCompare(b[0]))
-    .map(([participant, date], i) => ({ participant, date, n: i + 1 }));
+  // Data with no missed sittings at all may simply not record them, so compliance is only shown when some are missed.
+  const anyMissed = [...span.values()].some((p) => p.completed < p.delivered);
+  return [...span.entries()]
+    .filter(([, p]) => p.first)
+    .sort((a, b) => a[1].first.localeCompare(b[1].first) || a[0].localeCompare(b[0]))
+    .map(([participant, p], i) => ({ participant, date: p.first, last: p.last, n: i + 1, compliance: anyMissed ? p.completed / p.delivered : null }));
 }
 
 export interface SurveyTimeline {
-  /** One per completed survey sitting. */
-  points: Array<{ row: number; day: number; burst: number }>;
+  /** One per completed survey sitting; `burstDay` counts from the start of that participant's burst. */
+  points: Array<{ row: number; day: number; burst: number; burstDay: number }>;
   participants: number;
   /** Most bursts any participant had (1 when there are no gaps). */
   bursts: number;
   maxDay: number;
   /** Completed surveys per day since first survey (index = day). */
   perDay: number[];
+  /** Completed surveys per day since the start of each burst: perBurstDay[burst - 1][day]. */
+  perBurstDay: number[][];
 }
 
 /**
@@ -337,15 +376,25 @@ export function surveyTimeline(spec: StudySpec, gapDays = 7): SurveyTimeline | n
     days.sort((a, b) => a - b);
     const start = days[0]!;
     let burst = 1;
+    let burstStart = start;
     days.forEach((d, i) => {
-      if (i > 0 && d - days[i - 1]! > gapDays) burst++;
+      if (i > 0 && d - days[i - 1]! > gapDays) {
+        burst++;
+        burstStart = d;
+      }
       const day = d - start;
       maxDay = Math.max(maxDay, day);
-      points.push({ row: rowOf.get(p) ?? 0, day, burst });
+      points.push({ row: rowOf.get(p) ?? 0, day, burst, burstDay: d - burstStart });
     });
     bursts = Math.max(bursts, burst);
   }
   const perDay = new Array<number>(maxDay + 1).fill(0);
   for (const pt of points) perDay[pt.day]!++;
-  return { points, participants: byPerson.size, bursts, maxDay, perDay };
+  const perBurstDay = Array.from({ length: bursts }, () => [] as number[]);
+  for (const pt of points) {
+    const arr = perBurstDay[pt.burst - 1]!;
+    while (arr.length <= pt.burstDay) arr.push(0);
+    arr[pt.burstDay]!++;
+  }
+  return { points, participants: byPerson.size, bursts, maxDay, perDay, perBurstDay };
 }

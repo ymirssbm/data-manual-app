@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { isQuestion, surveyModels, type StudySpec, type ValidationResult } from '../../core';
-import { CLAUDE_MODELS, type AiConfig, type ChatTurn } from '../../ai/providers';
+import { CLAUDE_MODELS, type AiConfig, type ChatDocument, type ChatTurn } from '../../ai/providers';
+import { isPdf, type Attachment } from '../studyExtras';
+import { diffSpecs, type SpecChange } from '../../editor/diff';
 import { replyProse, runStudyAi } from '../../ai/studyAi';
 import type { LoadedSource } from './DataPull';
 import { Box, Field, Icon, PageTitle } from '../ui';
@@ -10,7 +12,11 @@ import { addKey, KeyField, keyLabel, useVault } from '../KeyField';
 
 interface Props {
   spec: StudySpec | null;
+  /** Documents attached on the Codebook page's Media tab; the AI can read them with each request. */
+  documents?: Attachment[];
   onLoaded(source: LoadedSource, result: ValidationResult): void;
+  /** Apply a change to the loaded study (undoable). */
+  onEdit?(spec: StudySpec): void;
   notify(text: string, kind?: 'message' | 'error' | 'warning', ms?: number): number;
 }
 
@@ -20,6 +26,8 @@ interface ChatMessage {
   result?: ValidationResult | null;
   repairs?: number;
   error?: boolean;
+  /** The study the request changed (null for a new study), to show what changed. */
+  base?: StudySpec | null;
 }
 
 const CONFIG_KEY = 'data-manual:ai-config';
@@ -52,7 +60,8 @@ function legacyKey(): string {
   }
 }
 
-export function AiPage({ spec, onLoaded, notify }: Props) {
+export function AiPage({ spec, onLoaded, onEdit, notify, documents = [] }: Props) {
+  const [useDocs, setUseDocs] = useState(true);
   const [config, setConfig] = useState<AiConfig>(loadConfig);
   const vault = useVault();
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -120,8 +129,9 @@ export function AiPage({ spec, onLoaded, notify }: Props) {
         signal: abort.current.signal,
         onStatus: setBusy,
         onText: (t) => setStreaming(replyProse(t)),
+        documents: useDocs && documents.length ? documents.map(toChatDocument) : undefined,
       });
-      setMessages((m) => [...m, { role: 'assistant', text: out.message, result: out.result, repairs: out.repairs }]);
+      setMessages((m) => [...m, { role: 'assistant', text: out.message, result: out.result, repairs: out.repairs, base }]);
     } catch (e) {
       const err = e as Error;
       if (err.name !== 'AbortError' && !/abort/i.test(err.message)) {
@@ -135,8 +145,10 @@ export function AiPage({ spec, onLoaded, notify }: Props) {
     }
   };
 
-  const useStudy = (result: ValidationResult, prompt: string) => {
-    onLoaded({ fileName: 'AI Study Generator', translatorLabel: `AI (${config.model})`, notes: [`Prompt: ${prompt}`] }, result);
+  const useStudy = (result: ValidationResult, prompt: string, base: StudySpec | null | undefined) => {
+    // A change to the loaded study is an edit (undoable); anything else is a new study.
+    if (base && onEdit && result.spec) onEdit(result.spec);
+    else onLoaded({ fileName: 'AI Study Generator', translatorLabel: `AI (${config.model})`, notes: [`Prompt: ${prompt}`] }, result);
   };
 
   const lastPromptBefore = (i: number) => [...messages.slice(0, i)].reverse().find((m) => m.role === 'user')?.text ?? '';
@@ -248,7 +260,7 @@ export function AiPage({ spec, onLoaded, notify }: Props) {
           {messages.map((m, i) => (
             <div key={i} className={`dm-msg dm-msg-${m.role} ${m.error ? 'is-error' : ''}`}>
               <div className="dm-msg-text">{m.text}</div>
-              {m.result && <ResultCard result={m.result} repairs={m.repairs ?? 0} onUse={() => useStudy(m.result!, lastPromptBefore(i))} />}
+              {m.result && <ResultCard result={m.result} repairs={m.repairs ?? 0} base={m.base ?? null} onUse={() => useStudy(m.result!, lastPromptBefore(i), m.base)} />}
             </div>
           ))}
           {busy && (
@@ -293,6 +305,11 @@ export function AiPage({ spec, onLoaded, notify }: Props) {
             Example: modify this study
           </button>
           <button onClick={() => setMessages((m) => [...m, { role: 'assistant', text: HELP }])}>What can it do?</button>
+          {documents.length > 0 && (
+            <label className="dm-check" title={documents.map((d) => d.name).join(', ')}>
+              <input type="checkbox" checked={useDocs} onChange={(e) => setUseDocs(e.target.checked)} /> Let the AI read the {documents.length} attached document{documents.length === 1 ? '' : 's'}
+            </label>
+          )}
           <span className="dm-hint dm-push-right">Enter to send · Shift+Enter for a new line</span>
         </div>
       </Box>
@@ -300,7 +317,7 @@ export function AiPage({ spec, onLoaded, notify }: Props) {
   );
 }
 
-function ResultCard({ result, repairs, onUse }: { result: ValidationResult; repairs: number; onUse(): void }) {
+function ResultCard({ result, repairs, onUse, base }: { result: ValidationResult; repairs: number; onUse(): void; base: StudySpec | null }) {
   const spec = result.spec;
   const errors = result.issues.filter((i) => i.severity === 'error');
   if (!spec) {
@@ -320,7 +337,7 @@ function ResultCard({ result, repairs, onUse }: { result: ValidationResult; repa
   const models = surveyModels(spec);
   const nq = models.reduce((a, m) => a + m.items.filter(isQuestion).length, 0);
   return (
-    <div className={`dm-result ${result.valid ? '' : 'is-bad'}`}>
+    <div className={`dm-result ${result.valid ? '' : 'is-bad'} ${base ? 'has-changes' : ''}`}>
       <div>
         <strong>{spec['Study.Metadata']['Study.Name']}</strong>
         <div className="dm-hint">
@@ -331,7 +348,7 @@ function ResultCard({ result, repairs, onUse }: { result: ValidationResult; repa
       </div>
       <div className="dm-inline dm-inline-tight">
         <button className="dm-btn dm-btn-primary dm-btn-sm" onClick={onUse} disabled={!result.valid}>
-          Use this study
+          {base ? 'Apply these changes' : 'Use this study'}
         </button>
         <button
           className="dm-btn dm-btn-secondary dm-btn-sm"
@@ -340,6 +357,77 @@ function ResultCard({ result, repairs, onUse }: { result: ValidationResult; repa
           Download JSON
         </button>
       </div>
+      {base && <ChangeList changes={diffSpecs(base, spec)} />}
     </div>
   );
+}
+
+const KIND_LABEL: Record<SpecChange['kind'], string> = { added: 'Added', removed: 'Removed', changed: 'Changed' };
+
+/** The AI's edits, highlighted, with a switch between the changes and the study before or after them. */
+function ChangeList({ changes }: { changes: SpecChange[] }) {
+  const [view, setView] = useState<'changes' | 'before' | 'after'>('changes');
+  if (!changes.length) return <p className="dm-hint dm-changes-none">No changes to the study.</p>;
+  const counts = (['added', 'changed', 'removed'] as const).map((k) => [k, changes.filter((c) => c.kind === k).length] as const).filter(([, n]) => n);
+  return (
+    <div className="dm-changes">
+      <div className="dm-changes-head">
+        <strong>
+          {changes.length} change{changes.length === 1 ? '' : 's'}
+        </strong>
+        <span className="dm-hint">{counts.map(([k, n]) => `${n} ${k}`).join(' · ')}</span>
+        <div className="dm-segmented dm-segmented-inline dm-push-right" role="radiogroup" aria-label="Show">
+          {(
+            [
+              ['changes', 'Changes'],
+              ['before', 'Before'],
+              ['after', 'After'],
+            ] as const
+          ).map(([v, label]) => (
+            <button key={v} type="button" role="radio" aria-checked={view === v} className={view === v ? 'is-active' : ''} onClick={() => setView(v)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <ul className="dm-changes-list">
+        {changes.map((c, i) => {
+          // Before: what was there (nothing for additions); After: what's there now (nothing for removals).
+          const gone = (view === 'before' && c.kind === 'added') || (view === 'after' && c.kind === 'removed');
+          return (
+            <li key={i} className={`is-${c.kind} ${gone ? 'is-gone' : ''}`}>
+              <div className="dm-change-title">
+                <span className={`dm-change-kind is-${c.kind}`}>{KIND_LABEL[c.kind]}</span>
+                <span>{c.label}</span>
+                {c.where && <span className="dm-hint">in {c.where}</span>}
+              </div>
+              {gone ? (
+                <p className="dm-hint">{view === 'before' ? 'Not in the study before.' : 'Not in the study after.'}</p>
+              ) : (
+                <dl className="dm-change-fields">
+                  {c.fields.map((f) => (
+                    <div key={f.field}>
+                      <dt>{f.field}</dt>
+                      {view === 'changes' && c.kind === 'changed' ? (
+                        <dd>
+                          <del>{f.before || '(empty)'}</del> <ins>{f.after || '(empty)'}</ins>
+                        </dd>
+                      ) : (
+                        <dd className={c.kind === 'changed' ? 'is-highlight' : ''}>{(view === 'before' ? f.before : f.after) || (view === 'changes' ? f.before || f.after : '(empty)')}</dd>
+                      )}
+                    </div>
+                  ))}
+                </dl>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/** An attachment as the model receives it: PDFs whole (base64), everything else as its text. */
+function toChatDocument(a: Attachment): ChatDocument {
+  return isPdf(a) ? { name: a.name, pdfBase64: a.dataUrl.slice(a.dataUrl.indexOf(',') + 1) } : { name: a.name, text: a.text };
 }

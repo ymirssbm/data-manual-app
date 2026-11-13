@@ -30,9 +30,20 @@ export interface AiConfig {
   useRelay: boolean;
 }
 
+/** A document the researcher attached (IRB protocol, consent form...) for the model to read. */
+export interface ChatDocument {
+  name: string;
+  /** PDFs: base64 without the data: prefix. Sent as a PDF to Claude; other providers can't read it. */
+  pdfBase64?: string;
+  /** Text and Word documents: their text. */
+  text?: string;
+}
+
 export interface ChatTurn {
   role: 'user' | 'assistant';
   content: string;
+  /** Documents to read with this (user) turn; they go before its text. */
+  documents?: ChatDocument[];
 }
 
 export const CLAUDE_MODELS = [
@@ -79,7 +90,7 @@ async function callClaude(config: AiConfig, system: string, turns: ChatTurn[], o
         max_tokens: 64000,
         // The schema-heavy system prompt is identical on every call, so cache it.
         system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
-        messages: turns.map((t) => ({ role: t.role, content: t.content })),
+        messages: turns.map((t): Anthropic.Beta.BetaMessageParam => (t.documents?.length ? { role: t.role, content: [...claudeDocuments(t.documents), { type: 'text', text: t.content }] } : { role: t.role, content: t.content })),
         output_config: { effort: config.effort },
         ...(withFallback ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' as const } : {}),
       },
@@ -111,6 +122,32 @@ async function callClaude(config: AiConfig, system: string, turns: ChatTurn[], o
   }
 }
 
+/**
+ * Attached documents as Claude document blocks: PDFs whole (Claude reads their text and pages),
+ * text as plain-text documents. The last one carries a cache breakpoint, since validation-repair
+ * rounds resend the same documents.
+ */
+function claudeDocuments(docs: ChatDocument[]): Anthropic.Beta.BetaRequestDocumentBlock[] {
+  const blocks = docs.flatMap((d): Anthropic.Beta.BetaRequestDocumentBlock[] =>
+    d.pdfBase64
+      ? [{ type: 'document', title: d.name, source: { type: 'base64', media_type: 'application/pdf', data: d.pdfBase64 } }]
+      : d.text?.trim()
+        ? [{ type: 'document', title: d.name, source: { type: 'text', media_type: 'text/plain', data: d.text } }]
+        : [],
+  );
+  if (blocks.length) blocks[blocks.length - 1]!.cache_control = { type: 'ephemeral' };
+  return blocks;
+}
+
+/** Other providers get text documents inline; PDFs are named but not sent. */
+function textDocuments(t: ChatTurn): string {
+  if (!t.documents?.length) return t.content;
+  const parts = t.documents.map((d) =>
+    d.text?.trim() ? `<document name="${d.name}">\n${d.text}\n</document>` : `(Attached PDF "${d.name}" was not sent: this provider only receives text. Use Claude to include PDFs.)`,
+  );
+  return `${parts.join('\n\n')}\n\n${t.content}`;
+}
+
 async function callOpenAiCompatible(config: AiConfig, system: string, turns: ChatTurn[], signal?: AbortSignal): Promise<string> {
   const base = config.baseUrl.trim().replace(/\/+$/, '');
   if (!/^https?:\/\//.test(base)) throw new AiError('Enter the provider\'s base URL (for example https://api.openai.com/v1).');
@@ -126,7 +163,7 @@ async function callOpenAiCompatible(config: AiConfig, system: string, turns: Cha
     method: 'POST',
     signal,
     headers: relay ? { ...headers, 'x-target-url': target, 'x-data-manual': '1' } : headers,
-    body: JSON.stringify({ model: config.model.trim(), messages: [{ role: 'system', content: system }, ...turns] }),
+    body: JSON.stringify({ model: config.model.trim(), messages: [{ role: 'system', content: system }, ...turns.map((t) => ({ role: t.role, content: textDocuments(t) }))] }),
   }).catch((e: Error) => {
     if (e.name === 'AbortError') throw e;
     throw new AiError(relay ? 'Could not reach the local relay. Is the app running with "npm run dev"?' : 'The request was blocked. Turn on "Relay through this app" and try again.');
