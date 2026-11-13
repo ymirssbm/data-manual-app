@@ -73,6 +73,29 @@ export function ScheduleEditPanel({ spec, onCommit, eventId, onDeselect }: { spe
       <button className="dm-btn dm-btn-primary dm-btn-sm" onClick={newSurvey}>
         + New repeating survey
       </button>
+      <Field label="Participants start on" hint="Set this when everyone’s day 1 is the same weekday, so the calendar can show weekdays and weekends.">
+        <select
+          className="dm-input dm-input-sm"
+          value={draft.schedules.map((s) => s.extensions?.['Study.Day1.Weekday']).find(Boolean) ?? ''}
+          onChange={(e) => {
+            const v = e.target.value as NonNullable<NonNullable<StudySpec['schedules'][number]['extensions']>['Study.Day1.Weekday']> | '';
+            const schedules = draft.schedules.map((s, i) => {
+              const { 'Study.Day1.Weekday': _old, ...rest } = s.extensions ?? {};
+              const ext = i === 0 && v ? { ...rest, 'Study.Day1.Weekday': v } : rest;
+              const { extensions: _e, ...base } = s;
+              return Object.keys(ext).length ? { ...base, extensions: ext } : base;
+            });
+            change({ ...draft, schedules: schedules as StudySpec['schedules'] }, v ? 'Set the weekday participants start on' : 'Cleared the start weekday');
+          }}
+        >
+          <option value="">Any day (each participant’s own)</option>
+          {(['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'] as const).map((c, i) => (
+            <option key={c} value={c}>
+              {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][i]}
+            </option>
+          ))}
+        </select>
+      </Field>
       <div className="dm-skip-row">
         <select className="dm-input dm-input-sm" value={addFor} onChange={(e) => setAddFor(e.target.value)} aria-label="Survey">
           {draft.surveys.map((s) => (

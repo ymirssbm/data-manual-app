@@ -57,6 +57,31 @@ export type QuestionSpecification = {
    */
   "Item.Type": "Block" | "Question" | null;
   /**
+   * Ask this block more than once in one delivery. Fixed: Count times. Per.Answer: once for each option chosen in Source.Item.ID (a Multiple Select). Until: again until Stop.Item.ID is answered Stop.Value, at most Count times.
+   */
+  "Block.Repeat"?: {
+    Type: "Fixed" | "Per.Answer" | "Until";
+    Count?: number;
+    "Source.Item.ID"?: string;
+    "Stop.Item.ID"?: string;
+    "Stop.Value"?: string;
+  };
+  /**
+   * A floating block: asked once per Once.Per period, in the first survey in Surveys that the participant takes. The block is defined in the first survey listed (its usual place); if that survey is missed it moves to the next one, and so on.
+   */
+  "Block.Float"?: {
+    /**
+     * Survey.Name values, in the order the block moves through them. The first is the survey the block is defined in.
+     *
+     * @minItems 2
+     */
+    Surveys: [string, string, ...string[]];
+    /**
+     * How often the block is asked. Day (default): once a day, whichever survey that is.
+     */
+    "Once.Per"?: "Day" | "Burst" | "Study";
+  };
+  /**
    * Item ID of the parent item. NOTE: This is different than the conditional master which points to the item which if successful, delivers the current. Parent may point to a block many questions up.
    */
   Parent: string | null;
@@ -127,6 +152,10 @@ export type SurveySpecifications = {
    * False when the order the questions are asked in, and any skip logic, are not known, e.g. a survey built from a dataset's columns. Tools then show no flowchart for it instead of guessing a straight line. Omitted or true means the questions are listed in the order they are asked.
    */
   "Survey.Flow.Known"?: boolean;
+  /**
+   * Assessment (default): questions that measure. Intervention: content delivered to the participant (a message, prompt or activity).
+   */
+  "Survey.Role"?: "Assessment" | "Intervention";
   /**
    * Human readable survey short name
    */
@@ -427,6 +456,10 @@ export interface Items {
    * Vendor-specific extensions.
    */
   extensions?: {
+    /**
+     * Every participant's day 1 falls on this weekday, so study days map to days of the week (weekends can be shown, and byDay rules line up).
+     */
+    "Study.Day1.Weekday"?: "MO" | "TU" | "WE" | "TH" | "FR" | "SA" | "SU";
     [k: string]: unknown | undefined;
   };
 }
@@ -503,6 +536,23 @@ export interface Event {
      * Name of the survey delivered by this schedule, referencing a Survey.Name value elsewhere in this document. Optional — some schedules (e.g. passive/sensor sync, administrative reminders) deliver no survey. JSON Schema cannot verify the referenced survey actually exists; any agent or tool generating or consuming this data must independently confirm it resolves to a real Survey.Name in the same study spec.
      */
     "Survey.Name"?: string;
+    /**
+     * At this decision point, which intervention is delivered: each option names an intervention survey (null = none) and its probability; probabilities sum to 1. With Trigger.Info, the options apply only when the rule is met.
+     *
+     * @minItems 1
+     */
+    "Intervention.Options"?: [
+      {
+        "Survey.Name"?: string | null;
+        Probability: number;
+        Label?: string;
+      },
+      ...{
+        "Survey.Name"?: string | null;
+        Probability: number;
+        Label?: string;
+      }[]
+    ];
   };
 }
 export interface Rrule {
@@ -573,6 +623,18 @@ export interface DataSpecificationColumnVectorFormat {
   "User.Response": string[];
   "Question.ID": string[];
   "External.ID"?: string[];
+  /**
+   * The survey whose delivery this answer came from. Needed when the same question can be answered in different surveys, as with floating blocks.
+   */
+  "Survey.Name"?: (string | null)[];
+  /**
+   * Which repetition of a repeating block this answer belongs to (1, 2, …); null outside repeating blocks.
+   */
+  Iteration?: (number | null)[];
+  /**
+   * For Per.Answer repeats: the option value this repetition was about (e.g. "2" = alcohol); null otherwise.
+   */
+  "Iteration.Key"?: (string | null)[];
 }
 /**
  * This specification contains all the needed information to describe a single item or scale used within a study, including its conceptual, psychometric, and delivery properties.

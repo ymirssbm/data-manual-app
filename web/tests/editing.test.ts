@@ -19,8 +19,9 @@ describe('making blocks from picked questions', () => {
     const qs = r.survey.questions!;
     const block = qs.find((q) => q['Item.ID'] === r.blockId)!;
     expect(block['Question.Long.Name']).toBe('Sleep basics');
-    // In the survey's order, at the first picked question's place.
-    expect(qs[0]!['Item.ID']).toBe(r.blockId);
+    // In the survey's order, at the first picked question's place (inside the floating sleep block).
+    expect(qs[1]!['Item.ID']).toBe(r.blockId);
+    expect(block.Parent).toBe('mo_b_sleep');
     expect(qs.filter((q) => q.Parent === r.blockId).map((q) => q['Item.ID'])).toEqual(['mo_sleep_hours', 'mo_woke']);
     // Still a valid study with the same skip logic.
     const spec = withSurveyReplaced(study(), 0, r.survey);
@@ -168,10 +169,11 @@ describe('linking and dropping on the flowchart', () => {
     expect(triggersFrom(sent.spec, 'mo_energy').length).toBeGreaterThan(0);
     expect(validateSpec(sent.spec).valid).toBe(true);
 
-    const first = survey(spec, 'morning').questions![0]!['Item.ID'];
-    const added = dropItem(spec, 'morning', { kind: 'question' }, { kind: 'question', itemId: first });
+    const qs = survey(spec, 'morning').questions!;
+    const at = qs.findIndex((q) => q['Item.Type'] === 'Question');
+    const added = dropItem(spec, 'morning', { kind: 'question' }, { kind: 'question', itemId: qs[at]!['Item.ID'] });
     if ('error' in added) throw new Error(added.error);
-    expect(survey(added.spec, 'morning').questions![1]!['Item.ID']).toBe(added.select);
+    expect(survey(added.spec, 'morning').questions![at + 1]!['Item.ID']).toBe(added.select);
 
     const evening = survey(spec, 'evening').questions!.find((q) => q['Question.Type.Display.Name'] !== 'Block')!;
     const copied = dropItem(spec, 'morning', { kind: 'copy', surveyName: 'evening', itemId: evening['Item.ID'] }, null);
@@ -193,5 +195,57 @@ describe('schedules by study day', () => {
     const texts = buildStudySchedule(study()).events.map((e) => e.recurrenceText);
     expect(texts.some((t) => /study days 1–7/.test(t))).toBe(true);
     expect(texts.every((t) => !/20\d\d/.test(t))).toBe(true);
+  });
+});
+
+describe('repeating and floating blocks, interventions, start weekday', () => {
+  it('describes them, checks their references, and draws them', async () => {
+    const { blockNotes, buildSurveyModel, floatingBlocksInto } = await import('../src/core');
+    const { buildStudySchedule, generateDataDictionary, flowchartContext, generateFlowchart } = await import('../src/generators');
+    const spec = study();
+    const label = (n: string) => spec.surveys.find((s) => s['Survey.Name'] === n)?.['Survey.LongName'] || n;
+    const morning = buildSurveyModel(survey(spec, 'morning'));
+    expect(blockNotes(morning, 'mo_sleep_hours', label)[0]).toMatch(/Floating.*Morning Check-in → Momentary Check → Evening Diary/);
+    expect(blockNotes(buildSurveyModel(survey(spec, 'evening')), 'ev_each_urge')[0]).toMatch(/once for each option chosen in ev_substances/);
+    expect(floatingBlocksInto(spec, 'random').map((f) => f.block['Item.ID'])).toEqual(['mo_b_sleep']);
+    expect(generateFlowchart(survey(spec, 'random'), flowchartContext(spec, 'random'))).toContain('floats from Morning Check-in');
+    expect(generateDataDictionary(spec).find((r) => r['Question.ID'] === 'ev_each_when')!['Shown.When']).toMatch(/each option/);
+    const sch = buildStudySchedule(spec);
+    expect(sch.day1Weekday).toBe('MO');
+    expect(sch.events.find((e) => e.intervention)?.intervention).toBe('Coping tip 50% · No message 50%');
+
+    // Data: floated sleep answers carry the survey they were answered in; repeats their iteration.
+    const d = spec.data!;
+    const floated = d['Question.ID'].findIndex((q, i) => q === 'mo_sleep_hours' && d['Survey.Name']![i] !== 'morning');
+    expect(floated).toBeGreaterThan(-1);
+    const rep = d['Question.ID'].findIndex((q) => q === 'ev_each_when');
+    expect(d.Iteration![rep]).toBe(1);
+
+    // Broken references are reported.
+    const bad = structuredClone(spec);
+    survey(bad, 'evening').questions!.find((q) => q['Item.ID'] === 'ev_b_each')!['Block.Repeat'] = { Type: 'Per.Answer', 'Source.Item.ID': 'nope' };
+    survey(bad, 'morning').questions!.find((q) => q['Item.ID'] === 'mo_b_sleep')!['Block.Float'] = { Surveys: ['evening', 'morning'] };
+    const issues = validateSpec(bad).issues.map((i) => i.message).join(' | ');
+    expect(issues).toMatch(/"nope" is not an Item.ID/);
+    expect(issues).toMatch(/first survey must be the one it is in/);
+  });
+});
+
+describe('study map', () => {
+  it('shows the bursts, then a burst’s surveys with what links them', async () => {
+    const { generateStudyMap, studyBursts, studyLinks } = await import('../src/generators');
+    const spec = study();
+    const bursts = studyBursts(spec);
+    expect(bursts.map((b) => [b.firstDay, b.lastDay])).toEqual([[1, 7], [29, 35], [57, 63]]);
+    const top = generateStudyMap(spec);
+    expect(top.nodes.map((n) => n.itemId)).toEqual(['burst:1', 'burst:2', 'burst:3']);
+    expect(top.code).toContain('3 weeks later');
+    const links = studyLinks(spec);
+    expect(links).toContainEqual({ from: 'evening', to: 'craving', kind: 'trigger', label: 'ev_craving ≥ 70' });
+    expect(links.some((l) => l.kind === 'float' && l.from === 'morning' && l.to === 'random')).toBe(true);
+    expect(links.some((l) => l.kind === 'intervention' && l.to === 'coping_tip')).toBe(true);
+    const one = generateStudyMap(spec, 2);
+    expect(one.nodes.map((n) => n.itemId)).toContain('survey:coping_tip');
+    expect(one.code).toContain('Burst 2: days 29–35');
   });
 });

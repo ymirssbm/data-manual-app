@@ -89,7 +89,7 @@ export function DatasetImport({ initial, spec, onLoaded, notify, onReset }: Prop
 
   const cols = file?.table.columns ?? [];
   const set = (patch: Partial<DatasetMapping>) => setM((cur) => (cur ? { ...cur, ...patch } : cur));
-  const colSelect = (label: string, key: 'participant' | 'time' | 'session' | 'survey' | 'question' | 'response' | 'questionText', optional = true, hint?: string) => (
+  const colSelect = (label: string, key: 'participant' | 'time' | 'session' | 'survey' | 'question' | 'response' | 'questionText' | 'iteration', optional = true, hint?: string) => (
     <Field label={label} hint={hint}>
       <select className="dm-input" value={m?.[key] ?? ''} onChange={(e) => set({ [key]: e.target.value || undefined })}>
         {optional && <option value="">(none)</option>}
@@ -129,7 +129,7 @@ export function DatasetImport({ initial, spec, onLoaded, notify, onReset }: Prop
     );
   }
 
-  const mappedCols = new Set([m.participant, m.time, m.session, m.survey, m.question, m.response, m.questionText].filter(Boolean));
+  const mappedCols = new Set([m.participant, m.time, m.session, m.survey, m.question, m.response, m.questionText, m.iteration].filter(Boolean));
   const roles: HeaderRole[] = m.layout === 'wide' ? (m.headerRows?.length ? m.headerRows : ['id']) : ['id'];
   const setRole = (k: number, role: HeaderRole | 'data') => {
     // Rows below a "data starts here" row are data; picking a role for the next row adds it as a header row.
@@ -173,6 +173,7 @@ export function DatasetImport({ initial, spec, onLoaded, notify, onReset }: Prop
         {colSelect('Survey occasion', 'session', true, 'Optional: which answers were given together in one sitting. See below.')}
         {m.layout === 'long' && colSelect('Question ID column', 'question', false, 'The variable name, e.g. mood_1.')}
         {m.layout === 'long' && colSelect('Question text column', 'questionText', true, 'Optional: the wording, e.g. "How is your mood?"')}
+        {m.layout === 'long' && colSelect('Repetition column', 'iteration', true, 'Optional: which repetition of a repeating block a row is (1, 2, …)')}
         {m.layout === 'long' && colSelect('Response value column', 'response', false)}
         <Field label="Times without a timezone are in">
           <select className="dm-input" value={m.timeZone ?? ''} onChange={(e) => set({ timeZone: e.target.value })}>

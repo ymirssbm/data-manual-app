@@ -5,3 +5,4 @@ export * from './schedule';
 export * from './descriptives';
 export * from './codebook';
 export * from './mockScreen';
+export * from './studyMap';

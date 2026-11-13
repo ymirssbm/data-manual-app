@@ -7,6 +7,12 @@ import { NoStudy } from './common';
 import { ScheduleEditPanel } from './ScheduleEditPanel';
 import type { CommitEdit } from '../useLiveDraft';
 
+const WD_CODES = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'] as const;
+const WD_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const WD_LONG = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+/** Weekday (0 = Monday) of a calendar day, when the study says which weekday day 1 is. */
+type StudyWeekday = (d: string) => number | null;
+
 const PALETTE = ['#3c8dbc', '#f39c12', '#00a65a', '#605ca8', '#dd4b39', '#39cccc', '#d81b60', '#3d9970'];
 const HOUR_PX = 52;
 const weekdayOf = (date: string) => new Date(`${date}T00:00:00Z`).getUTCDay();
@@ -81,7 +87,7 @@ export function SchedulePage({ spec, go, onEditSchedule, onChange }: { spec: Stu
       </>
     );
   }
-  return <Calendar spec={spec} events={schedule.events} first={schedule.firstDate!} last={schedule.lastDate!} onEditSchedule={onEditSchedule} onChange={onChange} />;
+  return <Calendar spec={spec} events={schedule.events} first={schedule.firstDate!} last={schedule.lastDate!} day1Weekday={schedule.day1Weekday} onEditSchedule={onEditSchedule} onChange={onChange} />;
 }
 
 function Calendar({
@@ -89,6 +95,7 @@ function Calendar({
   events,
   first,
   last,
+  day1Weekday,
   onEditSchedule,
   onChange,
 }: {
@@ -96,6 +103,7 @@ function Calendar({
   events: ScheduledEvent[];
   first: string;
   last: string;
+  day1Weekday: string | null;
   onEditSchedule?(surveyName: string): void;
   onChange?: CommitEdit;
 }) {
@@ -199,6 +207,9 @@ function Calendar({
     if (next) setDate(next);
   };
   const dayNo = (d: string) => dayIndex(first, d) + 1;
+  // Weekdays only mean something when every participant starts on the same weekday.
+  const studyWeekday: StudyWeekday = (d) => (day1Weekday ? (((WD_CODES.indexOf(day1Weekday as (typeof WD_CODES)[number]) + dayIndex(first, d)) % 7) + 7) % 7 : null);
+  const isWeekend = (d: string) => (studyWeekday(d) ?? 0) >= 5;
   const activeInMonth = monthDays.filter((d) => byDate.has(d)).length;
   const inStudy = monthDays.map(dayNo).filter((n) => n >= 1 && n <= totalDays);
   const monthStudyDays = inStudy.length ? `Study days ${inStudy[0]}–${inStudy[inStudy.length - 1]}` : 'Outside the study period';
@@ -207,7 +218,7 @@ function Calendar({
   const heading =
     view === 'day'
       ? inStudyDay(date)
-        ? `Day ${dayNo(date)}`
+        ? `Day ${dayNo(date)}${studyWeekday(date) != null ? ` · ${WD_LONG[studyWeekday(date)!]}` : ''}`
         : 'Outside the study period'
       : view === 'week'
         ? weekDays.length
@@ -286,6 +297,7 @@ function Calendar({
         byDate={byDate}
         selected={burstMode ? activeDates : view === 'month' ? monthDays : columns}
         onPick={setDate}
+        studyWeekday={studyWeekday}
         focus={focusSurvey ? { has: (d) => (byDate.get(d) ?? []).some((w) => colorKey(w.event) === focusSurvey), color: colors.get(focusSurvey)! } : null}
       />
 
@@ -316,6 +328,7 @@ function Calendar({
                     onPick={(d) => (setDate(d), setView('day'))}
                     burst
                     lastDay={b.end}
+                    studyWeekday={studyWeekday}
                   />
                 </section>
               );
@@ -333,14 +346,16 @@ function Calendar({
             dayNo={(d) => (dayNo(d) >= 1 && dayNo(d) <= totalDays ? dayNo(d) : null)}
             focus={focusSurvey}
             onPick={(d) => (setDate(d), setView('day'))}
+            studyWeekday={studyWeekday}
           />
         ) : (
         <div className="dm-cal" style={{ '--hour': `${HOUR_PX}px` } as CSSProperties}>
           <div className={`dm-cal-head ${view === 'week' ? 'is-week' : ''}`}>
             <span />
             {days.map(({ date: d }) => (
-              <button key={d} className={`dm-cal-dayhead ${d === date ? 'is-current' : ''}`} onClick={() => (setDate(d), setView('day'))} disabled={view === 'day'}>
+              <button key={d} className={`dm-cal-dayhead ${d === date ? 'is-current' : ''} ${isWeekend(d) ? 'is-weekend' : ''}`} onClick={() => (setDate(d), setView('day'))} disabled={view === 'day'}>
                 <strong>{inStudyDay(d) ? `Day ${dayNo(d)}` : ''}</strong>
+                {studyWeekday(d) != null && <em>{WD_SHORT[studyWeekday(d)!]}</em>}
               </button>
             ))}
           </div>
@@ -408,6 +423,12 @@ function Calendar({
               <dl className="dm-dl">
                 <dt>Window</dt>
                 <dd>{sel.windowText}</dd>
+                {sel.intervention && (
+                  <>
+                    <dt>Decision point</dt>
+                    <dd>Randomly picks: {sel.intervention}</dd>
+                  </>
+                )}
                 <dt>Repeats</dt>
                 <dd>
                   {sel.recurrenceText}
@@ -528,7 +549,9 @@ function StudyStrip({
   selected,
   onPick,
   focus,
+  studyWeekday,
 }: {
+  studyWeekday: StudyWeekday;
   first: string;
   totalDays: number;
   byDate: Map<string, unknown[]>;
@@ -549,11 +572,11 @@ function StudyStrip({
           return (
             <button
               key={d}
-              className={`dm-strip-day ${selected.includes(d) ? 'is-on' : ''} ${focus ? (inFocus ? 'is-focus' : 'is-faded') : ''}`}
+              className={`dm-strip-day ${selected.includes(d) ? 'is-on' : ''} ${focus ? (inFocus ? 'is-focus' : 'is-faded') : ''} ${(studyWeekday(d) ?? 0) >= 5 ? 'is-weekend' : ''}`}
               style={inFocus ? ({ '--fc': focus!.color } as CSSProperties) : n ? ({ '--n': 0.3 + 0.7 * (n / max) } as CSSProperties) : undefined}
               data-empty={n ? undefined : ''}
               onClick={() => onPick(d)}
-              title={`Day ${i + 1}: ${n ? `${n} survey${n === 1 ? '' : 's'}` : 'no surveys'}`}
+              title={`Day ${i + 1}${studyWeekday(d) != null ? ` (${WD_LONG[studyWeekday(d)!]})` : ''}: ${n ? `${n} survey${n === 1 ? '' : 's'}` : 'no surveys'}`}
               aria-label={`Day ${i + 1}`}
             />
           );
@@ -577,7 +600,9 @@ function MonthGrid({
   onPick,
   burst = false,
   lastDay,
+  studyWeekday,
 }: {
+  studyWeekday: StudyWeekday;
   /** Burst layout: rows are runs of 7 study days (not calendar weeks), each cell names its weekday. */
   burst?: boolean;
   /** In burst layout, days after this are padding and drawn empty. */
@@ -596,10 +621,10 @@ function MonthGrid({
   const MAX = 5;
   return (
     <div className="dm-month">
-      {!burst && (
+      {!burst && weeks[0] && studyWeekday(weeks[0][0]!) != null && (
         <div className="dm-month-head">
-          {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((w) => (
-            <span key={w}>{w}</span>
+          {weeks[0].map((d) => (
+            <span key={d}>{WD_SHORT[studyWeekday(d)!]}</span>
           ))}
         </div>
       )}
@@ -619,10 +644,10 @@ function MonthGrid({
             const n = dayNo(d);
             if (burst && lastDay && d > lastDay) return <span key={d} className="dm-month-day is-pad" aria-hidden="true" />;
             return (
-              <button key={d} className={`dm-month-day ${burst || d.slice(0, 7) === month ? '' : 'is-other'} ${d === today ? 'is-current' : ''} ${list.length ? '' : 'is-empty'}`} onClick={() => onPick(d)} title="Open this day">
+              <button key={d} className={`dm-month-day ${burst || d.slice(0, 7) === month ? '' : 'is-other'} ${d === today ? 'is-current' : ''} ${list.length ? '' : 'is-empty'} ${(studyWeekday(d) ?? 0) >= 5 ? 'is-weekend' : ''}`} onClick={() => onPick(d)} title="Open this day">
                 <span className="dm-month-date">
-                  {burst ? <strong>{n ? `Day ${n}` : ''}</strong> : <strong>{Number(d.slice(8, 10))}</strong>}
-                  {!burst && n && <em>Day {n}</em>}
+                  <strong>{n ? `Day ${n}` : ''}</strong>
+                  {studyWeekday(d) != null && n && <em>{WD_SHORT[studyWeekday(d)!]}</em>}
                 </span>
                 {list.slice(0, list.length > MAX ? MAX - 1 : MAX).map(([k, g]) => (
                   <span

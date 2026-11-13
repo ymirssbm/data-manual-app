@@ -60,7 +60,11 @@ function legacyKey(): string {
   }
 }
 
-export function AiPage({ spec, onLoaded, onEdit, notify, documents = [] }: Props) {
+/**
+ * The AI chat's state and actions, held by the app so the AI page and the floating chat share one
+ * conversation (and a reply keeps streaming while you move between pages).
+ */
+export function useAiChat({ spec, onLoaded, onEdit, notify, documents = [] }: Props) {
   const [useDocs, setUseDocs] = useState(true);
   const [config, setConfig] = useState<AiConfig>(loadConfig);
   const vault = useVault();
@@ -73,7 +77,6 @@ export function AiPage({ spec, onLoaded, onEdit, notify, documents = [] }: Props
   const [busy, setBusy] = useState<string | null>(null);
   const [streaming, setStreaming] = useState('');
   const abort = useRef<AbortController | null>(null);
-  const chatEnd = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     try {
@@ -103,12 +106,6 @@ export function AiPage({ spec, onLoaded, onEdit, notify, documents = [] }: Props
       .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [vault]);
-  // Scroll only the chat box (never the page), and return nothing from the effect.
-  useEffect(() => {
-    const box = chatEnd.current?.parentElement;
-    if (box) box.scrollTop = box.scrollHeight;
-  }, [messages, streaming]);
-
   const set = <K extends keyof AiConfig>(k: K, v: AiConfig[K]) => setConfig((c) => ({ ...c, [k]: v }));
 
   const run = async (prompt: string, base: StudySpec | null, useHistory: boolean) => {
@@ -163,6 +160,12 @@ export function AiPage({ spec, onLoaded, onEdit, notify, documents = [] }: Props
     void run(p, spec, true);
   };
 
+  return { spec, documents, useDocs, setUseDocs, config, setConfig, set, vault, messages, setMessages, input, setInput, settingsOpen, setSettingsOpen, busy, streaming, abort, useStudy, lastPromptBefore, modelLabel, send };
+}
+export type AiChat = ReturnType<typeof useAiChat>;
+
+export function AiPage({ chat, assistantHidden, onAssistantHidden }: { chat: AiChat; assistantHidden?: boolean; onAssistantHidden?(hidden: boolean): void }) {
+  const { spec, config, setConfig, set, vault, messages, setMessages, settingsOpen, setSettingsOpen, busy, modelLabel } = chat;
   return (
     <>
       <PageTitle
@@ -256,63 +259,88 @@ export function AiPage({ spec, onLoaded, onEdit, notify, documents = [] }: Props
       </section>
 
       <Box title="Chat" tools={<span className="dm-chat-context">{spec ? `Working on: ${spec['Study.Metadata']['Study.Name']}` : 'No study loaded: a new one will be created'}</span>}>
-        <div className="dm-chat">
-          {messages.map((m, i) => (
-            <div key={i} className={`dm-msg dm-msg-${m.role} ${m.error ? 'is-error' : ''}`}>
-              <div className="dm-msg-text">{m.text}</div>
-              {m.result && <ResultCard result={m.result} repairs={m.repairs ?? 0} base={m.base ?? null} onUse={() => useStudy(m.result!, lastPromptBefore(i), m.base)} />}
-            </div>
-          ))}
-          {busy && (
-            <div className="dm-msg dm-msg-assistant is-pending">
-              {streaming && <div className="dm-msg-text">{streaming}</div>}
-              <div className="dm-msg-status">
-                <span className="dm-spinner" /> {busy}
-                <button className="dm-link-btn" onClick={() => abort.current?.abort()}>
-                  Stop
-                </button>
-              </div>
-            </div>
-          )}
-          <div ref={chatEnd} />
-        </div>
-        <form
-          className="dm-composer"
-          onSubmit={(e) => {
-            e.preventDefault();
-            send();
-          }}
-        >
-          <textarea
-            rows={2}
-            value={input}
-            placeholder={spec ? 'Describe a change to this study, or a new study…' : 'Describe the study you want to create…'}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                send();
-              }
-            }}
-          />
-          <button className="dm-btn dm-btn-primary" type="submit" disabled={!!busy || !input.trim()}>
-            Send
-          </button>
-        </form>
-        <div className="dm-chips">
-          <button onClick={() => setInput(EXAMPLE_GENERATE)}>Example: generate a study</button>
-          <button onClick={() => setInput(EXAMPLE_MODIFY)} disabled={!spec}>
-            Example: modify this study
-          </button>
-          <button onClick={() => setMessages((m) => [...m, { role: 'assistant', text: HELP }])}>What can it do?</button>
-          {documents.length > 0 && (
-            <label className="dm-check" title={documents.map((d) => d.name).join(', ')}>
-              <input type="checkbox" checked={useDocs} onChange={(e) => setUseDocs(e.target.checked)} /> Let the AI read the {documents.length} attached document{documents.length === 1 ? '' : 's'}
-            </label>
-          )}
-          <span className="dm-hint dm-push-right">Enter to send · Shift+Enter for a new line</span>
-        </div>
+        <ChatView chat={chat} />
+        {onAssistantHidden && (
+          <label className="dm-check dm-mt">
+            <input type="checkbox" checked={!assistantHidden} onChange={(e) => onAssistantHidden(!e.target.checked)} /> Show the ✦ assistant button on other pages
+          </label>
+        )}
       </Box>
+    </>
+  );
+}
+
+/** The conversation and the message box. */
+export function ChatView({ chat, compact = false }: { chat: AiChat; compact?: boolean }) {
+  const { spec, documents, useDocs, setUseDocs, messages, setMessages, input, setInput, busy, streaming, abort, useStudy, lastPromptBefore, send } = chat;
+  const chatEnd = useRef<HTMLDivElement>(null);
+  // Scroll only the chat box (never the page), and return nothing from the effect.
+  useEffect(() => {
+    const box = chatEnd.current?.parentElement;
+    if (box) box.scrollTop = box.scrollHeight;
+  }, [messages, streaming]);
+  return (
+    <>
+      <div className="dm-chat">
+        {messages.map((m, i) => (
+          <div key={i} className={`dm-msg dm-msg-${m.role} ${m.error ? 'is-error' : ''}`}>
+            <div className="dm-msg-text">{m.text}</div>
+            {m.result && <ResultCard result={m.result} repairs={m.repairs ?? 0} base={m.base ?? null} onUse={() => useStudy(m.result!, lastPromptBefore(i), m.base)} />}
+          </div>
+        ))}
+        {busy && (
+          <div className="dm-msg dm-msg-assistant is-pending">
+            {streaming && <div className="dm-msg-text">{streaming}</div>}
+            <div className="dm-msg-status">
+              <span className="dm-spinner" /> {busy}
+              <button className="dm-link-btn" onClick={() => abort.current?.abort()}>
+                Stop
+              </button>
+            </div>
+          </div>
+        )}
+        <div ref={chatEnd} />
+      </div>
+      <form
+        className="dm-composer"
+        onSubmit={(e) => {
+          e.preventDefault();
+          send();
+        }}
+      >
+        <textarea
+          rows={2}
+          value={input}
+          placeholder={spec ? 'Describe a change to this study, or a new study…' : 'Describe the study you want to create…'}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              send();
+            }
+          }}
+        />
+        <button className="dm-btn dm-btn-primary" type="submit" disabled={!!busy || !input.trim()}>
+          Send
+        </button>
+      </form>
+      <div className="dm-chips">
+        {!compact && (
+          <>
+            <button onClick={() => setInput(EXAMPLE_GENERATE)}>Example: generate a study</button>
+            <button onClick={() => setInput(EXAMPLE_MODIFY)} disabled={!spec}>
+              Example: modify this study
+            </button>
+          </>
+        )}
+        <button onClick={() => setMessages((m) => [...m, { role: 'assistant', text: HELP }])}>What can it do?</button>
+        {documents.length > 0 && (
+          <label className="dm-check" title={documents.map((d) => d.name).join(', ')}>
+            <input type="checkbox" checked={useDocs} onChange={(e) => setUseDocs(e.target.checked)} /> Let the AI read the {documents.length} attached document{documents.length === 1 ? '' : 's'}
+          </label>
+        )}
+        {!compact && <span className="dm-hint dm-push-right">Enter to send · Shift+Enter for a new line</span>}
+      </div>
     </>
   );
 }

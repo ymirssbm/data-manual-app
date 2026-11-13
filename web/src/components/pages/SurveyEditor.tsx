@@ -14,6 +14,7 @@ import { Field, Icon, PageTitle } from '../ui';
 import { download } from '../util';
 import { NoStudy } from './common';
 import { LogicEditor } from '../LogicEditor';
+import { BlockSettings } from '../BlockSettings';
 import { questionOption, SearchPicker } from '../SearchPicker';
 import { DeleteDialog } from '../StudyEditDialogs';
 import { deleteItems } from '../../editor/data';
@@ -167,6 +168,20 @@ export function SurveyEditorPage({ spec, go, onEdit, notify, target, onTargetUse
             </Field>
             <Field label="Survey ID">
               <input className="dm-input" value={survey['Survey.Name']} onChange={(e) => change({ ...survey, 'Survey.Name': e.target.value.replace(/\s+/g, '_') })} />
+            </Field>
+            <Field label="Kind">
+              <select
+                className="dm-input"
+                value={survey['Survey.Role'] ?? 'Assessment'}
+                onChange={(e) => {
+                  const { 'Survey.Role': _old, ...rest } = survey;
+                  change(e.target.value === 'Intervention' ? { ...rest, 'Survey.Role': 'Intervention' } : rest, e.target.value === 'Intervention' ? 'Marked the survey as an intervention' : 'Marked the survey as an assessment');
+                }}
+                title="An intervention delivers content (a message, prompt or activity) rather than measuring"
+              >
+                <option value="Assessment">Assessment (questions)</option>
+                <option value="Intervention">Intervention (content delivered)</option>
+              </select>
             </Field>
           </div>
           <p className="dm-hint dm-editor-tip">Click to select · Ctrl-click or Shift-click to select several, then + Block, or press Delete.</p>
@@ -438,6 +453,7 @@ export function ItemForm({
           </Field>
         </>
       )}
+      {block && <BlockSettings spec={spec} survey={survey} block={q} set={set} />}
       <LogicEditor spec={spec} surveyName={surveyName} itemId={itemId} onSpecChange={(next) => onSpecChange(next)} />
       <div className="dm-editor-form-actions">
         <button className="dm-btn dm-btn-secondary dm-btn-sm" onClick={() => onChange(moveItem(survey, itemId, -1), `Moved ${q['Question.ID']} up`)}>

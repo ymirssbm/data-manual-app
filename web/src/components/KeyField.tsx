@@ -4,6 +4,7 @@
 // which then lives only in memory for this tab.
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { deleteVaultKey, isVaultRef, keyFromFile, KIND_LABELS, loadVault, openVaultFolder, saveVaultKey, setVaultFolder, vaultRef, type KeyEntry, type KeyKind, type KeyVault } from '../connectors/keys';
+import { forgetKey, listEncryptedKeys, rememberKey, unlockKey } from '../connectors/browserKeyStore';
 import { Icon } from './ui';
 
 // ---- One shared copy of the saved-key list for the whole app.
@@ -139,6 +140,7 @@ export function KeyField({ kind, value, onChange, meta = {}, suggestedLabel, lab
           </div>
         </div>
       )}
+      {vault === null && <BrowserKey kind={kind} value={value} onChange={onChange} label={suggestedLabel ?? `${KIND_LABELS[kind]} key`} />}
       {(mode === 'once' || vault === null) && (
         <div className="dm-key-once">
           <input className="dm-input" type="password" value={isVaultRef(value) ? '' : value} onChange={(e) => onChange(e.target.value)} placeholder="Paste the key" autoComplete="off" aria-label="Key" />
@@ -152,7 +154,7 @@ export function KeyField({ kind, value, onChange, meta = {}, suggestedLabel, lab
       {error && <span className="dm-bad dm-hint">{error}</span>}
       <span className="dm-hint">
         {vault === null
-          ? "Keys can't be saved here (no local app server), so this one is forgotten when you close the tab."
+          ? 'Without “Remember”, the key is forgotten when you close the tab.'
           : mode === 'once'
             ? 'Used for this session only and never stored.'
             : mode === 'add'
@@ -168,7 +170,7 @@ export function SavedKeysList() {
   const vault = useVault();
   const [error, setError] = useState<string | null>(null);
   if (vault === undefined) return <p className="dm-hint">Loading…</p>;
-  if (vault === null) return <p className="dm-hint">This online version can't save keys: a key you enter is used for that tab only and forgotten when you close it. The installed app saves keys in your computer's secure storage.</p>;
+  if (vault === null) return <BrowserKeysList />;
   return (
     <>
       {vault.keys.length ? (
@@ -278,5 +280,106 @@ function KeyFolderSetting({ vault }: { vault: KeyVault }) {
       {editing && <p className="dm-hint">Any keys already saved move with it. The folder is created if it doesn't exist. Keys encrypted by Windows only open for your Windows account, wherever the folder is.</p>}
       {error && <p className="dm-bad dm-hint">{error}</p>}
     </div>
+  );
+}
+
+/**
+ * The online version (no local app server): optionally remember a key in this browser, encrypted
+ * with a passphrase, and unlock it on later visits.
+ */
+function BrowserKey({ kind, value, onChange, label }: { kind: KeyKind; value: string; onChange(v: string): void; label: string }) {
+  const [stored, setStored] = useState(() => listEncryptedKeys().find((k) => k.kind === kind));
+  const [pass, setPass] = useState('');
+  const [pass2, setPass2] = useState('');
+  const [remember, setRemember] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const run = async (f: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await f();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  // A remembered key that isn't unlocked yet.
+  if (stored && !value)
+    return (
+      <form className="dm-key-unlock" onSubmit={(e) => (e.preventDefault(), void run(async () => (onChange(await unlockKey(stored, pass)), setPass(''))))}>
+        <span className="dm-hint">
+          <Icon name="lock" size={13} /> {stored.label} ({stored.hint}) is saved in this browser, encrypted.
+        </span>
+        <div className="dm-key-secret">
+          <input className="dm-input dm-input-sm" type="password" value={pass} onChange={(e) => setPass(e.target.value)} placeholder="Passphrase" autoComplete="current-password" aria-label="Passphrase" />
+          <button className="dm-btn dm-btn-primary dm-btn-sm" disabled={busy || !pass}>
+            {busy ? 'Unlocking…' : 'Unlock'}
+          </button>
+        </div>
+        <button type="button" className="dm-link-btn" onClick={() => (forgetKey(kind), setStored(undefined))}>
+          Forget the saved key
+        </button>
+        {error && <span className="dm-bad dm-hint">{error}</span>}
+      </form>
+    );
+  if (stored)
+    return (
+      <span className="dm-hint">
+        <Icon name="lock" size={13} /> Unlocked: {stored.label} ({stored.hint}), saved encrypted in this browser.{' '}
+        <button type="button" className="dm-link-btn" onClick={() => (forgetKey(kind), setStored(undefined), onChange(''))}>
+          Forget it
+        </button>
+      </span>
+    );
+  if (!value || isVaultRef(value)) return null;
+  return (
+    <div className="dm-key-remember">
+      <label className="dm-check">
+        <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> Remember this key in this browser, encrypted with a passphrase
+      </label>
+      {remember && (
+        <form className="dm-key-secret" onSubmit={(e) => (e.preventDefault(), void run(async () => setStored(await rememberKey(kind, label, value, pass))))}>
+          <input className="dm-input dm-input-sm" type="password" value={pass} onChange={(e) => setPass(e.target.value)} placeholder="Passphrase (8+ characters)" autoComplete="new-password" aria-label="Passphrase" />
+          <input className="dm-input dm-input-sm" type="password" value={pass2} onChange={(e) => setPass2(e.target.value)} placeholder="Again" autoComplete="new-password" aria-label="Passphrase again" />
+          <button className="dm-btn dm-btn-primary dm-btn-sm" disabled={busy || pass.length < 8 || pass !== pass2}>
+            {busy ? 'Encrypting…' : 'Remember'}
+          </button>
+        </form>
+      )}
+      {remember && <span className="dm-hint">Only the encrypted key is kept; the passphrase is never stored, so it can’t be recovered. You’ll type it once per visit.</span>}
+      {error && <span className="dm-bad dm-hint">{error}</span>}
+    </div>
+  );
+}
+
+/** Settings (online version): keys remembered in this browser, encrypted, with a way to forget each. */
+function BrowserKeysList() {
+  const [keys, setKeys] = useState(listEncryptedKeys);
+  return (
+    <>
+      <p className="dm-hint">
+        This online version has no access to your computer's secure key storage. A key is used for the tab you enter it in, unless you choose <strong>Remember</strong>: then it's kept in this
+        browser encrypted with a passphrase you choose (asked for once per visit). The installed app saves keys in your computer's secure storage instead.
+      </p>
+      {keys.length > 0 && (
+        <ul className="dm-keys">
+          {keys.map((k) => (
+            <li key={k.kind}>
+              <span>
+                <strong>{k.label}</strong>
+                <span className="dm-hint">
+                  {KIND_LABELS[k.kind]} · {k.hint} · encrypted in this browser
+                </span>
+              </span>
+              <button className="dm-icon-btn" aria-label={`Forget ${k.label}`} title="Forget this key" onClick={() => (forgetKey(k.kind), setKeys(listEncryptedKeys()))}>
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 }

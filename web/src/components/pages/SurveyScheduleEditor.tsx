@@ -103,6 +103,7 @@ export function EventFields({ spec, event: e, onSpecChange, onRemoved }: { spec:
       <label className="dm-check">
         <input type="checkbox" checked={!!x['User.Specified']} onChange={(ev) => set({}, { 'User.Specified': ev.target.checked || undefined })} /> Participants choose the time
       </label>
+      <DecisionPoint spec={spec} options={x['Intervention.Options'] as InterventionOption[] | undefined} surveyName={surveyName} onChange={(o) => set({}, { 'Intervention.Options': o })} />
       {rule && (
         <p className="dm-hint">
           Sent only when <code>{rule.source}</code> {opWords(rule.op)} {rule.value}. Change the rule under that survey’s “Sent when” or on the question’s logic.
@@ -129,5 +130,82 @@ export function ScheduleEditor({ spec, survey, onSpecChange }: { spec: StudySpec
         + Add a delivery window
       </button>
     </div>
+  );
+}
+
+type InterventionOption = { 'Survey.Name'?: string | null; Probability: number; Label?: string };
+
+/**
+ * A JITAI decision point: at this window (and, when triggered, only when its rule is met) one
+ * intervention is picked at random with the given probabilities, or none.
+ */
+function DecisionPoint({ spec, options, surveyName, onChange }: { spec: StudySpec; options: InterventionOption[] | undefined; surveyName: string; onChange(o: InterventionOption[] | undefined): void }) {
+  const interventions = spec.surveys.filter((s) => s['Survey.Role'] === 'Intervention');
+  const total = (options ?? []).reduce((n, o) => n + o.Probability, 0);
+  const setAt = (i: number, patch: Partial<InterventionOption>) => onChange(options!.map((o, j) => (j === i ? { ...o, ...patch } : o)));
+  return (
+    <>
+      <label className="dm-check">
+        <input
+          type="checkbox"
+          checked={!!options}
+          onChange={(e) => {
+            if (!e.target.checked) return onChange(undefined);
+            const first = interventions.find((s) => s['Survey.Name'] === surveyName) ?? interventions[0];
+            onChange([
+              { 'Survey.Name': first?.['Survey.Name'] ?? null, Probability: 0.5, Label: first ? label(first) : 'Intervention' },
+              { 'Survey.Name': null, Probability: 0.5, Label: 'No intervention' },
+            ]);
+          }}
+        />{' '}
+        Decision point: randomly pick an intervention (JITAI)
+      </label>
+      {options && (
+        <div className="dm-decision">
+          {!interventions.length && <p className="dm-hint">No survey is marked as an intervention yet. Set a survey’s Kind to Intervention in the Survey Editor.</p>}
+          {options.map((o, i) => (
+            <div key={i} className="dm-skip-row">
+              <select
+                className="dm-input dm-input-sm"
+                value={o['Survey.Name'] ?? ''}
+                onChange={(e) => {
+                  const s = spec.surveys.find((x) => x['Survey.Name'] === e.target.value);
+                  setAt(i, { 'Survey.Name': e.target.value || null, Label: s ? label(s) : 'No intervention' });
+                }}
+                aria-label="Intervention"
+              >
+                <option value="">No intervention</option>
+                {spec.surveys
+                  .filter((s) => s['Survey.Role'] === 'Intervention' || s['Survey.Name'] === o['Survey.Name'])
+                  .map((s) => (
+                    <option key={s['Survey.Name']} value={s['Survey.Name']}>
+                      {label(s)}
+                    </option>
+                  ))}
+              </select>
+              <input
+                className="dm-input dm-input-sm dm-input-num"
+                type="number"
+                min={0}
+                max={100}
+                value={Math.round(o.Probability * 1000) / 10}
+                onChange={(e) => setAt(i, { Probability: Math.min(1, Math.max(0, (Number(e.target.value) || 0) / 100)) })}
+                aria-label="Chance (%)"
+              />
+              <span>%</span>
+              <button className="dm-icon-btn" aria-label="Remove option" disabled={options.length < 2} onClick={() => onChange(options.filter((_, j) => j !== i))}>
+                ×
+              </button>
+            </div>
+          ))}
+          <div className="dm-skip-row">
+            <button className="dm-link-btn" onClick={() => onChange([...options, { 'Survey.Name': null, Probability: 0, Label: 'No intervention' }])}>
+              + Add an option
+            </button>
+            <span className={`dm-hint ${Math.abs(total - 1) > 0.001 ? 'dm-dirty' : ''}`}>Total {Math.round(total * 1000) / 10}%{Math.abs(total - 1) > 0.001 ? ' (should be 100%)' : ''}</span>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

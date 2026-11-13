@@ -7,6 +7,7 @@
 // collapsible pages/surveys/blocks, and colour/font themes. One file with
 // inline CSS + a little inline JS; prints to PDF with everything expanded.
 import {
+  blockNotes,
   blockPath,
   flowKnown,
   isBlock,
@@ -20,8 +21,9 @@ import {
   type StudySpec,
   type SurveyModel,
 } from '../core';
-import { buildStudySchedule } from './schedule';
-import { generateFlowchart } from './flowchart';
+import { buildStudySchedule, dayIndex } from './schedule';
+import { generateStudyMap, studyBursts } from './studyMap';
+import { flowchartBlocks, flowchartContext, generateFlowchart } from './flowchart';
 import { dataOverview, describeItem, enrollment, hasResponseData, indexResponses, surveyTimeline, type EnrollmentPoint, type ItemDescriptives, type SurveyTimeline } from './descriptives';
 
 export const QUESTION_TYPES = [
@@ -239,6 +241,14 @@ export interface CodebookText {
 export interface CodebookExtras {
   /** Pre-rendered flowchart SVG markup keyed by Survey.Name (rendering needs a DOM). */
   flowchartSvgs?: Record<string, string>;
+  /** Pre-rendered study map(s): the whole study, then its bursts' surveys and links, with captions. */
+  studyMapSvgs?: Array<{ caption: string; svg: string }>;
+  /**
+   * Interactive flowcharts (pan, zoom, minimap, folding blocks, zooming from the study into a
+   * burst): every view pre-rendered, keyed by Survey.Name, plus STUDY_MAP_KEY for the study map.
+   * Made from flowViewPlans(); without them the codebook shows plain pictures.
+   */
+  flowViews?: Record<string, RenderedFlowView[]>;
   /**
    * Without a DOM (the MCP server), embed each flowchart's Mermaid code and let the codebook draw it
    * when opened, with Mermaid loaded from a CDN. Needs internet when the codebook is viewed.
@@ -399,7 +409,7 @@ export function generateCodebookHtml(
   custom('funding');
   if (o.contact && contact) out.push(page('Contact', multiline(contact), ['contact']));
   custom('contact');
-  if (o.studySchedule && spec.schedules.length) out.push(page('Study Schedule', scheduleHtml(spec, models), ['studySchedule']));
+  if (o.studySchedule && spec.schedules.length) out.push(page('Study Schedule', scheduleHtml(spec, models, o.flowcharts ? studyMapFigures(spec, extras) : ''), ['studySchedule']));
   custom('studySchedule');
   if (o.participationPlots && hasResponseData(spec)) {
     const enrolled = enrollment(spec);
@@ -434,14 +444,16 @@ export function generateCodebookHtml(
   const varTocMark = toc.length;
   const varId = entry('Variable List', 1);
   const surveysHtml: string[] = [];
+  const surveyLabelOf = (n: string) => spec.surveys.find((s) => s['Survey.Name'] === n)?.['Survey.LongName'] || n;
   for (const m of models) {
     const surveyMark = toc.length;
     const sid = entry(m.label, 2, m.label);
     let kept = 0;
     let dropped = 0;
     const parts: string[] = [];
-    const svg = flowKnown(m.survey) ? extras.flowchartSvgs?.[m.name] : undefined;
-    const lazy = !svg && extras.flowchartsInBrowser && flowKnown(m.survey) ? `<pre class="cb-mermaid">${esc(generateFlowchart(m.survey))}</pre>` : '';
+    const views = flowKnown(m.survey) ? extras.flowViews?.[m.name] : undefined;
+    const svg = views?.length ? flowViewer(views) : flowKnown(m.survey) ? extras.flowchartSvgs?.[m.name] : undefined;
+    const lazy = !svg && extras.flowchartsInBrowser && flowKnown(m.survey) ? `<pre class="cb-mermaid">${esc(generateFlowchart(m.survey, flowchartContext(spec, m.name)))}</pre>` : '';
     if (o.flowcharts && (svg || lazy)) {
       const pid = `flow-${slug(m.name)}`;
       parts.push(`<div class="cb-anchor cb-flow"${optAttr('flowcharts')}>${toggleButton(pid, 'Click to view survey flowchart', t.expandVisuals)}<div id="${pid}" class="cb-visuals" ${t.expandVisuals ? '' : 'hidden'}><div class="cb-flowchart">${svg ?? lazy}</div></div></div>`);
@@ -471,7 +483,9 @@ export function generateCodebookHtml(
         closeBlock();
         if (path) {
           const blockItem = m.byId.get(q.Parent ?? '');
-          openBlock = { path, items: [], id: entry(`Block: ${path}`, 3, `${m.label} block ${path}`), note: blockItem && o.skipLogic ? skipNote(m, blockItem['Item.ID']) : '' };
+          const behaviour = blockItem ? blockNotes(m, blockItem['Item.ID'], surveyLabelOf, true) : [];
+          const note = (blockItem && o.skipLogic ? skipNote(m, blockItem['Item.ID']) : '') + behaviour.map((b) => `<p class="cb-cond"><span class="cb-cond-tag">${b.startsWith('Floating') ? 'Floating' : 'Repeats'}</span> ${esc(b.replace(/^Floating: /, ''))}</p>`).join('');
+          openBlock = { path, items: [], id: entry(`Block: ${path}`, 3, `${m.label} block ${path}`), note };
         }
       }
       const stats = responses ? describeItem(q, responses.get(q['Question.ID']), overview?.participants ?? 0) : null;
@@ -1085,15 +1099,104 @@ function autoSummary(models: SurveyModel[], overview: ReturnType<typeof dataOver
     .join('')}</tbody></table>`;
 }
 
-function scheduleHtml(spec: StudySpec, models: SurveyModel[]): string {
+/** The study map figures: pre-rendered, or (without a DOM) Mermaid code drawn when the codebook opens. */
+function studyMapFigures(spec: StudySpec, extras: CodebookExtras): string {
+  const views = extras.flowViews?.[STUDY_MAP_KEY];
+  if (views?.length) return `<figure class="cb-study-map"${optAttr('flowcharts')}>${flowViewer(views, 'Whole study')}</figure>`;
+  const figs = extras.studyMapSvgs?.length
+    ? extras.studyMapSvgs
+    : extras.flowchartsInBrowser
+      ? studyMapCodes(spec).map((m) => ({ caption: m.caption, svg: `<pre class="cb-mermaid">${esc(m.code)}</pre>` }))
+      : [];
+  return figs.map((f) => `<figure class="cb-study-map"${optAttr('flowcharts')}><div class="cb-flowchart">${f.svg}</div><figcaption>${esc(f.caption)}</figcaption></figure>`).join('');
+}
+
+export const STUDY_MAP_KEY = '\u0000study';
+
+/** One view of an interactive flowchart, before rendering: its Mermaid code and what its nodes open. */
+export interface FlowViewPlan {
+  key: string;
+  caption?: string;
+  code: string;
+  /** Mermaid node/cluster id -> another view's key, or "go:<anchor id>" to jump in the codebook. */
+  links: Record<string, string>;
+}
+export type RenderedFlowView = Omit<FlowViewPlan, 'code'> & { svg: string };
+
+/**
+ * Every view an interactive flowchart needs, pre-rendered because the codebook has no drawing
+ * library: a survey's flowchart unfolded, with each block folded on its own, and with all folded;
+ * the study map's whole-study view and each burst.
+ */
+export function flowViewPlans(spec: StudySpec): Record<string, FlowViewPlan[]> {
+  const out: Record<string, FlowViewPlan[]> = {};
+  for (const survey of spec.surveys.filter(flowKnown)) {
+    const ctx = flowchartContext(spec, survey['Survey.Name']);
+    const blocks = flowchartBlocks(survey);
+    const plans: FlowViewPlan[] = [{ key: 'base', code: generateFlowchart(survey, ctx), links: Object.fromEntries(blocks.map((b) => [b.clusterId, `fold:${b.itemId}`])) }];
+    for (const b of blocks)
+      plans.push({
+        key: `fold:${b.itemId}`,
+        code: generateFlowchart(survey, { ...ctx, collapsed: [b.itemId] }),
+        links: { [b.collapsedId]: 'base', ...Object.fromEntries(blocks.filter((o) => o !== b).map((o) => [o.clusterId, `fold:${o.itemId}`])) },
+      });
+    if (blocks.length > 1) plans.push({ key: 'all', code: generateFlowchart(survey, { ...ctx, collapsed: blocks.map((b) => b.itemId) }), links: Object.fromEntries(blocks.map((b) => [b.collapsedId, 'base'])) });
+    out[survey['Survey.Name']] = plans;
+  }
+  if (spec.schedules.length) {
+    const bursts = studyBursts(spec);
+    const target = (id: string) => (id.startsWith('burst:') ? id : `go:survey-${slug(id.slice(7))}`);
+    const plans: FlowViewPlan[] = [];
+    const linksOf = (m: ReturnType<typeof generateStudyMap>) => Object.fromEntries(m.nodes.map((n) => [n.nodeId, target(n.itemId)]));
+    if (bursts.length > 1) {
+      const m = generateStudyMap(spec);
+      plans.push({ key: 'study', caption: 'The study: its bursts and the gaps between them. Click a burst to see its surveys.', code: m.code, links: linksOf(m) });
+    }
+    for (const b of bursts.length ? bursts : [null]) {
+      const m = generateStudyMap(spec, b?.index ?? null);
+      plans.push({ key: b ? `burst:${b.index}` : 'burst', caption: `${b && bursts.length > 1 ? `Burst ${b.index}: its` : 'The'} surveys and what links them. Click a survey to go to its questions.`, code: m.code, links: linksOf(m) });
+    }
+    if (plans.length) out[STUDY_MAP_KEY] = plans;
+  }
+  return out;
+}
+
+/** An interactive flowchart: the first view shown (and printed), the others switched to by clicking. */
+function flowViewer(views: RenderedFlowView[], backLabel?: string): string {
+  const links = Object.fromEntries(views.map((v) => [v.key, v.links]));
+  const foldable = views.some((v) => v.key.startsWith('fold:'));
+  return `<div class="cb-fv" data-fv-start="${esc(views[0]!.key)}" data-fv-links="${esc(JSON.stringify(links))}"><div class="cb-fv-bar cb-screen-only">${backLabel ? `<button type="button" data-fv-act="back" hidden>‹ ${esc(backLabel)}</button>` : ''}${foldable ? `<button type="button" data-fv-act="all"${views.some((v) => v.key === 'all') ? '' : ' hidden'}>Collapse all blocks</button><button type="button" data-fv-act="base" hidden>Expand all</button>` : ''}<span class="cb-fv-hint">Drag to move · Ctrl + scroll to zoom${foldable ? ' · click a block to fold it' : ''}</span><span class="cb-fv-zoom"><button type="button" data-fv-act="in" aria-label="Zoom in">+</button><button type="button" data-fv-act="out" aria-label="Zoom out">−</button><button type="button" data-fv-act="fit">Fit</button></span></div><div class="cb-fv-port">${views
+    .map((v, i) => `<div class="cb-fv-stage${i ? ' cb-screen-only' : ''}" data-fv-view="${esc(v.key)}"${v.caption ? ` data-fv-caption="${esc(v.caption)}"` : ''}${i ? ' hidden' : ' data-fv-base'}>${v.svg}</div>`)
+    .join('')}<div class="cb-fv-mini cb-screen-only" aria-hidden="true"><img alt=""><span class="cb-fv-mini-box"></span></div></div>${views[0]!.caption ? `<p class="cb-fv-caption">${esc(views[0]!.caption)}</p>` : ''}</div>`;
+}
+
+/** Which study maps a codebook shows: the whole study, then one burst (or each, when they differ). */
+export function studyMapCodes(spec: StudySpec): Array<{ caption: string; code: string }> {
+  const bursts = studyBursts(spec);
+  const out: Array<{ caption: string; code: string }> = [];
+  if (bursts.length > 1) out.push({ caption: 'The study: its bursts and the gaps between them.', code: generateStudyMap(spec).code });
+  const same = bursts.every((b) => b.surveys.slice().sort().join() === bursts[0]!.surveys.slice().sort().join());
+  const shown = bursts.length > 1 && same ? bursts.slice(0, 1) : bursts;
+  for (const b of shown)
+    out.push({
+      caption: bursts.length > 1 && same ? `Each burst’s surveys and what links them (burst ${b.index} shown; the others are the same).` : bursts.length > 1 ? `Burst ${b.index}: its surveys and what links them.` : 'The surveys and what links them.',
+      code: generateStudyMap(spec, b.index).code,
+    });
+  return out;
+}
+
+function scheduleHtml(spec: StudySpec, models: SurveyModel[], maps = ''): string {
   const s = buildStudySchedule(spec);
   const label = (name: string | null) => (name ? (models.find((m) => m.name === name)?.label ?? name) : 'NA');
-  return `${s.firstDate ? `<p><strong>Study period:</strong> ${esc(s.firstDate)} to ${esc(s.lastDate)}</p>` : ''}
+  const bursts = studyBursts(spec);
+  const days = s.firstDate && s.lastDate ? dayIndex(s.firstDate, s.lastDate) + 1 : 0;
+  // Dates in a schedule are only an example, so the period is given in study days.
+  return `${days ? `<p><strong>Study period:</strong> ${days} study days${bursts.length > 1 ? ` in ${bursts.length} bursts` : ''}${s.day1Weekday ? `, starting on a ${({ MO: 'Monday', TU: 'Tuesday', WE: 'Wednesday', TH: 'Thursday', FR: 'Friday', SA: 'Saturday', SU: 'Sunday' } as const)[s.day1Weekday]}` : ''}</p>` : ''}${maps}
 <table class="cb-table"><thead><tr><th>Schedule</th><th>Event</th><th>Survey</th><th>Window</th><th>Repeats</th><th>Timing</th></tr></thead><tbody>${s.events
     .map(
       (e) =>
         `<tr><td>${esc(e.scheduleName)}</td><td>${'&nbsp;&nbsp;'.repeat(e.depth)}${esc(e.title)}</td><td>${esc(label(e.surveyName))}</td><td>${esc(e.windowText)}</td><td>${esc(e.recurrenceText)}</td><td>${esc(
-          [e.timingType, e.userSpecified ? 'participant-set' : null, e.trigger ? `trigger: ${e.trigger}` : null].filter(Boolean).join(', ') || 'NA',
+          [e.timingType, e.userSpecified ? 'participant-set' : null, e.trigger ? `trigger: ${e.trigger}` : null, e.intervention ? `decision point: ${e.intervention}` : null].filter(Boolean).join(', ') || 'NA',
         )}</td></tr>`,
     )
     .join('')}</tbody></table>`;
@@ -1203,7 +1306,7 @@ const CODEBOOK_JS = `
     if (!panel) return;
     if (open) panel.removeAttribute('hidden'); else panel.setAttribute('hidden', '');
     var btn = document.querySelector('[data-target="' + id + '"]');
-    if (open) drawFlowcharts(panel);
+    if (open) { drawFlowcharts(panel); setTimeout(function () { fvInitIn(panel); }, 0); }
     if (btn) { btn.setAttribute('aria-expanded', open); btn.querySelector('.cb-arrow').textContent = open ? '\\u25B2' : '\\u25BC'; }
   }
   // Flowcharts embedded as Mermaid code are drawn the first time their panel opens.
@@ -1213,8 +1316,108 @@ const CODEBOOK_JS = `
     pending.forEach(function (el) { el.setAttribute('data-drawn', ''); el.classList.add('mermaid'); });
     window.mermaid.run({ nodes: pending });
   }
+
+  // Interactive flowcharts (.cb-fv): drag to move, Ctrl+scroll or the buttons to zoom, a minimap,
+  // and clickable blocks (fold/unfold), bursts (zoom in) and surveys (jump to their questions).
+  // Every view is pre-rendered; clicking swaps which one is shown.
+  function fvMatch(el, ids) {
+    for (var n = el; n && n.tagName !== 'svg'; n = n.parentNode) {
+      if (!n.getAttribute) continue;
+      var id = n.getAttribute('id') || '', did = n.getAttribute('data-id') || '';
+      for (var k in ids) if (id === k || did === k || id.indexOf('-' + k + '-') >= 0 || id.slice(-k.length - 1) === '-' + k) return ids[k];
+    }
+    return null;
+  }
+  function fvApply(st) {
+    st.stage.style.transform = 'translate(' + st.x + 'px,' + st.y + 'px) scale(' + st.k + ')';
+    var mini = st.fv.querySelector('.cb-fv-mini img'), box = st.fv.querySelector('.cb-fv-mini-box');
+    if (!mini || !mini.clientWidth || !st.w) return;
+    var m = mini.clientWidth / st.w, pw = st.port.clientWidth, ph = st.port.clientHeight;
+    box.style.left = (mini.offsetLeft + Math.max(0, -st.x / st.k * m)) + 'px';
+    box.style.top = (mini.offsetTop + Math.max(0, -st.y / st.k * m)) + 'px';
+    box.style.width = Math.min(mini.clientWidth, pw / st.k * m) + 'px';
+    box.style.height = Math.min(mini.clientHeight, ph / st.k * m) + 'px';
+  }
+  function fvFit(st) {
+    var pw = st.port.clientWidth, ph = st.port.clientHeight;
+    st.k = Math.max(0.15, Math.min(1.1, (pw - 30) / st.w, (ph - 30) / st.h));
+    if (st.h * st.k > ph - 30 && (pw - 30) / st.w > st.k) st.k = Math.min(1.1, (pw - 30) / st.w, 1);
+    st.x = (pw - st.w * st.k) / 2;
+    st.y = st.h * st.k < ph ? (ph - st.h * st.k) / 2 : 15;
+    fvApply(st);
+  }
+  function fvShow(st, key) {
+    var stages = st.fv.querySelectorAll('.cb-fv-stage'), next = null;
+    stages.forEach(function (sg) { var on = sg.getAttribute('data-fv-view') === key; if (on) next = sg; if (on) sg.removeAttribute('hidden'); else sg.setAttribute('hidden', ''); });
+    if (!next) return;
+    st.view = key; st.stage = next;
+    var svg = next.querySelector('svg');
+    var vb = svg && svg.viewBox && svg.viewBox.baseVal;
+    st.w = (vb && vb.width) || svg.getBoundingClientRect().width || 600;
+    st.h = (vb && vb.height) || svg.getBoundingClientRect().height || 400;
+    svg.setAttribute('width', st.w); svg.setAttribute('height', st.h); svg.style.maxWidth = 'none';
+    var ids = st.links[key] || {};
+    svg.querySelectorAll('g.node, g.cluster').forEach(function (g) { if (fvMatch(g, ids)) g.classList.add('cb-fv-link'); });
+    var mini = st.fv.querySelector('.cb-fv-mini img');
+    if (mini) mini.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(svg));
+    var cap = st.fv.querySelector('.cb-fv-caption'), c = next.getAttribute('data-fv-caption');
+    if (cap && c) cap.textContent = c;
+    var back = st.fv.querySelector('[data-fv-act="back"]'); if (back) back.hidden = key === st.start;
+    var all = st.fv.querySelector('[data-fv-act="all"]'); if (all) all.hidden = key === 'all' || !st.links.all;
+    var base = st.fv.querySelector('[data-fv-act="base"]'); if (base) base.hidden = key === 'base';
+    fvFit(st);
+  }
+  function fvZoom(st, f, cx, cy) {
+    var k = Math.max(0.1, Math.min(4, st.k * f)); f = k / st.k;
+    st.x = cx - (cx - st.x) * f; st.y = cy - (cy - st.y) * f; st.k = k; fvApply(st);
+  }
+  function fvInit(fv) {
+    var port = fv.querySelector('.cb-fv-port');
+    if (!port || !port.clientWidth) return;
+    if (fv._fv) { fvFit(fv._fv); return; }
+    var st = { fv: fv, port: port, links: JSON.parse(fv.getAttribute('data-fv-links') || '{}'), start: fv.getAttribute('data-fv-start'), x: 0, y: 0, k: 1 };
+    fv._fv = st;
+    fvShow(st, st.start);
+    var drag = null;
+    port.addEventListener('pointerdown', function (e) {
+      if (e.target.closest('.cb-fv-mini')) { fvMini(st, e); return; }
+      drag = { x: e.clientX, y: e.clientY, sx: st.x, sy: st.y, moved: false };
+      port.setPointerCapture(e.pointerId);
+    });
+    port.addEventListener('pointermove', function (e) {
+      if (!drag) return;
+      if (Math.abs(e.clientX - drag.x) + Math.abs(e.clientY - drag.y) > 4) { drag.moved = true; port.classList.add('is-dragging'); }
+      st.x = drag.sx + e.clientX - drag.x; st.y = drag.sy + e.clientY - drag.y; fvApply(st);
+    });
+    port.addEventListener('pointerup', function (e) {
+      var d = drag; drag = null; port.classList.remove('is-dragging');
+      if (!d || d.moved) return;
+      var target = fvMatch(document.elementFromPoint(e.clientX, e.clientY), st.links[st.view] || {});
+      if (!target) return;
+      if (target.indexOf('go:') === 0) go(target.slice(3)); else fvShow(st, target);
+    });
+    port.addEventListener('wheel', function (e) {
+      if (!(e.ctrlKey || e.metaKey)) return; // plain scrolling still scrolls the page
+      e.preventDefault();
+      var r = port.getBoundingClientRect();
+      fvZoom(st, Math.exp(-Math.max(-100, Math.min(100, e.deltaY)) * 0.002), e.clientX - r.left, e.clientY - r.top);
+    }, { passive: false });
+    fv.querySelector('.cb-fv-bar').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-fv-act]'); if (!b) return;
+      var a = b.getAttribute('data-fv-act'), pw = port.clientWidth / 2, ph = port.clientHeight / 2;
+      if (a === 'in') fvZoom(st, 1.25, pw, ph); else if (a === 'out') fvZoom(st, 0.8, pw, ph); else if (a === 'fit') fvFit(st);
+      else if (a === 'back') fvShow(st, st.start); else fvShow(st, a);
+    });
+  }
+  function fvMini(st, e) {
+    var img = st.fv.querySelector('.cb-fv-mini img'), r = img.getBoundingClientRect(), m = img.clientWidth / st.w;
+    var mx = (e.clientX - r.left) / m, my = (e.clientY - r.top) / m;
+    st.x = st.port.clientWidth / 2 - mx * st.k; st.y = st.port.clientHeight / 2 - my * st.k; fvApply(st);
+  }
+  function fvInitIn(root) { (root || document).querySelectorAll('.cb-fv').forEach(fvInit); }
   function setSection(sec, open) {
     sec.classList.toggle('is-collapsed', !open);
+    if (open) setTimeout(function () { fvInitIn(sec); }, 0);
     var b = sec.querySelector(':scope > h1 .cb-sec-toggle, :scope > h2 .cb-sec-toggle, :scope > h3 .cb-sec-toggle, :scope > .cb-block-head .cb-sec-toggle');
     if (b) { b.setAttribute('aria-expanded', open); b.textContent = open ? '\\u25B2' : '\\u25BC'; }
   }
@@ -1292,6 +1495,8 @@ const CODEBOOK_JS = `
   var top = document.getElementById('backToTopBtn');
   function onScroll() { top.classList.toggle('is-visible', window.scrollY > 400); }
   window.addEventListener('scroll', onScroll, { passive: true }); onScroll();
+  fvInitIn(document);
+  window.addEventListener('load', function () { fvInitIn(document); });
 })();
 `;
 
@@ -1418,6 +1623,25 @@ section.is-collapsed > .cb-sec-body{display:none}
 .cb-flow{margin:4px 0 12px}
 .cb-flowchart{border:1px solid var(--cb-border);border-radius:6px;padding:10px;background:#fff;overflow:auto}
 .cb-flowchart svg{max-width:100%;height:auto}
+.cb-study-map{margin:1em 0 1.4em}
+.cb-fv{border:1px solid var(--cb-border);border-radius:6px;background:#fff;color:#1e293b}
+.cb-fv-bar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--cb-border);font-size:.85em}
+.cb-fv-bar button{font:inherit;border:1px solid #cbd5e1;background:#fff;color:#1e293b;border-radius:5px;padding:2px 9px;cursor:pointer}
+.cb-fv-bar button:hover{background:#f1f5f9}
+.cb-fv-hint{color:#64748b}
+.cb-fv-zoom{margin-left:auto;display:inline-flex;gap:4px}
+.cb-fv-port{position:relative;height:min(70vh,620px);overflow:hidden;cursor:grab;touch-action:none;user-select:none}
+.cb-fv-port.is-dragging{cursor:grabbing}
+.cb-fv-stage{position:absolute;left:0;top:0;transform-origin:0 0}
+.cb-fv-stage[hidden]{display:none}
+.cb-fv-stage svg{max-width:none!important;display:block}
+.cb-fv .cb-fv-link{cursor:pointer}
+.cb-fv .cb-fv-link:hover rect,.cb-fv .cb-fv-link:hover polygon,.cb-fv .cb-fv-link:hover path.basic{stroke:#2563eb!important;stroke-width:2.5px!important}
+.cb-fv-mini{position:absolute;right:8px;bottom:8px;width:150px;background:rgba(255,255,255,.92);border:1px solid #cbd5e1;border-radius:5px;padding:4px;cursor:pointer}
+.cb-fv-mini img{display:block;width:100%;height:auto;max-height:180px;object-fit:contain}
+.cb-fv-mini-box{position:absolute;border:1.5px solid #2563eb;background:rgba(37,99,235,.08);pointer-events:none}
+.cb-fv-caption{font-size:.85em;color:var(--cb-muted);margin:.4em .6em .5em}
+.cb-study-map figcaption{font-size:.85em;color:var(--cb-muted);margin-top:.4em}
 .cb-screenshot{max-width:320px;border:1px solid var(--cb-border)}
 
 /* Tabs (Bootstrap-style, like the prior codebook) */
@@ -1485,6 +1709,8 @@ section.is-collapsed > .cb-sec-body{display:none}
   .cb-topbar{padding:8px 12px}
 }
 @media print{
+  .cb-fv{border:0}.cb-fv-port{height:auto;overflow:visible;cursor:auto}.cb-fv-stage{position:static;transform:none!important}
+  .cb-fv-stage:not([data-fv-base]){display:none!important}.cb-fv-stage[data-fv-base]{display:block!important}.cb-fv-stage svg{max-width:100%!important;height:auto}
   /* A light, compact document whatever the screen theme. */
   :root{--cb-bg:#fff;--cb-surface:#fff;--cb-text:#1f1f1f;--cb-muted:#5f5f5f;--cb-border:#cfcfcf;--cb-faint:#f6f6f6;--cb-header:#eeeeee;--cb-size:10.5pt}
   html,body{background:#fff !important;font-size:10.5pt;line-height:1.4}

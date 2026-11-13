@@ -13,7 +13,7 @@ Structure:
 - **Title page**: the study name, authors, and (if ticked) study metadata (data collection period, participants, devices, timezones).
 - **Abstract** and **Executive Summary** (your own text, or an automatic summary of the study; in the automatic one, each survey name links to its section).
 - **Funding** and **Contact**, each its own section, from the Study details tab (Contact defaults to the study spec's data-access contact).
-- **Study Schedule**: a calendar of when each survey is delivered.
+- **Study Schedule**: the study period in study days, the study map (bursts, then each burst's surveys and what links them), and a table of every delivery window.
 - **Study Adherence** (with response data):
   - *Enrollment over time*: cumulative participants by the date of each person's first completed survey (a "Sisyphus" plot). A bar runs from each participant's first to last completed survey, colored by compliance (the share of their delivered prompts they answered; shown when the data records missed prompts). Hover over a bar for the numbers.
   - *Surveys by day since first survey*: one row per participant, one dot per completed survey, with a shaded curve of surveys per day. In measurement-burst designs the dots are colored by burst (a gap of more than a week starts a new burst). Hover over a burst in the legend to pick it out.
@@ -43,6 +43,14 @@ All of this, with the Study details text and the variables you picked, is saved 
 One row per variable: survey, variable name, question text, delivery type, data type, missingness codes, response range, response options (value = label) and **Shown When** (the skip logic in words). Search it, and download it as CSV.
 
 ## Study flowchart
+
+Three zoom levels, with a breadcrumb at the top (**Whole study › Burst 2 › Evening Diary**) to step back out:
+
+- **Whole study**: the bursts in order (days, surveys, prompts) with the gaps between them ("3 weeks later"). Click a burst to zoom in.
+- **A burst**: its surveys in time-of-day order, and what links them. An answer that sends another survey is an orange arrow with its rule ("ev_craving ≥ 70"). A floating block moving to the next survey is dashed. A decision point that may deliver an intervention is a thick arrow with its chance. Triggered surveys are dashed boxes, interventions hexagons. Click a survey to see its questions.
+- **A survey**: its questions, as below. Picking a survey in the list on the left goes straight here.
+
+The codebook's Study Schedule page includes the same pictures: the whole study, then one burst (or each burst, when they differ).
 
 One chart per survey (pick from the menu on the left), drawn top to bottom:
 

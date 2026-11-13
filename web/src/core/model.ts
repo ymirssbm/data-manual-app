@@ -210,3 +210,44 @@ export function buildBlockMap(surveys: Survey[]): BlockMapEntry[] {
 export function surveyModels(spec: StudySpec): SurveyModel[] {
   return spec.surveys.map(buildSurveyModel);
 }
+
+const REPEAT_PER: Record<string, string> = { Day: 'day', Burst: 'burst', Study: 'study' };
+
+/**
+ * How a block repeats or floats, in words, for the block itself (`ownOnly`) or for an item inside
+ * it (any enclosing block). Empty when it does neither.
+ */
+export function blockNotes(model: SurveyModel, itemId: string, surveyLabel: (name: string) => string = (n) => n, ownOnly = false): string[] {
+  const notes: string[] = [];
+  let cur: Question | undefined = model.byId.get(itemId);
+  const seen = new Set<string>();
+  while (cur && !seen.has(cur['Item.ID'])) {
+    seen.add(cur['Item.ID']);
+    if (isBlock(cur)) {
+      const where = ownOnly ? '' : ` (block “${itemLabel(cur)}”)`;
+      const r = cur['Block.Repeat'];
+      const qid = (id: string | undefined) => (id ? (model.byId.get(id)?.['Question.ID'] ?? id) : '?');
+      if (r?.Type === 'Fixed') notes.push(`Repeated ${r.Count ?? '?'} times in each survey${where}`);
+      else if (r?.Type === 'Per.Answer') notes.push(`Asked once for each option chosen in ${qid(r['Source.Item.ID'])}${where}`);
+      else if (r?.Type === 'Until') {
+        const stop = r['Stop.Item.ID'] ? model.byId.get(r['Stop.Item.ID']) : undefined;
+        const label = stop?.responseKey?.find((k) => String(k.value) === r['Stop.Value'])?.definition ?? r['Stop.Value'];
+        notes.push(`Repeated until ${qid(r['Stop.Item.ID'])} is “${label}”${r.Count ? `, at most ${r.Count} times` : ''}${where}`);
+      }
+      const f = cur['Block.Float'];
+      if (f) notes.push(`Floating${where}: asked once a ${REPEAT_PER[f['Once.Per'] ?? 'Day']}, in the first of ${f.Surveys.map(surveyLabel).join(' → ')} the participant takes`);
+    }
+    if (ownOnly) break;
+    cur = cur.Parent ? model.byId.get(cur.Parent) : undefined;
+  }
+  return notes;
+}
+
+/** Floating blocks defined in other surveys that can be asked in `surveyName`. */
+export function floatingBlocksInto(spec: StudySpec, surveyName: string): Array<{ survey: Survey; block: Question }> {
+  return spec.surveys.flatMap((survey) =>
+    survey['Survey.Name'] === surveyName
+      ? []
+      : (survey.questions ?? []).filter((q) => isBlock(q) && q['Block.Float']?.Surveys.slice(1).includes(surveyName)).map((block) => ({ survey, block })),
+  );
+}

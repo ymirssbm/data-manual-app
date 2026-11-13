@@ -26,11 +26,11 @@ describe('exporters round-trip through the importers', () => {
   it('Qualtrics .qsf: questions, blocks and display logic', () => {
     const out = exportStudy(spec(), 'qualtrics', { survey: 'evening' });
     const qsf = JSON.parse(out.text);
-    expect(qsf.SurveyElements.filter((e: { Element: string }) => e.Element === 'SQ')).toHaveLength(17);
+    expect(qsf.SurveyElements.filter((e: { Element: string }) => e.Element === 'SQ')).toHaveLength(19);
     const back = validateSpec(qualtricsTranslator.translate({ fileName: out.fileName, text: out.text }).spec);
     expect(back.spec, JSON.stringify(back.issues.slice(0, 3))).toBeTruthy();
     const ev = back.spec!.surveys[0]!;
-    expect(questionCount(ev)).toBe(17);
+    expect(questionCount(ev)).toBe(19);
     const m = buildSurveyModel(ev);
     const parentOf = (exportTag: string) => {
       const q = ev.questions!.find((x) => x['Question.ID'] === exportTag)!;

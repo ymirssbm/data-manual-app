@@ -22,6 +22,8 @@ export interface ScheduledEvent {
   timingType: string | null;
   userSpecified: boolean;
   trigger: string | null;
+  /** A JITAI decision point's options, e.g. "Coping Tip 50% · no intervention 50%". */
+  intervention: string | null;
   windowText: string;
   recurrenceText: string;
   occurrences: Occurrence[];
@@ -34,6 +36,8 @@ export interface StudySchedule {
   events: ScheduledEvent[];
   firstDate: string | null;
   lastDate: string | null;
+  /** The weekday every participant's day 1 falls on (Study.Day1.Weekday), when the study sets one. */
+  day1Weekday: (typeof DAY_CODES)[number] | null;
 }
 
 export const MAX_OCCURRENCES = 2000;
@@ -185,6 +189,9 @@ export function buildStudySchedule(spec: StudySpec): StudySchedule {
       const x = ev.extensions;
       const trig = x?.['Trigger.Info'];
       recurrences.push({ rule: ev.recurrence, dates });
+      const options = x?.['Intervention.Options'];
+      const surveyLabel = (n: string | null | undefined) => (n ? (spec.surveys.find((sv) => sv['Survey.Name'] === n)?.['Survey.LongName'] || n) : 'no intervention');
+      const intervention = options?.length ? options.map((o) => `${o.Label || surveyLabel(o['Survey.Name'])} ${Math.round(o.Probability * 1000) / 10}%`).join(' · ') : null;
       events.push({
         id: ev.id,
         scheduleName,
@@ -198,6 +205,7 @@ export function buildStudySchedule(spec: StudySpec): StudySchedule {
               .filter(Boolean)
               .join(' ')
           : null,
+        intervention,
         windowText:
           s.minutes == null || e.minutes == null
             ? 'All day'
@@ -212,10 +220,11 @@ export function buildStudySchedule(spec: StudySpec): StudySchedule {
     for (const child of schedule.children ?? []) visit(child, depth + 1);
   };
   spec.schedules.forEach((s) => visit(s, 0));
+  const day1Weekday = spec.schedules.map((s) => s.extensions?.['Study.Day1.Weekday']).find(Boolean) ?? null;
 
   const all = events.flatMap((e) => e.occurrences.map((o) => o.date)).sort();
   events.forEach((e, i) => (e.recurrenceText = describeRecurrence(recurrences[i]!.rule, recurrences[i]!.dates, all[0])));
-  return { events, firstDate: all[0] ?? null, lastDate: all[all.length - 1] ?? null };
+  return { events, firstDate: all[0] ?? null, lastDate: all[all.length - 1] ?? null, day1Weekday };
 }
 
 export function dayIndex(first: string, date: string): number {

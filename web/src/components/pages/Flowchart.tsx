@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { blockPath, buildSurveyModel, flowKnown, isQuestion, itemLabel, responseOptions, shownWhen, stripHtml, triggers, type StudySpec, type Survey } from '../../core';
-import { dataOverview, describeItem, flowchartBlocks, flowchartQuestionNodes, flowchartText, generateFlowchart, hasResponseData, indexResponses } from '../../generators';
+import { blockNotes, blockPath, buildSurveyModel, flowKnown, isQuestion, itemLabel, responseOptions, shownWhen, stripHtml, triggers, type StudySpec, type Survey } from '../../core';
+import { dataOverview, describeItem, flowchartBlocks, flowchartQuestionNodes, flowchartContext, flowchartText, generateFlowchart, hasResponseData, indexResponses } from '../../generators';
 import type { PageId } from '../App';
 import { Icon, PageTitle } from '../ui';
 import { download, renderMermaid, safeFileName, svgToPng } from '../util';
@@ -12,6 +12,7 @@ import { withSurveyReplaced } from '../../exporters';
 import { deleteItems } from '../../editor/data';
 import type { LiveEditOptions } from '../useLiveDraft';
 import { dropItem, linkItems, linkSurvey, type DropItem, type DropTarget } from '../../editor/link';
+import { generateStudyMap, studyBursts } from '../../generators';
 import { allQuestions } from '../../editor/search';
 import { questionOption, SearchPicker } from '../SearchPicker';
 
@@ -105,9 +106,26 @@ export function FlowchartPage({ spec, go, notify, onChange, openInCodebook }: Pr
   }, []);
   const collapsed = survey ? (folded[survey['Survey.Name']] ?? []) : [];
   const known = survey ? flowKnown(survey) : true;
-  const code = useMemo(() => (survey && known ? generateFlowchart(survey, { showIds, direction, collapsed }) : ''), [survey, known, showIds, direction, collapsed.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
+  const surveyCode = useMemo(() => (survey && known ? generateFlowchart(survey, { showIds, direction, collapsed, ...flowchartContext(spec!, survey['Survey.Name']) }) : ''), [spec, survey, known, showIds, direction, collapsed.join('|')]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fitKey = survey ? `${survey['Survey.Name']}|${direction}|${showIds}` : '';
+  // Zoom levels: the whole study (its bursts), one burst (its surveys and their links), one survey.
+  const [zoom, setZoom] = useState<{ level: 'study' } | { level: 'burst'; burst: number } | { level: 'survey' }>({ level: 'survey' });
+  /** The burst the survey was opened from, for the breadcrumb. */
+  const [viaBurst, setViaBurst] = useState<number | null>(null);
+  const bursts = useMemo(() => (spec ? studyBursts(spec) : []), [spec]);
+  const map = useMemo(() => (spec && zoom.level !== 'survey' ? generateStudyMap(spec, zoom.level === 'burst' ? zoom.burst : null) : null), [spec, zoom]);
+  const code = map ? map.code : surveyCode;
+  const openMapNode = (id: string | null) => {
+    if (!id) return;
+    if (id.startsWith('burst:')) setZoom({ level: 'burst', burst: Number(id.slice(6)) });
+    else if (id.startsWith('survey:')) {
+      setViaBurst(zoom.level === 'burst' ? zoom.burst : bursts.length === 1 ? 1 : null);
+      setSurveyName(id.slice(7));
+      setZoom({ level: 'survey' });
+    }
+  };
+
+  const fitKey = map ? `map|${zoom.level}|${zoom.level === 'burst' ? zoom.burst : ''}` : survey ? `${survey['Survey.Name']}|${direction}|${showIds}` : '';
   useEffect(() => {
     if (!code) return;
     let cancelled = false;
@@ -201,6 +219,26 @@ export function FlowchartPage({ spec, go, notify, onChange, openInCodebook }: Pr
       >
         Flowchart Visualization
       </PageTitle>
+      <nav className="dm-flow-crumbs" aria-label="Zoom level">
+        <button className={zoom.level === 'study' ? 'is-current' : ''} onClick={() => setZoom({ level: 'study' })}>
+          Whole study
+        </button>
+        {(zoom.level === 'burst' || (zoom.level === 'survey' && viaBurst != null)) && bursts.length > 1 && (
+          <>
+            <span aria-hidden="true">›</span>
+            <button className={zoom.level === 'burst' ? 'is-current' : ''} onClick={() => setZoom({ level: 'burst', burst: zoom.level === 'burst' ? zoom.burst : viaBurst! })}>
+              Burst {zoom.level === 'burst' ? zoom.burst : viaBurst}
+            </button>
+          </>
+        )}
+        {zoom.level === 'survey' && (
+          <>
+            <span aria-hidden="true">›</span>
+            <button className="is-current">{survey['Survey.LongName'] || survey['Survey.Name']}</button>
+          </>
+        )}
+        <span className="dm-hint">{zoom.level === 'survey' ? 'Questions in this survey' : zoom.level === 'burst' ? 'Click a survey to see its questions' : bursts.length > 1 ? 'Click a burst to see its surveys' : 'Click a survey to see its questions'}</span>
+      </nav>
       <div className="dm-flow-layout">
         <nav className="dm-flow-surveys" aria-label="Surveys">
           <p className="dm-flow-surveys-title">Surveys</p>
@@ -208,17 +246,46 @@ export function FlowchartPage({ spec, go, notify, onChange, openInCodebook }: Pr
             const m = buildSurveyModel(s);
             const active = s === survey;
             return (
-              <button key={s['Survey.Name']} className={`dm-flow-survey ${active ? 'is-active' : ''}`} onClick={() => setSurveyName(s['Survey.Name'])} aria-current={active}>
-                <strong>{s['Survey.LongName'] || s['Survey.Name']}</strong>
-                <span>
-                  {m.items.filter(isQuestion).length} questions · {flowKnown(s) ? `${m.branches.length} branches` : 'no flow information'}
-                </span>
-              </button>
+              <div key={s['Survey.Name']} className="dm-flow-survey-row">
+                <button className={`dm-flow-survey ${active && zoom.level === 'survey' ? 'is-active' : ''}`} onClick={() => (setSurveyName(s['Survey.Name']), setZoom({ level: 'survey' }), setViaBurst(null))} aria-current={active}>
+                  <strong>{s['Survey.LongName'] || s['Survey.Name']}</strong>
+                  <span>
+                    {m.items.filter(isQuestion).length} questions · {flowKnown(s) ? `${m.branches.length} branches` : 'no flow information'}
+                    {s['Survey.Role'] === 'Intervention' ? ' · intervention' : ''}
+                  </span>
+                </button>
+                {editMode && active && <SurveyNameField key={s['Survey.Name']} survey={s} onRename={(name) => onChange({ ...spec, surveys: spec.surveys.map((x) => (x === s ? { ...x, 'Survey.LongName': name } : x)) }, `Renamed the survey to “${name}”`)} />}
+              </div>
             );
           })}
+          {editMode && (
+            <button
+              className="dm-flow-add-survey"
+              onClick={() => {
+                const before = new Set(spec.surveys.map((x) => x['Survey.Name']));
+                const r = dropItem(spec, survey['Survey.Name'], { kind: 'new-survey' }, null);
+                if ('error' in r) return void notify(r.error, 'warning');
+                const added = r.spec.surveys.find((x) => !before.has(x['Survey.Name']));
+                if (onChange(r.spec, 'Added a new survey (daily for a week; change it on the Study Schedule)') === null && added) setSurveyName(added['Survey.Name']);
+              }}
+            >
+              ＋ New survey
+            </button>
+          )}
         </nav>
 
-        {!known ? (
+        {map ? (
+          <section className="dm-flow-main">
+            {drawn && drawn.key === fitKey ? (
+              <Canvas svg={drawn.svg} fitKey={drawn.key} blocks={[]} onToggleBlock={() => {}} questions={map.nodes} selected={null} onQuestion={openMapNode} />
+            ) : (
+              <p className="dm-empty">Drawing…</p>
+            )}
+            <p className="dm-hint dm-mt">
+              Solid arrows: the day’s surveys in order. Orange: an answer that sends another survey. Dashed: a floating block moving to the next survey. Thick: a decision point that may deliver an intervention.
+            </p>
+          </section>
+        ) : !known ? (
           <section className="dm-flow-main">
             <div className="dm-flow-none">
               <h3>No flowchart for this survey</h3>
@@ -308,6 +375,12 @@ export function FlowchartPage({ spec, go, notify, onChange, openInCodebook }: Pr
                 Clear
               </button>
             </div>
+          )}
+          {editMode && !questionNodes.length && (
+            <p className="dm-flow-empty-hint">
+              <strong>{survey['Survey.LongName'] || survey['Survey.Name']}</strong> has no questions yet. Drag <strong>＋ Question</strong> or <strong>＋ Block</strong> onto the chart, or copy a
+              question from another survey.
+            </p>
           )}
           {editMode && (
             <div className="dm-flow-palette" aria-label="Drag onto the chart">
@@ -884,6 +957,7 @@ function QuestionPanel({
   const text = stripHtml(q['Question.Text'] ?? '') || itemLabel(q);
   const opts = responseOptions(q);
   const when = shownWhen(model, itemId);
+  const notes = blockNotes(model, itemId, (n) => spec.surveys.find((s) => s['Survey.Name'] === n)?.['Survey.LongName'] || n);
   const leadsTo = triggers(model, itemId);
   const path = blockPath(model, q);
   const stats = responses ? describeItem(q, responses.get(q['Question.ID']), total) : null;
@@ -905,6 +979,12 @@ function QuestionPanel({
       <dl className="dm-q-panel-dl">
         <dt>Shown</dt>
         <dd>{when ? `Only if ${when}` : 'Always'}</dd>
+        {notes.length > 0 && (
+          <>
+            <dt>Repeats / floats</dt>
+            <dd>{notes.join('. ')}</dd>
+          </>
+        )}
         {leadsTo.length > 0 && (
           <>
             <dt>Leads to</dt>
@@ -961,5 +1041,24 @@ function QuestionPanel({
         </button>
       </div>
     </aside>
+  );
+}
+
+/** The selected survey's name, editable in the list while editing; saved on Enter or leaving the box. */
+function SurveyNameField({ survey, onRename }: { survey: Survey; onRename(name: string): void }) {
+  const [name, setName] = useState(survey['Survey.LongName'] || survey['Survey.Name']);
+  const save = () => {
+    const v = name.trim();
+    if (v && v !== (survey['Survey.LongName'] || survey['Survey.Name'])) onRename(v);
+  };
+  return (
+    <input
+      className="dm-input dm-input-sm dm-flow-survey-name"
+      value={name}
+      aria-label="Survey name"
+      onChange={(e) => setName(e.target.value)}
+      onBlur={save}
+      onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
+    />
   );
 }

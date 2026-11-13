@@ -52,6 +52,8 @@ export interface DatasetMapping {
   questionText?: string;
   /** long only: column holding the value. */
   response?: string;
+  /** long only: column numbering repetitions of a repeating block (1, 2, …; optional). */
+  iteration?: string;
   /** wide only: the variable columns (default: every unmapped column). */
   variables?: string[];
   /**
@@ -116,6 +118,7 @@ export function guessMapping(table: DatasetTable): DatasetMapping {
   const question = has(cols, /^(question[ _.]?id|question|item|variable|var|item[ _.]?id)$/i);
   const response = has(cols, /^(user[ _.]?response|response|value|answer|score)$/i);
   const questionText = has(cols, /^(question[ _.]?text|item[ _.]?text|text|label|prompt[ _.]?text|wording)$/i);
+  const iteration = has(cols, /^(iteration|repetition|repeat|loop|loop[ _.]?index|instance)$/i);
   const layout: DatasetLayout = question && response ? 'long' : 'wide';
   const used = new Set([participant, time, session, survey].filter(Boolean) as string[]);
   // Survey platforms' bookkeeping columns aren't questions: leave them out of the variables by default.
@@ -130,6 +133,7 @@ export function guessMapping(table: DatasetTable): DatasetMapping {
     question: layout === 'long' ? question : undefined,
     response: layout === 'long' ? response : undefined,
     questionText: layout === 'long' ? questionText : undefined,
+    iteration: layout === 'long' ? iteration : undefined,
     variables,
     // Labelled files (SPSS, SAS, Stata) have one header row of names; the text comes from the labels.
     headerRows: variables ? (table.labels ? ['id'] : guessHeaderRows(table, variables)) : undefined,
@@ -173,7 +177,19 @@ export function datasetToData(table: DatasetTable, m: DatasetMapping, now = new 
   const fallbackTime = now.toISOString().replace(/\.\d{3}Z$/, 'Z');
   const notes: string[] = [];
 
-  const cols = { 'Participant.ID': [] as string[], 'Session.ID': [] as number[], 'Survey.Date.Completed': [] as string[], 'Question.ID': [] as string[], 'User.Response': [] as string[] };
+  const cols: Record<string, unknown[]> & { 'Participant.ID': string[]; 'Session.ID': number[]; 'Survey.Date.Completed': string[]; 'Question.ID': string[]; 'User.Response': string[] } = {
+    'Participant.ID': [],
+    'Session.ID': [],
+    'Survey.Date.Completed': [],
+    'Question.ID': [],
+    'User.Response': [],
+  };
+  // Optional columns: which survey each answer came from, and repetitions of repeating blocks.
+  const itI = m.layout === 'long' ? idx(m.iteration) : -1;
+  const surveyCol: Array<string | null> | null = svI >= 0 ? [] : null;
+  const iterCol: Array<number | null> | null = itI >= 0 ? [] : null;
+  /** Variable -> survey -> answers, so a variable belongs to the survey it's mostly answered in. */
+  const surveyVotes = new Map<string, Map<string, number>>();
   const sessionIds = new Map<string, number>();
   const variableSurveys = new Map<string, string>();
   const questionText = new Map<string, string>();
@@ -201,13 +217,20 @@ export function datasetToData(table: DatasetTable, m: DatasetMapping, now = new 
     }
     return { pid, time, session, survey: svI >= 0 ? (r[svI] ?? '') : '' };
   };
-  const push = (meta: ReturnType<typeof rowMeta>, q: string, v: string) => {
+  const push = (meta: ReturnType<typeof rowMeta>, q: string, v: string, iteration: string | null = null) => {
     cols['Participant.ID'].push(meta.pid);
     cols['Session.ID'].push(meta.session);
     cols['Survey.Date.Completed'].push(meta.time);
     cols['Question.ID'].push(q);
     cols['User.Response'].push(isMissing(v) ? '' : v);
-    if (meta.survey && !variableSurveys.has(q)) variableSurveys.set(q, meta.survey);
+    surveyCol?.push(meta.survey || null);
+    const n = iteration == null ? NaN : Number(iteration);
+    iterCol?.push(Number.isInteger(n) && n >= 1 ? n : null);
+    if (meta.survey) {
+      const votes = surveyVotes.get(q) ?? new Map<string, number>();
+      votes.set(meta.survey, (votes.get(meta.survey) ?? 0) + 1);
+      surveyVotes.set(q, votes);
+    }
   };
 
   if (m.layout === 'long') {
@@ -222,7 +245,7 @@ export function datasetToData(table: DatasetTable, m: DatasetMapping, now = new 
       }
       const q = (r[qI] ?? '').trim();
       if (!q) continue;
-      push(rowMeta(r), q, r[vI] ?? '');
+      push(rowMeta(r), q, r[vI] ?? '', itI >= 0 ? (r[itI] ?? '') : null);
       const text = xI >= 0 ? (r[xI] ?? '').trim() : '';
       if (text && !questionText.has(q)) questionText.set(q, text);
     }
@@ -262,6 +285,9 @@ export function datasetToData(table: DatasetTable, m: DatasetMapping, now = new 
     }
   }
 
+  for (const [q, votes] of surveyVotes) variableSurveys.set(q, [...votes.entries()].sort((a, b) => b[1] - a[1])[0]![0]);
+  if (surveyCol) cols['Survey.Name'] = surveyCol;
+  if (iterCol?.some((x) => x != null)) cols.Iteration = iterCol;
   if (sI < 0) notes.push('Answers from the same participant with the same timestamp were grouped as one survey occasion.');
   if (tI < 0) notes.push(`No timestamp column was chosen, so every response is dated ${fallbackTime.slice(0, 10)} (the import date).`);
   if (badTimes)

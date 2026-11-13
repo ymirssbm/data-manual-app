@@ -41,7 +41,9 @@ function mapEvents(spec: StudySpec, fn: (e: ScheduleEvent) => ScheduleEvent | nu
 }
 
 export function updateEvent(spec: StudySpec, id: string, patch: Partial<ScheduleEvent>, extPatch?: Record<string, unknown>): StudySpec {
-  return mapEvents(spec, (e) => (e.id === id ? ({ ...e, ...patch, ...(extPatch ? { extensions: { ...ext(e), ...extPatch } } : {}) } as ScheduleEvent) : e));
+  // A field set to undefined is removed.
+  const clean = <T extends object>(o: T): T => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined)) as T;
+  return mapEvents(spec, (e) => (e.id === id ? (clean({ ...e, ...patch, ...(extPatch ? { extensions: clean({ ...ext(e), ...extPatch }) } : {}) }) as ScheduleEvent) : e));
 }
 
 export function deleteEvent(spec: StudySpec, id: string): StudySpec {

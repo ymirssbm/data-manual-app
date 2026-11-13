@@ -331,7 +331,14 @@
           "extensions": {
             "description": "Vendor-specific extensions.",
             "type": "object",
-            "additionalProperties": true
+            "additionalProperties": true,
+            "properties": {
+              "Study.Day1.Weekday": {
+                "description": "Every participant's day 1 falls on this weekday, so study days map to days of the week (weekends can be shown, and byDay rules line up).",
+                "type": "string",
+                "enum": ["MO", "TU", "WE", "TH", "FR", "SA", "SU"]
+              }
+            }
           }
         },
         "$defs": {
@@ -605,6 +612,21 @@
                   "Survey.Name": {
                     "description": "Name of the survey delivered by this schedule, referencing a Survey.Name value elsewhere in this document. Optional — some schedules (e.g. passive/sensor sync, administrative reminders) deliver no survey. JSON Schema cannot verify the referenced survey actually exists; any agent or tool generating or consuming this data must independently confirm it resolves to a real Survey.Name in the same study spec.",
                     "type": "string"
+                  },
+                  "Intervention.Options": {
+                    "description": "At this decision point, which intervention is delivered: each option names an intervention survey (null = none) and its probability; probabilities sum to 1. With Trigger.Info, the options apply only when the rule is met.",
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": ["Probability"],
+                      "properties": {
+                        "Survey.Name": { "type": ["string", "null"] },
+                        "Probability": { "type": "number", "minimum": 0, "maximum": 1 },
+                        "Label": { "type": "string" }
+                      }
+                    }
                   }
                 }
               }
@@ -629,6 +651,11 @@
           "Survey.Flow.Known": {
             "description": "False when the order the questions are asked in, and any skip logic, are not known, e.g. a survey built from a dataset's columns. Tools then show no flowchart for it instead of guessing a straight line. Omitted or true means the questions are listed in the order they are asked.",
             "type": "boolean"
+          },
+          "Survey.Role": {
+            "description": "Assessment (default): questions that measure. Intervention: content delivered to the participant (a message, prompt or activity).",
+            "type": "string",
+            "enum": ["Assessment", "Intervention"]
           },
           "Survey.Name": {
             "description": "Human readable survey short name",
@@ -810,6 +837,39 @@
                     "Question",
                     null
                   ]
+                },
+                "Block.Repeat": {
+                  "description": "Ask this block more than once in one delivery. Fixed: Count times. Per.Answer: once for each option chosen in Source.Item.ID (a Multiple Select). Until: again until Stop.Item.ID is answered Stop.Value, at most Count times.",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["Type"],
+                  "properties": {
+                    "Type": { "type": "string", "enum": ["Fixed", "Per.Answer", "Until"] },
+                    "Count": { "type": "integer", "minimum": 1 },
+                    "Source.Item.ID": { "type": "string" },
+                    "Stop.Item.ID": { "type": "string" },
+                    "Stop.Value": { "type": "string" }
+                  }
+                },
+                "Block.Float": {
+                  "description": "A floating block: asked once per Once.Per period, in the first survey in Surveys that the participant takes. The block is defined in the first survey listed (its usual place); if that survey is missed it moves to the next one, and so on.",
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["Surveys"],
+                  "properties": {
+                    "Surveys": {
+                      "description": "Survey.Name values, in the order the block moves through them. The first is the survey the block is defined in.",
+                      "type": "array",
+                      "minItems": 2,
+                      "uniqueItems": true,
+                      "items": { "type": "string" }
+                    },
+                    "Once.Per": {
+                      "description": "How often the block is asked. Day (default): once a day, whichever survey that is.",
+                      "type": "string",
+                      "enum": ["Day", "Burst", "Study"]
+                    }
+                  }
                 },
                 "Parent": {
                   "description": "Item ID of the parent item. NOTE: This is different than the conditional master which points to the item which if successful, delivers the current. Parent may point to a block many questions up.",
@@ -1058,6 +1118,21 @@
           "items": {
             "type": "string"
           }
+        },
+        "Survey.Name": {
+          "description": "The survey whose delivery this answer came from. Needed when the same question can be answered in different surveys, as with floating blocks.",
+          "type": "array",
+          "items": { "type": ["string", "null"] }
+        },
+        "Iteration": {
+          "description": "Which repetition of a repeating block this answer belongs to (1, 2, …); null outside repeating blocks.",
+          "type": "array",
+          "items": { "type": ["integer", "null"] }
+        },
+        "Iteration.Key": {
+          "description": "For Per.Answer repeats: the option value this repetition was about (e.g. \"2\" = alcohol); null otherwise.",
+          "type": "array",
+          "items": { "type": ["string", "null"] }
         }
       },
       "required": [

@@ -13,7 +13,8 @@ import { CodebookGeneratorPage, type GeneratedCodebook } from './pages/Codebook'
 import { DictionaryPage } from './pages/Dictionary';
 import { FlowchartPage } from './pages/Flowchart';
 import { SchedulePage } from './pages/Schedule';
-import { AiPage } from './pages/Ai';
+import { AiPage, useAiChat } from './pages/Ai';
+import { AiBubble, loadAssistantHidden, saveAssistantHidden } from './AiBubble';
 import { DataExportPage } from './pages/DataExport';
 import { SurveyEditorPage } from './pages/SurveyEditor';
 import { appStyle, ContactDialog, loadAppSettings, saveAppSettings, SettingsDialog, useResolvedMode, type AppSettings } from './AppSettings';
@@ -166,6 +167,11 @@ export function App({ adapter }: { adapter: HostAdapter }) {
     },
     [onLoaded, notify],
   );
+  // One AI conversation for the AI page and the floating assistant on every other page.
+  const [assistantHidden, setAssistantHiddenState] = useState(loadAssistantHidden);
+  const setAssistantHidden = useCallback((h: boolean) => (setAssistantHiddenState(h), saveAssistantHidden(h)), []);
+  const aiChat = useAiChat({ spec, onLoaded, onEdit: (s) => editStudy(s, 'AI changes'), notify, documents: cbSettings.extras.attachments });
+
   const undo = useCallback(() => {
     const h = historyRef.current;
     const last = h.past[h.past.length - 1];
@@ -402,9 +408,10 @@ export function App({ adapter }: { adapter: HostAdapter }) {
           />
         )}
         {page === 'standard' && <StandardPage />}
-        {page === 'ai' && <AiPage spec={spec} onLoaded={onLoaded} onEdit={(s) => editStudy(s, 'AI changes')} notify={notify} documents={cbSettings.extras.attachments} />}
+        {page === 'ai' && <AiPage chat={aiChat} assistantHidden={assistantHidden} onAssistantHidden={setAssistantHidden} />}
       </main>
 
+      {page !== 'ai' && <AiBubble chat={aiChat} openPage={() => go('ai')} hidden={assistantHidden} onHide={() => (setAssistantHidden(true), notify('The AI assistant is hidden. Turn it back on from the AI Study Generator page.'))} />}
       <Toasts toasts={toasts} dismiss={dismiss} />
     </div>
   );

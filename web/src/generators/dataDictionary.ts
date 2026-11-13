@@ -10,6 +10,7 @@ import {
   responseOptions,
   responseRange,
   shownWhen,
+  blockNotes,
   stripHtml,
   surveyModels,
   toCsv,
@@ -48,6 +49,7 @@ export const DICTIONARY_COLUMNS = [
 export type DictionaryColumn = (typeof DICTIONARY_COLUMNS)[number];
 
 export function generateDataDictionary(spec: StudySpec): DictionaryRow[] {
+  const surveyLabel = (n: string) => spec.surveys.find((s) => s['Survey.Name'] === n)?.['Survey.LongName'] || n;
   return surveyModels(spec).flatMap((model) =>
     (model.survey.questions ?? [])
       .filter((q) => !isEndBlock(q))
@@ -62,7 +64,7 @@ export function generateDataDictionary(spec: StudySpec): DictionaryRow[] {
           'Missingness.Codes': '',
           'Response.Range': block ? '' : (responseRange(q) ?? ''),
           'Response.Text': block ? '' : responseOptions(q).map((o) => o.label).join(', '),
-          'Shown.When': shownWhen(model, q['Item.ID']) ?? '',
+          'Shown.When': [shownWhen(model, q['Item.ID']), ...blockNotes(model, q['Item.ID'], surveyLabel)].filter(Boolean).join('; '),
           _itemId: q['Item.ID'],
           _isBlock: block,
           _surveyName: model.name,

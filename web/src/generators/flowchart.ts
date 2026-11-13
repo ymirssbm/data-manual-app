@@ -9,7 +9,7 @@
 //  - Items with branches get a decision diamond with one labelled edge per
 //    child, plus an "Otherwise" edge (the fail item, or wherever flow continues).
 //  - Blocks are drawn as subgraphs around their members rather than as nodes.
-import { buildSurveyModel, isBlock, isQuestion, itemLabel, type Question, type SurveyModel, type Survey } from '../core';
+import { buildSurveyModel, floatingBlocksInto, isBlock, isQuestion, itemLabel, type Question, type StudySpec, type SurveyModel, type Survey } from '../core';
 
 export interface FlowchartOptions {
   /** Max characters per line inside a node. */
@@ -19,6 +19,16 @@ export interface FlowchartOptions {
   direction?: 'TD' | 'LR';
   /** Block Item.IDs drawn folded into a single node. */
   collapsed?: string[];
+  /** Survey names to labels (for floating blocks' survey lists). */
+  surveyLabel?(name: string): string;
+  /** Floating blocks from other surveys that can be asked in this one, drawn after Start. */
+  floatingIn?: Array<{ label: string; from: string }>;
+}
+
+/** The study-wide context a survey's flowchart needs: survey labels, and floating blocks that land in it. */
+export function flowchartContext(spec: StudySpec, surveyName: string): Pick<FlowchartOptions, 'surveyLabel' | 'floatingIn'> {
+  const surveyLabel = (n: string) => spec.surveys.find((s) => s['Survey.Name'] === n)?.['Survey.LongName'] || n;
+  return { surveyLabel, floatingIn: floatingBlocksInto(spec, surveyName).map(({ survey, block }) => ({ label: itemLabel(block), from: surveyLabel(survey['Survey.Name']) })) };
 }
 
 export interface FlowchartBlock {
@@ -147,6 +157,19 @@ export function generateFlowchart(survey: Survey, opts: FlowchartOptions = {}): 
   const decisions = new Map<string, string[]>();
   const renderNode = (q: Question, pad = '  ') =>
     [`${nodeId.get(q['Item.ID'])}["${escapeLabel(nodeText(q, wrap, showIds))}"]`, ...(decisions.get(q['Item.ID']) ?? [])].join(`\n${pad}`);
+  /** A block title's second line: how it repeats or floats. */
+  const label = opts.surveyLabel ?? ((n: string) => n);
+  const blockTag = (block: Question): string => {
+    const r = block['Block.Repeat'];
+    const qid = (id?: string) => (id ? (model.byId.get(id)?.['Question.ID'] ?? id) : '?');
+    const parts: string[] = [];
+    if (r?.Type === 'Fixed') parts.push(`↻ repeated ${r.Count ?? '?'} times`);
+    if (r?.Type === 'Per.Answer') parts.push(`↻ once per answer to ${qid(r['Source.Item.ID'])}`);
+    if (r?.Type === 'Until') parts.push(`↻ until ${qid(r['Stop.Item.ID'])} = ${r['Stop.Value'] ?? '?'}`);
+    const f = block['Block.Float'];
+    if (f) parts.push(`⇢ floats: ${f.Surveys.map(label).join(' → ')}`);
+    return parts.map((x) => `<br/>${wrapText(x, 44)}`).join('');
+  };
   const questionsIn = (id: string): number => (model.members.get(id) ?? []).reduce((n, m) => n + (isBlock(m) ? questionsIn(m['Item.ID']) : 1), 0);
   const folded: string[] = [];
   const renderBlock = (block: Question, depth: number): string[] => {
@@ -155,9 +178,9 @@ export function generateFlowchart(survey: Survey, opts: FlowchartOptions = {}): 
       const id = `${nodeId.get(block['Item.ID'])}_c`;
       folded.push(id);
       const n = questionsIn(block['Item.ID']);
-      return [`${pad}${id}[["${escapeLabel(`▸ ${wrapText(itemLabel(block), 36)}<br/>${n} question${n === 1 ? '' : 's'}`)}"]]`];
+      return [`${pad}${id}[["${escapeLabel(`▸ ${wrapText(itemLabel(block), 36)}<br/>${n} question${n === 1 ? '' : 's'}${blockTag(block)}`)}"]]`];
     }
-    const out = [`${pad}subgraph ${nodeId.get(block['Item.ID'])}_g["${escapeLabel(wrapText(itemLabel(block), 40))}"]`];
+    const out = [`${pad}subgraph ${nodeId.get(block['Item.ID'])}_g["${escapeLabel(wrapText(itemLabel(block), 40) + blockTag(block))}"]`];
     for (const m of model.members.get(block['Item.ID']) ?? []) {
       if (isBlock(m)) out.push(...renderBlock(m, depth + 1));
       else out.push(`${pad}  ${renderNode(m, `${pad}  `)}`);
@@ -244,13 +267,25 @@ export function generateFlowchart(survey: Survey, opts: FlowchartOptions = {}): 
     else lines.push(`  ${renderNode(q)}`);
   }
   const start = order.find((q) => !isBlock(q) && gates.get(q['Item.ID'])!.length === 0);
+  // Floating blocks from other surveys that land here when their own survey was missed.
+  const floats = opts.floatingIn ?? [];
   if (start) {
     lines.push('  start(["Start"])');
-    edges.unshift(`  start --> ${remap(nodeId.get(start['Item.ID'])!)}`);
+    const first = remap(nodeId.get(start['Item.ID'])!);
+    if (floats.length) {
+      lines.push('  floatcheck{"Floating block<br/>already answered today?"}');
+      floats.forEach((f, k) => lines.push(`  float${k}["${escapeLabel(`⇢ ${wrapText(f.label, 32)}<br/>(floats from ${f.from})`)}"]`));
+      const chain = floats.map((_, k) => `float${k}`);
+      edges.unshift(`  start --> floatcheck`, `  floatcheck -->|"No"| ${chain[0]}`, ...chain.slice(1).map((c, k) => `  ${chain[k]} --> ${c}`), `  ${chain.at(-1)} --> ${first}`, `  floatcheck -->|"Yes"| ${first}`);
+    } else edges.unshift(`  start --> ${first}`);
   }
 
   if (endUsed) lines.push('  finish(["End"])');
   lines.push(...edges);
+  if (floats.length) {
+    lines.push('  classDef floating fill:#f8fafc,stroke:#64748b,stroke-width:1.5px,stroke-dasharray:6 4,color:#1e293b');
+    lines.push(`  class ${floats.map((_, k) => `float${k}`).join(',')} floating`);
+  }
   if (folded.length) {
     lines.push('  classDef folded fill:#eef3f9,stroke:#6f8fb8,stroke-width:1.5px,stroke-dasharray:5 3,color:#1e293b');
     lines.push(`  class ${folded.join(',')} folded`);

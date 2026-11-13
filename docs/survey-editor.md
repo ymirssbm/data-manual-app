@@ -12,6 +12,21 @@
 - **Delete**: the Delete key removes the selected items at once (a block takes its questions with it) and clears any skip logic that pointed at them; their responses stay in the data. The **Delete** button asks first and can also remove their responses: tick **Also delete N responses from the data**.
 - **Question fields**: text, variable name (Question ID, kept unique), block, question type, type of data, response options (value = label), and description.
 - **Move up / down** reorders an item among its siblings (a block moves with its contents).
+- **Survey kind**: next to the survey's name, **Assessment** (questions that measure) or **Intervention** (content delivered to the participant, such as a coping tip).
+
+### Repeating and floating blocks
+
+A block's form has two more boxes:
+
+- **Repeat this block**:
+  - a set number of times;
+  - once for each option chosen in an earlier multiple-select question (e.g. two questions asked about each substance used);
+  - or until an answer says stop, with a maximum.
+
+  Each answer in the data records which repetition it was.
+- **Floating**: tick it to ask the block in the next survey the participant takes if its own survey is missed, for example last night's sleep moving from a missed morning survey to the afternoon check, then to the evening diary.
+  - Set the order of surveys it moves through, and whether it's asked once per day, burst or study.
+  - The flowchart marks the block in its own survey and draws it as a dashed step at the start of the other surveys it can move to.
 
 ### Logic: both ends in one place
 
@@ -30,7 +45,9 @@ Each question has its logic in two boxes, so you can wire it from either end:
 
 The **Schedule** tab lists when the selected survey is sent: each window's title, the study day it starts on, time range, how it repeats (once, daily or weekly, and how many times), and whether the time is fixed, random within the window, or triggered by an answer. **+ Add a delivery window** adds one (a week after the last, or daily 9–10 AM for a week). **Edit this schedule** on the Study Schedule page opens this tab for that survey.
 
-Schedules are set in study days, not dates. Day 1 is the first day any survey is sent, and each participant's day 1 is when they start. (A study file stores example dates, but only the spacing between them matters.) If you move the first window later, the next one becomes day 1.
+A window can be a **decision point** (for just-in-time adaptive interventions). Tick **Decision point** and give each option (an intervention survey, or no intervention) its chance, e.g. a coping tip 50% and no message 50%. Combined with a trigger, the draw happens only when the answer rule is met.
+
+Schedules are set in study days, not dates. Day 1 is the first day any survey is sent, and each participant's day 1 is when they start. (A study file stores example dates, but only the spacing between them matters.) If you move the first window later, the next one becomes day 1. If everyone starts on the same weekday, set **Participants start on** in the Study Schedule's edit panel: the calendar then shows weekdays and shades weekends.
 
 ## Saving and undoing
 

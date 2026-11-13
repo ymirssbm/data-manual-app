@@ -64,12 +64,12 @@ describe('folding flowchart blocks', () => {
     const { flowchartBlocks } = await import('../src/generators');
     const evening = validateSpec(structuredClone(branching)).spec!.surveys.find((s) => s['Survey.Name'] === 'evening')!;
     const use = flowchartBlocks(evening).find((b) => b.itemId === 'ev_b_use')!;
-    expect(use.questions).toBe(8);
+    expect(use.questions).toBe(10);
     const open = generateFlowchart(evening);
     const folded = generateFlowchart(evening, { collapsed: ['ev_b_use'] });
     expect(open).toContain(`subgraph ${use.clusterId}`);
     expect(folded).not.toContain(`subgraph ${use.clusterId}`);
-    expect(folded).toContain(`${use.collapsedId}[["▸ Substance use details<br/>8 questions"]]`);
+    expect(folded).toContain(`${use.collapsedId}[["▸ Substance use details<br/>10 questions"]]`);
     expect(folded).toContain(`-->|"Yes"| ${use.collapsedId}`);
     expect(folded).toMatch(new RegExp(`${use.collapsedId} --> n[0-9]+`));
     expect(folded).not.toMatch(new RegExp(`${use.collapsedId} --> ${use.collapsedId}`));
@@ -91,7 +91,7 @@ describe('linear multi-select branching and text outline', () => {
     expect(m).toContain('n6 --> n5_d1');
     // The edible follow-up (nested under cannabis method) resumes at the tobacco check.
     expect(m).toContain('n8 --> n5_d2');
-    expect(m).toContain('n16 --> n14_d1');
+    expect(m).toContain('n19 --> n17_d1'); // ev_sponsor_help resumes at the coping chain's next check
     expect(m).toContain('n7_d -->|"Otherwise"| n5_d2');
     // Diamonds are declared inside the block that holds their question.
     const block = m.slice(m.indexOf('subgraph n4_g'), m.indexOf('end', m.indexOf('subgraph n4_g')));

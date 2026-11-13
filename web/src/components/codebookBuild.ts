@@ -1,11 +1,13 @@
 // Builds codebook HTML for the app (generator preview and viewer share this),
 // caching rendered flowcharts and remembering the user's look and options.
-import { flowKnown, type StudySpec, type Survey } from '../core';
+import type { StudySpec } from '../core';
 import {
   DEFAULT_CODEBOOK_OPTIONS,
   DEFAULT_CODEBOOK_THEME,
   generateCodebookHtml,
-  generateFlowchart,
+  flowViewPlans,
+  STUDY_MAP_KEY,
+  type RenderedFlowView,
   type CodebookOptions,
   type CodebookText,
   type CodebookTheme,
@@ -81,23 +83,25 @@ export function textFromSpec(spec: StudySpec | null): CodebookText {
   return { title: m?.['Study.Name'] ?? '', authors: m?.authors ?? '', funding: m?.funding ?? '', contact, abstract: m?.abstract ?? '', summary: '' };
 }
 
-// Flowcharts are the slow part, so each survey is rendered once per loaded study.
-const svgCache = new WeakMap<Survey, Promise<string | null>>();
-function surveySvg(survey: Survey): Promise<string | null> {
-  let p = svgCache.get(survey);
-  if (!p) {
-    p = renderMermaid(generateFlowchart(survey)).catch(() => null);
-    svgCache.set(survey, p);
-  }
-  return p;
-}
+// Flowcharts are the slow part, so each drawing is rendered once (keyed by its Mermaid code, which
+// changes whenever the survey, or a floating block landing in it, changes).
+const svgCache = new Map<string, Promise<string | null>>();
 
 export async function buildCodebook(spec: StudySpec, s: CodebookSettings): Promise<string> {
-  const flowchartSvgs: Record<string, string> = {};
+  // Interactive flowcharts: every view of every survey's flowchart and of the study map, drawn once
+  // (cached by Mermaid code, so only what changed is redrawn after an edit).
+  const flowViews: Record<string, RenderedFlowView[]> = {};
   if (s.options.flowcharts) {
-    for (const survey of spec.surveys.filter(flowKnown)) {
-      const svg = await surveySvg(survey);
-      if (svg) flowchartSvgs[survey['Survey.Name']] = svg;
+    for (const [key, plans] of Object.entries(flowViewPlans(spec))) {
+      if (key === STUDY_MAP_KEY && !s.options.studySchedule) continue;
+      const views: RenderedFlowView[] = [];
+      for (const plan of plans) {
+        let p = svgCache.get(plan.code);
+        if (!p) svgCache.set(plan.code, (p = renderMermaid(plan.code).catch(() => null)));
+        const svg = await p;
+        if (svg) views.push({ key: plan.key, caption: plan.caption, links: plan.links, svg });
+      }
+      if (views.length) flowViews[key] = views;
     }
   }
   const x = s.extras;
@@ -105,7 +109,7 @@ export async function buildCodebook(spec: StudySpec, s: CodebookSettings): Promi
     spec,
     s.options,
     {
-      flowchartSvgs,
+      flowViews,
       theme: s.theme,
       excludeItems: s.exclude,
       logo: x.logo?.src,
